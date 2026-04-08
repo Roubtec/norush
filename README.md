@@ -1,0 +1,91 @@
+# norush
+
+**Deferred LLM processing for people who can wait.**
+
+norush is a batch-processing engine for LLM APIs that trades immediacy for
+cost. Both Anthropic (Claude) and OpenAI offer asynchronous batch APIs at
+**50% off** standard pricing — norush abstracts the complexity of using them.
+
+## Why
+
+Real-time LLM responses are expensive and often unnecessary. Many use cases
+don't need answers in milliseconds:
+
+- **Overnight summarization** — queue up news articles, research papers, or
+  meeting notes before bed; wake up to summaries.
+- **Bulk analysis** — process thousands of data points, reviews, or support
+  tickets without babysitting API calls.
+- **Thought dumping** — write down questions and ideas throughout the day;
+  read thoughtful responses when you're ready.
+- **Pipeline stages** — feed LLM outputs into downstream processes that run
+  on their own schedule.
+
+norush handles the full lifecycle: batching requests, submitting them to
+providers, tracking progress, retrieving results, and routing them where
+they need to go — all while persisting state so nothing gets lost.
+
+## What
+
+### Core Library (`@norush/core`)
+
+A TypeScript library that manages deferred LLM request processing:
+
+- **Multi-provider** — Anthropic Claude and OpenAI from a single interface.
+  Submit to whichever provider/model you want per-request.
+- **Automatic batching** — Queues requests and flushes them in optimal batch
+  sizes on a configurable schedule.
+- **Lifecycle management** — Tracks every request from submission through
+  completion. Handles polling, retries on expiration, and crash recovery.
+- **Persistence** — Pluggable storage backends (SQLite for local use,
+  Postgres for production). Every request-response pair is tracked.
+- **Result routing** — Deliver results via callbacks, event emitters, or
+  webhook POSTs.
+- **Composable** — Chain batch results into follow-up batches for multi-step
+  workflows.
+
+### Deferred Chat (`norush.chat`)
+
+A web application built on the core library:
+
+- Users bring their own API keys (Anthropic, OpenAI).
+- Chat interface designed for async conversation — write now, read later.
+- Responses appear when ready (minutes to hours).
+- Optional webhook forwarding — use norush as a batch-processing broker
+  without self-hosting.
+
+## How It Works
+
+```
+You write prompts
+       │
+       ▼
+  norush queues them
+       │
+       ▼
+  Batches are submitted to Claude / OpenAI batch APIs (50% cheaper)
+       │
+       ▼
+  norush polls for completion
+       │
+       ▼
+  Results arrive → delivered to your callback, webhook, or inbox
+```
+
+Underneath, norush maps to each provider's native batch API:
+
+| | Anthropic (Claude) | OpenAI |
+|---|---|---|
+| API | Message Batches | Batch API |
+| Discount | 50% | 50% |
+| Max batch | 100K requests | 50K requests |
+| Typical completion | <1 hour | <24 hours |
+| Format | JSON body | JSONL file upload |
+
+## Project Status
+
+**Early development.** See [PLAN.md](./PLAN.md) for the full design document
+and implementation roadmap.
+
+## License
+
+TBD
