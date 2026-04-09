@@ -96,13 +96,12 @@ export class RequestQueue {
 
   /**
    * External tick — call this from a cron/scheduler instead of relying on
-   * the internal `setInterval`. Checks if there are pending requests and
-   * triggers a flush if so.
+   * the internal `setInterval`. Always attempts a flush so persisted queued
+   * requests are not skipped when in-memory counters are zero (for example,
+   * after a process restart or a previous flush error).
    */
   async tick(): Promise<void> {
-    if (this.pendingCount > 0) {
-      await this.triggerFlush();
-    }
+    await this.triggerFlush();
   }
 
   /**
@@ -161,12 +160,15 @@ export class RequestQueue {
   private async triggerFlush(): Promise<void> {
     if (this.flushing) return;
     this.flushing = true;
+    // Snapshot counters so that requests arriving *during* the flush are
+    // counted toward the next cycle. On error the counters are left unchanged
+    // so that the next tick or threshold check will retry.
+    const flushedCount = this.pendingCount;
+    const flushedBytes = this.pendingBytes;
     try {
-      // Reset counters before calling onFlush so that any requests arriving
-      // during the flush are counted toward the next cycle.
-      this.pendingCount = 0;
-      this.pendingBytes = 0;
       await this.onFlush();
+      this.pendingCount = Math.max(0, this.pendingCount - flushedCount);
+      this.pendingBytes = Math.max(0, this.pendingBytes - flushedBytes);
     } finally {
       this.flushing = false;
     }

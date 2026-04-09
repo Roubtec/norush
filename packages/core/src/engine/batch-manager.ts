@@ -33,10 +33,10 @@ export interface ProviderLimits {
   maxBytes: number;
 }
 
-export const PROVIDER_LIMITS: Record<ProviderName, ProviderLimits> = {
-  claude: { maxRequests: 100_000, maxBytes: 256 * 1024 * 1024 },
-  openai: { maxRequests: 50_000, maxBytes: 200 * 1024 * 1024 },
-};
+export const PROVIDER_LIMITS = Object.freeze({
+  claude: Object.freeze({ maxRequests: 100_000, maxBytes: 256 * 1024 * 1024 }),
+  openai: Object.freeze({ maxRequests: 50_000, maxBytes: 200 * 1024 * 1024 }),
+} as const) as Readonly<Record<ProviderName, Readonly<ProviderLimits>>>;
 
 // ---------------------------------------------------------------------------
 // Options
@@ -44,11 +44,21 @@ export const PROVIDER_LIMITS: Record<ProviderName, ProviderLimits> = {
 
 export interface BatchManagerOptions {
   store: Store;
-  /** Map of provider name to API-key-ID to Provider adapter instance. */
+  /**
+   * Map of adapter lookup keys to Provider adapter instances.
+   * Each key is either `"provider::userId"` (per-user adapter) or
+   * `"provider"` (shared fallback). The manager tries the specific key first,
+   * then falls back to the provider-only key.
+   */
   providers: Map<string, Provider>;
   batching: BatchingConfig;
   /** Optional telemetry hook. */
   telemetry?: TelemetryHook;
+  /**
+   * Override provider size limits. Defaults to `PROVIDER_LIMITS`.
+   * Primarily useful for testing without mutating the global constant.
+   */
+  providerLimits?: Record<ProviderName, ProviderLimits>;
 }
 
 // ---------------------------------------------------------------------------
@@ -69,12 +79,17 @@ export class BatchManager {
   private readonly providers: Map<string, Provider>;
   private readonly batching: BatchingConfig;
   private readonly telemetry: TelemetryHook;
+  private readonly limits: Record<ProviderName, ProviderLimits>;
+
+  /** Guard to prevent concurrent flushes creating duplicate batches. */
+  private flushing = false;
 
   constructor(options: BatchManagerOptions) {
     this.store = options.store;
     this.providers = options.providers;
     this.batching = options.batching;
     this.telemetry = options.telemetry ?? new NoopTelemetry();
+    this.limits = options.providerLimits ?? PROVIDER_LIMITS;
   }
 
   // -------------------------------------------------------------------------
@@ -91,17 +106,23 @@ export class BatchManager {
    * 4. For each batch: write-before-submit, then call provider.
    */
   async flush(): Promise<void> {
-    const queued = await this.store.getQueuedRequests(this.batching.maxRequests);
-    if (queued.length === 0) return;
+    if (this.flushing) return;
+    this.flushing = true;
+    try {
+      const queued = await this.store.getQueuedRequests(this.batching.maxRequests);
+      if (queued.length === 0) return;
 
-    const groups = this.groupRequests(queued);
+      const groups = this.groupRequests(queued);
 
-    for (const [, requests] of groups) {
-      const chunks = this.splitByProviderLimits(requests);
+      for (const [, requests] of groups) {
+        const chunks = this.splitByProviderLimits(requests);
 
-      for (const chunk of chunks) {
-        await this.submitBatch(chunk);
+        for (const chunk of chunks) {
+          await this.submitBatch(chunk);
+        }
       }
+    } finally {
+      this.flushing = false;
     }
   }
 
@@ -139,13 +160,15 @@ export class BatchManager {
    * Split a group of requests into chunks that respect provider limits.
    *
    * Each chunk is guaranteed to be within the provider's max request count
-   * and max byte size.
+   * and max byte size. Requests whose `params` exceed the provider's byte
+   * limit on their own are skipped with a telemetry event — they cannot fit
+   * in any batch.
    */
   private splitByProviderLimits(requests: Request[]): Request[][] {
     if (requests.length === 0) return [];
 
     const provider = requests[0].provider;
-    const limits = PROVIDER_LIMITS[provider];
+    const limits = this.limits[provider];
     const chunks: Request[][] = [];
     let currentChunk: Request[] = [];
     let currentBytes = 0;
@@ -154,6 +177,17 @@ export class BatchManager {
       const reqBytes = new TextEncoder().encode(
         JSON.stringify(req.params),
       ).byteLength;
+
+      // A request whose params alone exceed the limit can never fit in a batch.
+      if (reqBytes > limits.maxBytes) {
+        this.telemetry.event("request_oversized", {
+          requestId: req.id,
+          provider,
+          reqBytes,
+          limitBytes: limits.maxBytes,
+        });
+        continue;
+      }
 
       const wouldExceedCount = currentChunk.length >= limits.maxRequests;
       const wouldExceedBytes = currentBytes + reqBytes > limits.maxBytes;
@@ -208,12 +242,11 @@ export class BatchManager {
     });
 
     // Update all requests to reference this batch and mark as 'batched'.
-    for (const req of requests) {
-      await this.store.updateRequest(req.id, {
-        batchId: batch.id,
-        status: "batched",
-      });
-    }
+    await this.store.assignBatchToRequests(
+      requests.map((req) => req.id),
+      batch.id,
+      "batched",
+    );
 
     // Step 2: Increment submission_attempts and call provider.
     await this.store.updateBatch(batch.id, {
@@ -251,8 +284,15 @@ export class BatchManager {
         requestCount: requests.length,
       });
     } catch (error) {
-      // Step 4: Failure — leave provider_batch_id NULL.
-      // The batch remains in 'pending' status for orphan recovery (task 1-07).
+      // Step 4: Failure — revert requests to 'queued' so they will be retried
+      // on the next flush. The batch record stays in 'pending' with a NULL
+      // providerBatchId for observability / orphan tracking (task 1-07).
+      await Promise.all(
+        requests.map((req) =>
+          this.store.updateRequest(req.id, { batchId: null, status: "queued" }),
+        ),
+      );
+
       this.telemetry.counter("batches_submitted", 1, {
         provider,
         status: "failure",

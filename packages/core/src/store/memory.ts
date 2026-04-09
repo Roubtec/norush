@@ -80,6 +80,16 @@ export class MemoryStore implements Store {
     return queued.slice(0, limit);
   }
 
+  async assignBatchToRequests(
+    ids: string[],
+    batchId: string,
+    status: "batched",
+  ): Promise<void> {
+    await Promise.all(
+      ids.map((id) => this.updateRequest(id, { batchId, status })),
+    );
+  }
+
   // -- Batch lifecycle ------------------------------------------------------
 
   async createBatch(batch: NewBatch): Promise<Batch> {

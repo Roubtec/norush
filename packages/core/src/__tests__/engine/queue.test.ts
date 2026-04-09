@@ -217,15 +217,17 @@ describe("RequestQueue", () => {
       expect(flushSpy).toHaveBeenCalledOnce();
     });
 
-    it("tick() does nothing when no pending requests", async () => {
+    it("tick() always triggers a flush attempt even with no in-memory pending requests", async () => {
       const queue = new RequestQueue({
         store,
         batching: defaultBatching(),
         onFlush: flushSpy,
       });
 
+      // tick() is unconditional so that persisted 'queued' requests are picked
+      // up after a process restart (when in-memory counters are zero).
       await queue.tick();
-      expect(flushSpy).not.toHaveBeenCalled();
+      expect(flushSpy).toHaveBeenCalledOnce();
     });
 
     it("start() enables periodic flush via setInterval", async () => {

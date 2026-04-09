@@ -200,7 +200,7 @@ describe("BatchManager", () => {
       expect(submissionAttemptsDuringCall).toBe(1);
     });
 
-    it("on submission failure: batch remains pending with NULL provider_batch_id", async () => {
+    it("on submission failure: requests are reverted to 'queued' and batch remains pending", async () => {
       const reqRecord = await store.createRequest(makeNewRequest());
 
       const provider = mockProvider({
@@ -216,15 +216,18 @@ describe("BatchManager", () => {
 
       await manager.flush();
 
-      // Batch should exist but remain pending.
+      // Requests should be reverted to 'queued' so the next flush can retry.
       const stored = await store.getRequest(reqRecord.id);
       expect(stored).toBeTruthy();
-      expect(stored?.batchId).toBeTruthy();
-      const batch = await store.getBatch(stored?.batchId ?? "");
-      expect(batch).toBeTruthy();
-      expect(batch?.status).toBe("pending");
-      expect(batch?.providerBatchId).toBeNull();
-      expect(batch?.submissionAttempts).toBe(1);
+      expect(stored?.status).toBe("queued");
+      expect(stored?.batchId).toBeNull();
+
+      // Batch record stays in 'pending' with NULL provider_batch_id for observability.
+      const pendingBatches = await store.getPendingBatches();
+      expect(pendingBatches).toHaveLength(1);
+      expect(pendingBatches[0].status).toBe("pending");
+      expect(pendingBatches[0].providerBatchId).toBeNull();
+      expect(pendingBatches[0].submissionAttempts).toBe(1);
     });
 
     it("updates requests to 'batched' status with batch_id", async () => {
@@ -335,41 +338,35 @@ describe("BatchManager", () => {
 
   describe("size-based splitting", () => {
     it("splits batches that exceed provider max request count", async () => {
-      // Temporarily lower the provider limit for testing.
-      const originalLimit = PROVIDER_LIMITS.claude.maxRequests;
-      PROVIDER_LIMITS.claude.maxRequests = 3;
-
-      try {
-        // Create 5 requests (should split into 2 batches: 3 + 2).
-        for (let i = 0; i < 5; i++) {
-          await store.createRequest(makeNewRequest());
-        }
-
-        const provider = mockProvider();
-        const providers = new Map([["claude", provider]]);
-        const manager = new BatchManager({
-          store,
-          providers,
-          batching: defaultBatching({ maxRequests: 100 }),
-        });
-
-        await manager.flush();
-
-        expect(provider.submitBatch).toHaveBeenCalledTimes(2);
-
-        const calls = (provider.submitBatch as ReturnType<typeof vi.fn>).mock.calls;
-        const firstBatch = calls[0][0] as NorushRequest[];
-        const secondBatch = calls[1][0] as NorushRequest[];
-        expect(firstBatch).toHaveLength(3);
-        expect(secondBatch).toHaveLength(2);
-      } finally {
-        PROVIDER_LIMITS.claude.maxRequests = originalLimit;
+      // Create 5 requests (should split into 2 batches: 3 + 2).
+      for (let i = 0; i < 5; i++) {
+        await store.createRequest(makeNewRequest());
       }
+
+      const provider = mockProvider();
+      const providers = new Map([["claude", provider]]);
+      const manager = new BatchManager({
+        store,
+        providers,
+        batching: defaultBatching({ maxRequests: 100 }),
+        providerLimits: {
+          claude: { maxRequests: 3, maxBytes: 256 * 1024 * 1024 },
+          openai: { maxRequests: 50_000, maxBytes: 200 * 1024 * 1024 },
+        },
+      });
+
+      await manager.flush();
+
+      expect(provider.submitBatch).toHaveBeenCalledTimes(2);
+
+      const calls = (provider.submitBatch as ReturnType<typeof vi.fn>).mock.calls;
+      const firstBatch = calls[0][0] as NorushRequest[];
+      const secondBatch = calls[1][0] as NorushRequest[];
+      expect(firstBatch).toHaveLength(3);
+      expect(secondBatch).toHaveLength(2);
     });
 
     it("splits batches that exceed provider max byte size", async () => {
-      const originalLimit = PROVIDER_LIMITS.claude.maxBytes;
-
       // Create requests with known param sizes.
       const largeContent = "x".repeat(500);
       const req = makeNewRequest({
@@ -379,35 +376,68 @@ describe("BatchManager", () => {
         JSON.stringify(req.params),
       ).byteLength;
 
-      // Set limit so that only 2 requests fit per batch.
-      PROVIDER_LIMITS.claude.maxBytes = reqBytes * 2 + 1;
+      await store.createRequest(makeNewRequest({ params: req.params }));
+      await store.createRequest(makeNewRequest({ params: req.params }));
+      await store.createRequest(makeNewRequest({ params: req.params }));
 
-      try {
-        await store.createRequest(makeNewRequest({ params: req.params }));
-        await store.createRequest(makeNewRequest({ params: req.params }));
-        await store.createRequest(makeNewRequest({ params: req.params }));
+      const provider = mockProvider();
+      const providers = new Map([["claude", provider]]);
+      const manager = new BatchManager({
+        store,
+        providers,
+        batching: defaultBatching({ maxRequests: 100 }),
+        // Set limit so that only 2 requests fit per batch.
+        providerLimits: {
+          claude: { maxRequests: 100_000, maxBytes: reqBytes * 2 + 1 },
+          openai: { maxRequests: 50_000, maxBytes: 200 * 1024 * 1024 },
+        },
+      });
 
-        const provider = mockProvider();
-        const providers = new Map([["claude", provider]]);
-        const manager = new BatchManager({
-          store,
-          providers,
-          batching: defaultBatching({ maxRequests: 100 }),
-        });
+      await manager.flush();
 
-        await manager.flush();
+      // Should split: 2 + 1.
+      expect(provider.submitBatch).toHaveBeenCalledTimes(2);
 
-        // Should split: 2 + 1.
-        expect(provider.submitBatch).toHaveBeenCalledTimes(2);
+      const calls = (provider.submitBatch as ReturnType<typeof vi.fn>).mock.calls;
+      const firstBatch = calls[0][0] as NorushRequest[];
+      const secondBatch = calls[1][0] as NorushRequest[];
+      expect(firstBatch).toHaveLength(2);
+      expect(secondBatch).toHaveLength(1);
+    });
 
-        const calls = (provider.submitBatch as ReturnType<typeof vi.fn>).mock.calls;
-        const firstBatch = calls[0][0] as NorushRequest[];
-        const secondBatch = calls[1][0] as NorushRequest[];
-        expect(firstBatch).toHaveLength(2);
-        expect(secondBatch).toHaveLength(1);
-      } finally {
-        PROVIDER_LIMITS.claude.maxBytes = originalLimit;
-      }
+    it("skips a request whose params alone exceed the byte limit and emits telemetry", async () => {
+      const req = makeNewRequest({
+        params: { messages: [{ role: "user", content: "x".repeat(100) }] },
+      });
+      const reqBytes = new TextEncoder().encode(
+        JSON.stringify(req.params),
+      ).byteLength;
+
+      await store.createRequest(req);
+
+      const telemetry = { counter: vi.fn(), histogram: vi.fn(), event: vi.fn() };
+      const provider = mockProvider();
+      const providers = new Map([["claude", provider]]);
+      const manager = new BatchManager({
+        store,
+        providers,
+        batching: defaultBatching(),
+        telemetry,
+        // Byte limit smaller than a single request.
+        providerLimits: {
+          claude: { maxRequests: 100_000, maxBytes: reqBytes - 1 },
+          openai: { maxRequests: 50_000, maxBytes: 200 * 1024 * 1024 },
+        },
+      });
+
+      await manager.flush();
+
+      // Oversized request must not be submitted.
+      expect(provider.submitBatch).not.toHaveBeenCalled();
+      expect(telemetry.event).toHaveBeenCalledWith(
+        "request_oversized",
+        expect.objectContaining({ reqBytes, limitBytes: reqBytes - 1 }),
+      );
     });
 
     it("respects different limits per provider", () => {

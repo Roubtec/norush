@@ -33,6 +33,16 @@ export interface Store {
   /** Fetch up to `limit` requests in 'queued' status, ordered by creation. */
   getQueuedRequests(limit: number): Promise<Request[]>;
 
+  /**
+   * Atomically assign a batch to multiple requests and mark them as 'batched'.
+   * More efficient than calling `updateRequest()` for each request individually.
+   */
+  assignBatchToRequests(
+    ids: NorushId[],
+    batchId: BatchId,
+    status: "batched",
+  ): Promise<void>;
+
   // -- Batch lifecycle ------------------------------------------------------
 
   /** Persist a new batch and return the full record with generated ID. */
