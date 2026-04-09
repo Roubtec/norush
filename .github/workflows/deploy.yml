@@ -28,14 +28,34 @@ concurrency:
 
 jobs:
   # -----------------------------------------------------------------------
+  # 0. Check whether Azure credentials are configured
+  # -----------------------------------------------------------------------
+  check-credentials:
+    runs-on: ubuntu-latest
+    outputs:
+      has-azure: ${{ steps.check.outputs.has-azure }}
+    steps:
+      - name: Check for Azure credentials
+        id: check
+        run: |
+          if [ -n "${{ secrets.ACR_LOGIN_SERVER }}" ] && [ -n "${{ secrets.AZURE_CREDENTIALS }}" ]; then
+            echo "has-azure=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has-azure=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Skipping deploy — Azure credentials not configured. Set ACR_LOGIN_SERVER, ACR_USERNAME, ACR_PASSWORD, AZURE_CREDENTIALS, and AZURE_RESOURCE_GROUP secrets to enable deployment."
+          fi
+
+  # -----------------------------------------------------------------------
   # 1. Build and push Docker image to ACR
   # -----------------------------------------------------------------------
   build-and-push:
-    # Only deploy when CI succeeded (workflow_run fires on both success and failure).
-    # The condition is skipped for manual workflow_dispatch triggers.
+    needs: check-credentials
+    # Only deploy when CI succeeded and Azure credentials are available.
+    # The CI check is skipped for manual workflow_dispatch triggers.
     if: >-
-      github.event_name == 'workflow_dispatch' ||
-      github.event.workflow_run.conclusion == 'success'
+      needs.check-credentials.outputs.has-azure == 'true' &&
+      (github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success')
     runs-on: ubuntu-latest
     outputs:
       image-tag: ${{ steps.meta.outputs.tag }}
@@ -75,7 +95,8 @@ jobs:
   # -----------------------------------------------------------------------
   deploy-web:
     runs-on: ubuntu-latest
-    needs: build-and-push
+    needs: [check-credentials, build-and-push]
+    if: needs.check-credentials.outputs.has-azure == 'true'
     environment: production
     steps:
       - name: Log in to Azure
@@ -95,7 +116,8 @@ jobs:
   # -----------------------------------------------------------------------
   deploy-worker:
     runs-on: ubuntu-latest
-    needs: build-and-push
+    needs: [check-credentials, build-and-push]
+    if: needs.check-credentials.outputs.has-azure == 'true'
     environment: production
     steps:
       - name: Log in to Azure
@@ -115,7 +137,8 @@ jobs:
   # -----------------------------------------------------------------------
   verify:
     runs-on: ubuntu-latest
-    needs: [deploy-web, deploy-worker]
+    needs: [check-credentials, deploy-web, deploy-worker]
+    if: needs.check-credentials.outputs.has-azure == 'true'
     steps:
       - name: Wait for containers to start
         run: sleep 30
