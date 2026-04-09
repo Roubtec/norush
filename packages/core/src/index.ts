@@ -90,6 +90,20 @@ export {
 } from "./polling/index.js";
 
 // ---------------------------------------------------------------------------
+// Provider adapters
+// ---------------------------------------------------------------------------
+
+export {
+  ClaudeAdapter,
+  type ClaudeAdapterOptions,
+} from "./providers/claude.js";
+
+export {
+  OpenAIBatchAdapter,
+  type OpenAIBatchAdapterOptions,
+} from "./providers/openai-batch.js";
+
+// ---------------------------------------------------------------------------
 // Telemetry implementations
 // ---------------------------------------------------------------------------
 

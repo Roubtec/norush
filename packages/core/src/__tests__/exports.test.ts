@@ -7,6 +7,8 @@ import {
   MemoryStore,
   PostgresStore,
   migrate,
+  ClaudeAdapter,
+  OpenAIBatchAdapter,
 } from "../index.js";
 
 // Type-only imports to verify they are exported
@@ -42,6 +44,8 @@ import type {
   OperatorConfig,
   UserConfig,
   ResolvedConfig,
+  ClaudeAdapterOptions,
+  OpenAIBatchAdapterOptions,
 } from "../index.js";
 
 describe("@norush/core exports", () => {
@@ -75,6 +79,16 @@ describe("@norush/core exports", () => {
 
   it("exports migrate function", () => {
     expect(typeof migrate).toBe("function");
+  });
+
+  it("exports ClaudeAdapter class", () => {
+    expect(ClaudeAdapter).toBeDefined();
+    expect(typeof ClaudeAdapter).toBe("function");
+  });
+
+  it("exports OpenAIBatchAdapter class", () => {
+    expect(OpenAIBatchAdapter).toBeDefined();
+    expect(typeof OpenAIBatchAdapter).toBe("function");
   });
 
   // Type-level assertions — these verify that all type exports compile.
@@ -127,7 +141,12 @@ describe("@norush/core exports", () => {
     const _userCfg: UserConfig = {};
     const _resolved: ResolvedConfig = resolveConfig();
 
+    const _claudeOpts: ClaudeAdapterOptions = { apiKey: "sk-test" };
+    const _openaiOpts: OpenAIBatchAdapterOptions = { apiKey: "sk-test" };
+
     // Use variables to avoid unused-variable lint errors
+    expect(_claudeOpts).toBeDefined();
+    expect(_openaiOpts).toBeDefined();
     expect(_id).toBeDefined();
     expect(_batchId).toBeDefined();
     expect(_resultId).toBeDefined();

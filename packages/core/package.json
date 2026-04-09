@@ -18,6 +18,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.86.1",
+    "openai": "^6.34.0",
     "postgres": "^3.4.5",
     "ulidx": "^2.4.1"
   },
