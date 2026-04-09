@@ -53,6 +53,7 @@ const mockSql = new Proxy(
 import { POST, GET } from "../../../src/routes/api/v1/requests/+server";
 import { GET as getRequestById } from "../../../src/routes/api/v1/requests/[id]/+server";
 import { POST as redeliverPost } from "../../../src/routes/api/v1/requests/[id]/redeliver/+server";
+import { POST as retryPost } from "../../../src/routes/api/v1/requests/[id]/retry/+server";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -672,5 +673,136 @@ describe("POST /api/v1/requests/:id/redeliver", () => {
     expect(data.requestId).toBe("req_01");
     expect(data.resultId).toBe("res_01");
     expect(data.previousDeliveryStatus).toBe("delivered");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/v1/requests/:id/retry
+// ---------------------------------------------------------------------------
+
+function makeRetryEvent(id: string, authHeader = "Bearer valid_token") {
+  const url = new URL(`http://localhost/api/v1/requests/${id}/retry`);
+
+  return {
+    request: new Request(url.toString(), {
+      method: "POST",
+      headers: authHeader ? { authorization: authHeader } : {},
+    }),
+    url,
+    locals: {},
+    params: { id },
+    cookies: {} as never,
+    getClientAddress: () => "127.0.0.1",
+    isDataRequest: false,
+    isSubRequest: false,
+    platform: undefined,
+    route: { id: "/api/v1/requests/[id]/retry" },
+    fetch: globalThis.fetch,
+    setHeaders: vi.fn(),
+  };
+}
+
+describe("POST /api/v1/requests/:id/retry", () => {
+  it("rejects unauthenticated requests (no token)", async () => {
+    const event = makeRetryEvent("req_01", "");
+    const response = await retryPost(event as never);
+    expect(response.status).toBe(401);
+    const data = await response.json();
+    expect(data.error.code).toBe("unauthorized");
+  });
+
+  it("returns 404 for non-existent request", async () => {
+    mockSqlResult = [];
+    const event = makeRetryEvent("req_nonexistent");
+    const response = await retryPost(event as never);
+    expect(response.status).toBe(404);
+    const data = await response.json();
+    expect(data.error.code).toBe("not_found");
+  });
+
+  it("returns 200 with status queued when retrying from failed_final", async () => {
+    mockSqlResult = [
+      {
+        id: "req_01",
+        status: "failed_final",
+        retry_count: 3,
+        batch_id: "batch_01",
+        provider: "claude",
+        model: "claude-sonnet-4-20250514",
+      },
+    ];
+    const event = makeRetryEvent("req_01");
+    const response = await retryPost(event as never);
+    expect(response.status).toBe(200);
+    const data = await response.json();
+    expect(data.message).toBe("Request re-queued for processing");
+    expect(data.request.id).toBe("req_01");
+    expect(data.request.provider).toBe("claude");
+    expect(data.request.model).toBe("claude-sonnet-4-20250514");
+    expect(data.request.previousStatus).toBe("failed_final");
+    expect(data.request.status).toBe("queued");
+    expect(data.request.retryCount).toBe(0);
+  });
+
+  it("returns 200 with status queued when retrying from canceled", async () => {
+    mockSqlResult = [
+      {
+        id: "req_02",
+        status: "canceled",
+        retry_count: 1,
+        batch_id: "batch_02",
+        provider: "openai",
+        model: "gpt-4o",
+      },
+    ];
+    const event = makeRetryEvent("req_02");
+    const response = await retryPost(event as never);
+    expect(response.status).toBe(200);
+    const data = await response.json();
+    expect(data.message).toBe("Request re-queued for processing");
+    expect(data.request.id).toBe("req_02");
+    expect(data.request.provider).toBe("openai");
+    expect(data.request.model).toBe("gpt-4o");
+    expect(data.request.previousStatus).toBe("canceled");
+    expect(data.request.status).toBe("queued");
+    expect(data.request.retryCount).toBe(0);
+  });
+
+  it("returns 400 when retrying from non-terminal status queued", async () => {
+    mockSqlResult = [
+      {
+        id: "req_03",
+        status: "queued",
+        retry_count: 0,
+        batch_id: null,
+        provider: "claude",
+        model: "claude-sonnet-4-20250514",
+      },
+    ];
+    const event = makeRetryEvent("req_03");
+    const response = await retryPost(event as never);
+    expect(response.status).toBe(400);
+    const data = await response.json();
+    expect(data.error.code).toBe("invalid_state");
+    expect(data.error.message).toContain("queued");
+  });
+
+  it("returns 400 when retrying from non-terminal status processing", async () => {
+    mockSqlResult = [
+      {
+        id: "req_04",
+        status: "processing",
+        retry_count: 0,
+        batch_id: "batch_03",
+        provider: "openai",
+        model: "gpt-4o",
+      },
+    ];
+    const event = makeRetryEvent("req_04");
+    const response = await retryPost(event as never);
+    expect(response.status).toBe(400);
+    const data = await response.json();
+    expect(data.error.code).toBe("invalid_state");
+    expect(data.error.message).toContain("processing");
   });
 });

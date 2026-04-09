@@ -17,6 +17,8 @@ import {
   encrypt,
   decrypt,
   maskApiKey,
+  selectKeys,
+  isFailoverEligibleError,
 } from "../index.js";
 
 // Type-only imports to verify they are exported
@@ -64,6 +66,9 @@ import type {
   NorushEventName,
   NorushEventHandler,
   EncryptedPayload,
+  KeyResolver,
+  ApiKeyInfo,
+  KeyCandidate,
 } from "../index.js";
 
 describe("@norush/core exports", () => {
@@ -134,6 +139,11 @@ describe("@norush/core exports", () => {
     expect(typeof encrypt).toBe("function");
     expect(typeof decrypt).toBe("function");
     expect(typeof maskApiKey).toBe("function");
+  });
+
+  it("exports key selector functions", () => {
+    expect(typeof selectKeys).toBe("function");
+    expect(typeof isFailoverEligibleError).toBe("function");
   });
 
   // Type-level assertions — these verify that all type exports compile.
@@ -218,6 +228,29 @@ describe("@norush/core exports", () => {
     const _encPayload: EncryptedPayload = { blob: Buffer.alloc(0) };
     expect(_norushConfig).toBeDefined();
     expect(_encPayload).toBeDefined();
+
+    // Key selector types
+    const _keyInfo: ApiKeyInfo = {
+      id: "key1",
+      provider: "claude",
+      label: "primary",
+      priority: 0,
+      failoverEnabled: true,
+      revokedAt: null,
+    };
+    const _keyCandidate: KeyCandidate = { id: "key1", label: "primary", priority: 0 };
+    const _keyResolver: KeyResolver = {
+      getKeysForUser: async () => [],
+      buildProvider: async () => ({
+        submitBatch: async () => ({ providerBatchId: "x", provider: "claude" }),
+        checkStatus: async () => "processing",
+        fetchResults: async function* () { /* empty */ },
+        cancelBatch: async () => {},
+      }),
+    };
+    expect(_keyInfo).toBeDefined();
+    expect(_keyCandidate).toBeDefined();
+    expect(_keyResolver).toBeDefined();
     expect(_id).toBeDefined();
     expect(_batchId).toBeDefined();
     expect(_resultId).toBeDefined();

@@ -118,6 +118,7 @@ export {
   PROVIDER_LIMITS,
   type BatchManagerOptions,
   type ProviderLimits,
+  type KeyResolver,
   StatusTracker,
   type StatusTrackerOptions,
   type StatusTrackerEventName,
@@ -144,6 +145,17 @@ export {
   type RepackagerOptions,
   type RepackageResult,
 } from "./engine/index.js";
+
+// ---------------------------------------------------------------------------
+// Key selection (failover)
+// ---------------------------------------------------------------------------
+
+export {
+  selectKeys,
+  isFailoverEligibleError,
+  type ApiKeyInfo,
+  type KeyCandidate,
+} from "./keys/selector.js";
 
 // ---------------------------------------------------------------------------
 // Crypto vault (API key encryption)
