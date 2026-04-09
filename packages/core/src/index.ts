@@ -115,6 +115,17 @@ export {
   PROVIDER_LIMITS,
   type BatchManagerOptions,
   type ProviderLimits,
+  StatusTracker,
+  type StatusTrackerOptions,
+  type StatusTrackerEventName,
+  type StatusTrackerEventHandler,
+  OrphanRecovery,
+  type OrphanRecoveryOptions,
+  type OrphanRecoveryResult,
+  CircuitBreaker,
+  type CircuitBreakerOptions,
+  type CircuitBreakerState,
+  type CircuitBreakerSnapshot,
 } from "./engine/index.js";
 
 // ---------------------------------------------------------------------------

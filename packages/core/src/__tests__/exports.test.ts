@@ -9,6 +9,9 @@ import {
   migrate,
   ClaudeAdapter,
   OpenAIBatchAdapter,
+  StatusTracker,
+  OrphanRecovery,
+  CircuitBreaker,
 } from "../index.js";
 
 // Type-only imports to verify they are exported
@@ -46,6 +49,11 @@ import type {
   ResolvedConfig,
   ClaudeAdapterOptions,
   OpenAIBatchAdapterOptions,
+  StatusTrackerEventName,
+  StatusTrackerEventHandler,
+  OrphanRecoveryResult,
+  CircuitBreakerState,
+  CircuitBreakerSnapshot,
 } from "../index.js";
 
 describe("@norush/core exports", () => {
@@ -89,6 +97,22 @@ describe("@norush/core exports", () => {
   it("exports OpenAIBatchAdapter class", () => {
     expect(OpenAIBatchAdapter).toBeDefined();
     expect(typeof OpenAIBatchAdapter).toBe("function");
+  });
+
+  it("exports StatusTracker class", () => {
+    expect(StatusTracker).toBeDefined();
+    expect(typeof StatusTracker).toBe("function");
+  });
+
+  it("exports OrphanRecovery class", () => {
+    expect(OrphanRecovery).toBeDefined();
+    expect(typeof OrphanRecovery).toBe("function");
+  });
+
+  it("exports CircuitBreaker class", () => {
+    const cb = new CircuitBreaker();
+    expect(cb).toBeInstanceOf(CircuitBreaker);
+    expect(cb.state).toBe("closed");
   });
 
   // Type-level assertions — these verify that all type exports compile.
@@ -143,10 +167,25 @@ describe("@norush/core exports", () => {
 
     const _claudeOpts: ClaudeAdapterOptions = { apiKey: "sk-test" };
     const _openaiOpts: OpenAIBatchAdapterOptions = { apiKey: "sk-test" };
+    const _cbState: CircuitBreakerState = "closed";
+    const _cbSnapshot: CircuitBreakerSnapshot = {
+      state: "closed",
+      consecutiveFailures: 0,
+      lastFailureAt: null,
+      lastTrippedAt: null,
+    };
+    const _eventName: StatusTrackerEventName = "batch:completed";
+    const _eventHandler: StatusTrackerEventHandler = () => {};
+    const _orphanResult: OrphanRecoveryResult = { recovered: 0, failed: 0 };
 
     // Use variables to avoid unused-variable lint errors
     expect(_claudeOpts).toBeDefined();
     expect(_openaiOpts).toBeDefined();
+    expect(_cbState).toBeDefined();
+    expect(_cbSnapshot).toBeDefined();
+    expect(_eventName).toBeDefined();
+    expect(_eventHandler).toBeDefined();
+    expect(_orphanResult).toBeDefined();
     expect(_id).toBeDefined();
     expect(_batchId).toBeDefined();
     expect(_resultId).toBeDefined();
