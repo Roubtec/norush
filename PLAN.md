@@ -1346,16 +1346,49 @@ inter-process messaging needed.
 
 ---
 
-## 17. Remaining Open Questions
+## 17. Final Resolved Decisions
 
-No blocking open questions remain for starting Phase 1 implementation.
-The following are noted for future consideration:
+All open questions resolved. No blockers for Phase 1 implementation.
 
-- **Worker process management:** Should the worker use a single event loop
-  with `setInterval` for each concern (polling, delivery, retention), or
-  separate sub-processes? Single loop is simpler; split if any concern
-  becomes CPU-bound.
-- **ULID generation:** Use `ulid` package or `ulidx`? Minor; pick during
-  scaffolding.
-- **CI pipeline:** GitHub Actions for lint/test/build/push? Define during
-  Phase 1 scaffolding.
+### 17.1 Worker Process Management
+
+**Decision:** Single event loop with `setInterval` for each concern (polling,
+delivery, retention scrubbing). All concerns run in one Node.js process.
+
+**Rationale:** The worker's concerns are I/O-bound (database queries, HTTP
+calls to provider APIs, webhook delivery), not CPU-bound. A single event loop
+handles this naturally. If any concern becomes CPU-bound in the future (e.g.,
+large-scale JSONL parsing), we can split into separate processes then.
+
+### 17.2 ULID Generation: `ulidx`
+
+**Decision:** Use `ulidx` for all primary key generation.
+
+**Why ULIDs over UUIDs:**
+- ULIDs encode a millisecond timestamp in the first 48 bits + 80 bits of
+  randomness. This means IDs are **lexicographically sortable by creation
+  time**.
+- B-tree friendly: monotonically increasing keys insert at the rightmost
+  leaf page, avoiding the index fragmentation that random UUIDv4 causes.
+- Extractable timestamp: creation time can be decoded from the ID without
+  a database lookup, useful for debugging.
+- UUIDv7 (RFC 9562) solves the same problem but has less mature JS ecosystem
+  support. Node's `crypto.randomUUID()` still generates v4, not v7.
+
+**Why `ulidx` over `ulid`:** The original `ulid` package has stalled
+(~2021). `ulidx` is the actively maintained successor — native ESM, zero
+dependencies, drop-in replacement.
+
+### 17.3 CI Pipeline: GitHub Actions
+
+**Decision:** GitHub Actions for the CI/CD pipeline.
+
+- **Lint + type-check + test** on every push and PR.
+- **Build + push Docker image** on merge to `main`.
+- **Deploy to Azure Container Apps** via Azure's official GitHub Actions
+  integration.
+
+**Rationale:** Zero-friction integration with our existing GitHub repository.
+Azure has first-class GitHub Actions support for container deployments. If we
+need to migrate CI later (e.g., to Azure DevOps or another provider), the
+pipeline is YAML-based and portable.
