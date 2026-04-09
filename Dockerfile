@@ -19,13 +19,17 @@
 # ---------------------------------------------------------------------------
 FROM node:24-slim AS base
 
-# Enable pnpm via corepack (ships with Node 24)
-RUN corepack enable && corepack prepare pnpm@latest --activate
-
 WORKDIR /app
 
+# Copy package.json first so corepack can activate the exact pnpm version
+# pinned by the repository via the packageManager field.
+COPY package.json ./
+
+# Enable pnpm via corepack (ships with Node 24) using the repo-pinned version.
+RUN corepack enable && corepack prepare "$(node -p "require('./package.json').packageManager")" --activate
+
 # Copy only the files pnpm needs to resolve the workspace and install deps.
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/core/package.json packages/core/package.json
 COPY packages/web/package.json packages/web/package.json
 
@@ -77,6 +81,9 @@ COPY --from=build /app/packages/core/dist ./packages/core/dist
 COPY --from=build /app/packages/core/package.json ./packages/core/package.json
 COPY --from=build /app/packages/web/build ./packages/web/build
 COPY --from=build /app/packages/web/package.json ./packages/web/package.json
+
+# Copy SQL migrations — read at runtime by migrate.ts via import.meta.url.
+COPY packages/core/migrations ./packages/core/migrations
 
 USER norush
 
