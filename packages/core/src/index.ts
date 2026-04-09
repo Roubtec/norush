@@ -60,6 +60,14 @@ export type {
 export { resolveConfig } from "./config/resolve.js";
 
 // ---------------------------------------------------------------------------
+// Store implementations
+// ---------------------------------------------------------------------------
+
+export { MemoryStore } from "./store/memory.js";
+export { PostgresStore } from "./store/postgres.js";
+export { migrate } from "./store/migrate.js";
+
+// ---------------------------------------------------------------------------
 // Telemetry implementations
 // ---------------------------------------------------------------------------
 

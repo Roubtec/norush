@@ -1,0 +1,442 @@
+/**
+ * Shared Store contract test suite.
+ *
+ * Exercises every Store interface method. Called by both memory.test.ts and
+ * postgres.test.ts with their respective Store factories.
+ */
+
+import { describe, expect, it } from "vitest";
+import type { Store } from "../../interfaces/store.js";
+import type { NewRequest, NewBatch, NewResult } from "../../types.js";
+
+// ---------------------------------------------------------------------------
+// Test data factories
+// ---------------------------------------------------------------------------
+
+function newRequest(overrides?: Partial<NewRequest>): NewRequest {
+  return {
+    provider: "claude",
+    model: "claude-sonnet-4-6",
+    params: { messages: [{ role: "user", content: "Hello" }] },
+    userId: "test-user",
+    ...overrides,
+  };
+}
+
+function newBatch(overrides?: Partial<NewBatch>): NewBatch {
+  return {
+    provider: "claude",
+    apiKeyId: "test-key",
+    requestCount: 1,
+    ...overrides,
+  };
+}
+
+function newResult(
+  requestId: string,
+  batchId: string,
+  overrides?: Partial<NewResult>,
+): NewResult {
+  return {
+    requestId,
+    batchId,
+    response: { content: "Hello back" },
+    stopReason: "end_turn",
+    inputTokens: 10,
+    outputTokens: 20,
+    ...overrides,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Contract tests
+// ---------------------------------------------------------------------------
+
+/**
+ * Run the full Store contract test suite.
+ *
+ * @param factory Creates a fresh Store instance. Called at the start of each test.
+ * @param shouldSkip Optional function that returns true if the suite should be
+ *   skipped (e.g., database not available). Evaluated at test execution time
+ *   (inside beforeAll), not at registration time.
+ */
+export function runStoreContractTests(
+  factory: () => Store | Promise<Store>,
+  shouldSkip?: () => boolean,
+): void {
+  // Wrapper that skips individual tests when shouldSkip returns true.
+  function test(
+    name: string,
+    fn: () => Promise<void>,
+  ): void {
+    it(name, async (ctx) => {
+      if (shouldSkip?.()) {
+        ctx.skip();
+        return;
+      }
+      await fn();
+    });
+  }
+
+  let store: Store;
+
+  describe("Store contract", () => {
+    describe("Request lifecycle", () => {
+      test("createRequest returns a record with generated ID and defaults", async () => {
+        store = await factory();
+        const req = await store.createRequest(newRequest());
+
+        expect(req.id).toBeTruthy();
+        expect(req.provider).toBe("claude");
+        expect(req.model).toBe("claude-sonnet-4-6");
+        expect(req.status).toBe("queued");
+        expect(req.batchId).toBeNull();
+        expect(req.retryCount).toBe(0);
+        expect(req.maxRetries).toBe(5);
+        expect(req.contentScrubbedAt).toBeNull();
+        expect(req.createdAt).toBeInstanceOf(Date);
+        expect(req.updatedAt).toBeInstanceOf(Date);
+      });
+
+      test("createRequest respects optional fields", async () => {
+        store = await factory();
+        const req = await store.createRequest(
+          newRequest({
+            callbackUrl: "https://example.com/hook",
+            webhookSecret: "secret123",
+            maxRetries: 3,
+          }),
+        );
+
+        expect(req.callbackUrl).toBe("https://example.com/hook");
+        expect(req.webhookSecret).toBe("secret123");
+        expect(req.maxRetries).toBe(3);
+      });
+
+      test("getRequest returns the request by ID", async () => {
+        store = await factory();
+        const created = await store.createRequest(newRequest());
+        const fetched = await store.getRequest(created.id);
+
+        expect(fetched).not.toBeNull();
+        expect(fetched?.id).toBe(created.id);
+        expect(fetched?.provider).toBe("claude");
+      });
+
+      test("getRequest returns null for unknown ID", async () => {
+        store = await factory();
+        const result = await store.getRequest("nonexistent");
+        expect(result).toBeNull();
+      });
+
+      test("updateRequest modifies fields", async () => {
+        store = await factory();
+        const req = await store.createRequest(newRequest());
+        const batch = await store.createBatch(newBatch());
+        await store.updateRequest(req.id, {
+          status: "batched",
+          batchId: batch.id,
+        });
+
+        const updated = await store.getRequest(req.id);
+        expect(updated).not.toBeNull();
+        expect(updated?.status).toBe("batched");
+        expect(updated?.batchId).toBe(batch.id);
+        expect(updated?.updatedAt.getTime()).toBeGreaterThanOrEqual(
+          req.updatedAt.getTime(),
+        );
+      });
+
+      test("getQueuedRequests returns only queued requests in order", async () => {
+        store = await factory();
+        const r1 = await store.createRequest(newRequest());
+        const r2 = await store.createRequest(newRequest());
+        await store.updateRequest(r1.id, { status: "batched" });
+        const r3 = await store.createRequest(newRequest());
+
+        const queued = await store.getQueuedRequests(10);
+        expect(queued.length).toBe(2);
+        expect(queued[0].id).toBe(r2.id);
+        expect(queued[1].id).toBe(r3.id);
+      });
+
+      test("getQueuedRequests respects limit", async () => {
+        store = await factory();
+        await store.createRequest(newRequest());
+        await store.createRequest(newRequest());
+        await store.createRequest(newRequest());
+
+        const queued = await store.getQueuedRequests(2);
+        expect(queued.length).toBe(2);
+      });
+    });
+
+    describe("Batch lifecycle", () => {
+      test("createBatch returns a record with generated ID and defaults", async () => {
+        store = await factory();
+        const batch = await store.createBatch(newBatch());
+
+        expect(batch.id).toBeTruthy();
+        expect(batch.provider).toBe("claude");
+        expect(batch.status).toBe("pending");
+        expect(batch.providerBatchId).toBeNull();
+        expect(batch.requestCount).toBe(1);
+        expect(batch.succeededCount).toBe(0);
+        expect(batch.failedCount).toBe(0);
+        expect(batch.submissionAttempts).toBe(0);
+        expect(batch.maxSubmissionAttempts).toBe(3);
+        expect(batch.providerRetries).toBe(0);
+        expect(batch.maxProviderRetries).toBe(5);
+        expect(batch.submittedAt).toBeNull();
+        expect(batch.endedAt).toBeNull();
+        expect(batch.createdAt).toBeInstanceOf(Date);
+      });
+
+      test("getBatch returns the batch by ID", async () => {
+        store = await factory();
+        const created = await store.createBatch(newBatch());
+        const fetched = await store.getBatch(created.id);
+
+        expect(fetched).not.toBeNull();
+        expect(fetched?.id).toBe(created.id);
+      });
+
+      test("getBatch returns null for unknown ID", async () => {
+        store = await factory();
+        const result = await store.getBatch("nonexistent");
+        expect(result).toBeNull();
+      });
+
+      test("updateBatch modifies fields", async () => {
+        store = await factory();
+        const batch = await store.createBatch(newBatch());
+        const submittedAt = new Date();
+        await store.updateBatch(batch.id, {
+          status: "submitted",
+          providerBatchId: "provider-123",
+          submittedAt,
+        });
+
+        const updated = await store.getBatch(batch.id);
+        expect(updated).not.toBeNull();
+        expect(updated?.status).toBe("submitted");
+        expect(updated?.providerBatchId).toBe("provider-123");
+        expect(updated?.submittedAt).toBeInstanceOf(Date);
+      });
+
+      test("getPendingBatches returns only pending batches", async () => {
+        store = await factory();
+        const b1 = await store.createBatch(newBatch());
+        const b2 = await store.createBatch(newBatch());
+        await store.updateBatch(b1.id, { status: "submitted" });
+
+        const pending = await store.getPendingBatches();
+        expect(pending.length).toBe(1);
+        expect(pending[0].id).toBe(b2.id);
+      });
+
+      test("getInFlightBatches returns submitted and processing batches", async () => {
+        store = await factory();
+        const b1 = await store.createBatch(newBatch());
+        const b2 = await store.createBatch(newBatch());
+        const b3 = await store.createBatch(newBatch());
+        // b4 stays "pending" — created but not updated
+        await store.createBatch(newBatch());
+
+        await store.updateBatch(b1.id, { status: "submitted" });
+        await store.updateBatch(b2.id, { status: "processing" });
+        await store.updateBatch(b3.id, { status: "ended" });
+
+        const inFlight = await store.getInFlightBatches();
+        expect(inFlight.length).toBe(2);
+        const ids = inFlight.map((b) => b.id);
+        expect(ids).toContain(b1.id);
+        expect(ids).toContain(b2.id);
+      });
+    });
+
+    describe("Result lifecycle", () => {
+      test("createResult returns a record with generated ID and defaults", async () => {
+        store = await factory();
+        // Create prerequisite request and batch.
+        const req = await store.createRequest(newRequest());
+        const batch = await store.createBatch(newBatch());
+
+        const result = await store.createResult(
+          newResult(req.id, batch.id),
+        );
+
+        expect(result.id).toBeTruthy();
+        expect(result.requestId).toBe(req.id);
+        expect(result.batchId).toBe(batch.id);
+        expect(result.deliveryStatus).toBe("pending");
+        expect(result.deliveryAttempts).toBe(0);
+        expect(result.maxDeliveryAttempts).toBe(5);
+        expect(result.deliveredAt).toBeNull();
+        expect(result.contentScrubbedAt).toBeNull();
+        expect(result.stopReason).toBe("end_turn");
+        expect(result.inputTokens).toBe(10);
+        expect(result.outputTokens).toBe(20);
+        expect(result.createdAt).toBeInstanceOf(Date);
+      });
+
+      test("getUndeliveredResults returns pending and failed results", async () => {
+        store = await factory();
+        const req1 = await store.createRequest(newRequest());
+        const req2 = await store.createRequest(newRequest());
+        const req3 = await store.createRequest(newRequest());
+        const batch = await store.createBatch(newBatch());
+
+        const res1 = await store.createResult(
+          newResult(req1.id, batch.id),
+        );
+        const res2 = await store.createResult(
+          newResult(req2.id, batch.id),
+        );
+        const res3 = await store.createResult(
+          newResult(req3.id, batch.id),
+        );
+
+        await store.markDelivered(res1.id);
+
+        const undelivered = await store.getUndeliveredResults(10);
+        expect(undelivered.length).toBe(2);
+        const ids = undelivered.map((r) => r.id);
+        expect(ids).toContain(res2.id);
+        expect(ids).toContain(res3.id);
+      });
+
+      test("getUndeliveredResults respects limit", async () => {
+        store = await factory();
+        const batch = await store.createBatch(newBatch());
+
+        for (let i = 0; i < 5; i++) {
+          const req = await store.createRequest(newRequest());
+          await store.createResult(newResult(req.id, batch.id));
+        }
+
+        const undelivered = await store.getUndeliveredResults(3);
+        expect(undelivered.length).toBe(3);
+      });
+
+      test("markDelivered updates delivery status and timestamp", async () => {
+        store = await factory();
+        const req = await store.createRequest(newRequest());
+        const batch = await store.createBatch(newBatch());
+        const result = await store.createResult(
+          newResult(req.id, batch.id),
+        );
+
+        await store.markDelivered(result.id);
+
+        const undelivered = await store.getUndeliveredResults(10);
+        const found = undelivered.find((r) => r.id === result.id);
+        expect(found).toBeUndefined();
+      });
+    });
+
+    describe("Retention", () => {
+      test("scrubExpiredContent replaces content with tombstones", async () => {
+        store = await factory();
+        const req = await store.createRequest(newRequest());
+        const batch = await store.createBatch(newBatch());
+        await store.updateRequest(req.id, { status: "succeeded" });
+        await store.createResult(newResult(req.id, batch.id));
+
+        // Scrub everything created before "now + 1 hour" (i.e., everything).
+        const future = new Date(Date.now() + 3600_000);
+        const count = await store.scrubExpiredContent(future);
+
+        expect(count).toBeGreaterThanOrEqual(2); // at least 1 request + 1 result
+
+        const scrubbedReq = await store.getRequest(req.id);
+        expect(scrubbedReq).not.toBeNull();
+        expect(scrubbedReq?.params).toEqual({ scrubbed: true });
+        expect(scrubbedReq?.contentScrubbedAt).toBeInstanceOf(Date);
+      });
+
+      test("scrubExpiredContent skips already-scrubbed records", async () => {
+        store = await factory();
+        const req = await store.createRequest(newRequest());
+        const batch = await store.createBatch(newBatch());
+        await store.updateRequest(req.id, { status: "succeeded" });
+        await store.createResult(newResult(req.id, batch.id));
+
+        const future = new Date(Date.now() + 3600_000);
+        const count1 = await store.scrubExpiredContent(future);
+        expect(count1).toBeGreaterThanOrEqual(2);
+
+        const count2 = await store.scrubExpiredContent(future);
+        expect(count2).toBe(0);
+      });
+
+      test("scrubExpiredContent does not scrub non-terminal requests", async () => {
+        store = await factory();
+        // Create a queued request (not succeeded/failed/failed_final).
+        const req = await store.createRequest(newRequest());
+
+        const future = new Date(Date.now() + 3600_000);
+        const count = await store.scrubExpiredContent(future);
+
+        // The request should not be scrubbed (still queued).
+        const fetched = await store.getRequest(req.id);
+        expect(fetched).not.toBeNull();
+        expect(fetched?.contentScrubbedAt).toBeNull();
+        expect(fetched?.params).not.toEqual({ scrubbed: true });
+
+        // count may be 0 (no results either).
+        expect(count).toBe(0);
+      });
+    });
+
+    describe("Analytics", () => {
+      test("getStats aggregates usage for a user within a period", async () => {
+        store = await factory();
+        const req1 = await store.createRequest(newRequest());
+        const req2 = await store.createRequest(newRequest());
+        const batch = await store.createBatch(newBatch());
+
+        await store.updateRequest(req1.id, {
+          status: "succeeded",
+          batchId: batch.id,
+        });
+        await store.updateRequest(req2.id, {
+          status: "failed",
+          batchId: batch.id,
+        });
+
+        await store.createResult(
+          newResult(req1.id, batch.id, {
+            inputTokens: 100,
+            outputTokens: 200,
+          }),
+        );
+
+        const from = new Date(Date.now() - 3600_000);
+        const to = new Date(Date.now() + 3600_000);
+        const stats = await store.getStats("test-user", { from, to });
+
+        expect(stats.totalRequests).toBe(2);
+        expect(stats.succeededRequests).toBe(1);
+        expect(stats.failedRequests).toBe(1);
+        expect(stats.totalInputTokens).toBe(100);
+        expect(stats.totalOutputTokens).toBe(200);
+        expect(stats.totalBatches).toBe(1);
+      });
+
+      test("getStats returns zeros for unknown user", async () => {
+        store = await factory();
+        const from = new Date(Date.now() - 3600_000);
+        const to = new Date(Date.now() + 3600_000);
+        const stats = await store.getStats("unknown-user", { from, to });
+
+        expect(stats.totalRequests).toBe(0);
+        expect(stats.succeededRequests).toBe(0);
+        expect(stats.failedRequests).toBe(0);
+        expect(stats.totalInputTokens).toBe(0);
+        expect(stats.totalOutputTokens).toBe(0);
+        expect(stats.totalBatches).toBe(0);
+      });
+    });
+  });
+}
