@@ -146,7 +146,7 @@ OPENAI_API_KEY=sk-...
 
 ```bash
 # Start just the database
-docker compose up postgres -d
+docker compose up -d postgres
 
 # Install dependencies and build
 pnpm install

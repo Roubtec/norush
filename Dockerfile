@@ -26,7 +26,7 @@ WORKDIR /app
 COPY package.json ./
 
 # Enable pnpm via corepack (ships with Node 24) using the repo-pinned version.
-RUN corepack enable && corepack prepare "$(node -p "require('./package.json').packageManager")" --activate
+RUN corepack enable && corepack prepare "$(node -p 'require("./package.json").packageManager')" --activate
 
 # Copy only the files pnpm needs to resolve the workspace and install deps.
 COPY pnpm-lock.yaml pnpm-workspace.yaml ./
@@ -49,6 +49,7 @@ COPY packages/web/src packages/web/src
 COPY packages/web/tsconfig.json packages/web/tsconfig.json
 COPY packages/web/svelte.config.js packages/web/svelte.config.js
 COPY packages/web/vite.config.ts packages/web/vite.config.ts
+COPY packages/web/static packages/web/static
 
 # Build core first (web depends on it), then web.
 RUN pnpm --filter @norush/core run build && \
@@ -79,7 +80,7 @@ COPY --from=build /app/packages/web/node_modules ./packages/web/node_modules
 # Copy built artefacts.
 COPY --from=build /app/packages/core/dist ./packages/core/dist
 COPY --from=build /app/packages/core/package.json ./packages/core/package.json
-COPY --from=build /app/packages/web/build ./packages/web/build
+COPY --from=build /app/packages/web/dist ./packages/web/dist
 COPY --from=build /app/packages/web/package.json ./packages/web/package.json
 
 # Copy SQL migrations — read at runtime by migrate.ts via import.meta.url.
@@ -92,4 +93,4 @@ ENV PORT=3000
 EXPOSE 3000
 
 # Default entrypoint: SvelteKit web server.
-CMD ["node", "packages/web/build/index.js"]
+CMD ["node", "packages/web/dist/index.js"]

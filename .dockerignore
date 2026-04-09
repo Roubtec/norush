@@ -10,6 +10,7 @@ node_modules
 # Build output (rebuilt inside container)
 packages/core/dist
 packages/web/build
+packages/web/dist
 packages/web/.svelte-kit
 
 # Documentation (not needed at runtime)

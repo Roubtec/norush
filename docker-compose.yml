@@ -18,6 +18,7 @@ services:
 
   web:
     build: .
+    image: norush
     container_name: norush-web
     restart: unless-stopped
     ports:
@@ -31,7 +32,7 @@ services:
       ORIGIN: ${ORIGIN:-http://localhost:3000}
 
   worker:
-    build: .
+    image: norush
     container_name: norush-worker
     restart: unless-stopped
     command: ["node", "packages/core/dist/worker.js"]
