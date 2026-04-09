@@ -191,8 +191,7 @@ deferred-request lifecycle. Provider-agnostic at the consumer level.
   consumers provide an adapter.
 - Built-in adapters:
   - `MemoryStore` — for tests and ephemeral use.
-  - `SQLiteStore` — for single-server / CLI deployments.
-  - `PostgresStore` (or similar) — for production web apps.
+  - `PostgresStore` — for all persistent environments (dev, staging, prod).
 - What's stored:
   - Requests: `norush_id`, provider, model, params, status, created_at, batch_ref.
   - Batches: `batch_id`, provider_batch_id, status, submitted_at, ended_at.
@@ -206,7 +205,7 @@ const norush = createNorush({
     claude: { apiKey: process.env.ANTHROPIC_API_KEY },
     openai: { apiKey: process.env.OPENAI_API_KEY },
   },
-  store: new SQLiteStore('./norush.db'),
+  store: new PostgresStore(process.env.DATABASE_URL),
   batching: {
     maxRequests: 1000,       // flush when queue reaches this
     maxBytes: 50_000_000,    // flush at 50MB
@@ -253,7 +252,7 @@ API Server (SvelteKit server routes / Node.js)
     ├── Auth (WorkOS AuthKit — social, passkeys, enterprise SSO)
     ├── Key vault (AES-256-GCM encrypted API key storage)
     ├── @norush/core (batch engine)
-    ├── Store adapter (SQLite local / PostgreSQL cloud)
+    ├── PostgresStore (local Docker / Azure Flexible Server)
     └── Cron worker (tick the status tracker)
 ```
 

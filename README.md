@@ -36,12 +36,12 @@ A TypeScript library that manages deferred LLM request processing:
   sizes on a configurable schedule.
 - **Lifecycle management** — Tracks every request from submission through
   completion. Handles polling, retries on expiration, and crash recovery.
-- **Persistence** — Pluggable storage backends (SQLite for local use,
-  Postgres for production). Every request-response pair is tracked.
+- **Persistence** — PostgreSQL-backed storage with configurable data retention
+  policies. Every request-response pair is tracked.
 - **Result routing** — Deliver results via callbacks, event emitters, or
-  webhook POSTs.
-- **Composable** — Chain batch results into follow-up batches for multi-step
-  workflows.
+  webhook POSTs with optional HMAC signing.
+- **Broker model** — Delivers results to your webhooks. Chain further work
+  by submitting new requests through the norush API.
 
 ### Deferred Chat (`norush.chat`)
 
