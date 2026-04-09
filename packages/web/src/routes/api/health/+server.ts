@@ -30,7 +30,7 @@ export const GET: RequestHandler = async () => {
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
-    return error(503, {
+    throw error(503, {
       message: `Database unreachable: ${message}`,
     });
   }

@@ -8,7 +8,6 @@
 import postgres from "postgres";
 import { PostgresStore, migrate, createNorush, type NorushEngine } from "@norush/core";
 
-let engine: NorushEngine | undefined;
 let sql: postgres.Sql | undefined;
 
 /**
@@ -29,17 +28,23 @@ export function getSql(): postgres.Sql {
 /**
  * Return the shared NorushEngine.
  * Initializes database migrations and engine on first call.
+ *
+ * Uses a shared Promise so concurrent calls during startup share one
+ * initialization path rather than racing to run migrations in parallel.
  */
-export async function getEngine(): Promise<NorushEngine> {
-  if (!engine) {
-    const db = getSql();
-    await migrate(db);
-    const store = new PostgresStore(db);
+let engineInit: Promise<NorushEngine> | undefined;
 
-    engine = createNorush({
-      store,
-      providers: {},
-    });
+export async function getEngine(): Promise<NorushEngine> {
+  if (!engineInit) {
+    engineInit = (async () => {
+      const db = getSql();
+      await migrate(db);
+      const store = new PostgresStore(db);
+      return createNorush({
+        store,
+        providers: {},
+      });
+    })();
   }
-  return engine;
+  return engineInit;
 }
