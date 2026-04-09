@@ -126,6 +126,20 @@ export {
   type CircuitBreakerOptions,
   type CircuitBreakerState,
   type CircuitBreakerSnapshot,
+  ResultIngester,
+  type ResultIngesterOptions,
+  type IngestionResult,
+  DeliveryWorker,
+  BASE_DELAY_MS,
+  MAX_DELAY_MS,
+  DEFAULT_MAX_DELIVERY_ATTEMPTS,
+  type DeliveryWorkerOptions,
+  type DeliveryCallback,
+  type DeliveryEventName,
+  type DeliveryEventHandler,
+  Repackager,
+  type RepackagerOptions,
+  type RepackageResult,
 } from "./engine/index.js";
 
 // ---------------------------------------------------------------------------

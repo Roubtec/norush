@@ -71,6 +71,9 @@ export interface Store {
   /** Fetch up to `limit` results that have not yet been delivered. */
   getUndeliveredResults(limit: number): Promise<Result[]>;
 
+  /** Apply partial updates to a result record. */
+  updateResult(id: string, updates: Partial<Result>): Promise<void>;
+
   /** Mark a result as successfully delivered. */
   markDelivered(id: ResultId): Promise<void>;
 

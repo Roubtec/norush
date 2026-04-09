@@ -26,3 +26,23 @@ export {
   type CircuitBreakerState,
   type CircuitBreakerSnapshot,
 } from "./circuit-breaker.js";
+export {
+  ResultIngester,
+  type ResultIngesterOptions,
+  type IngestionResult,
+} from "./result-ingester.js";
+export {
+  DeliveryWorker,
+  BASE_DELAY_MS,
+  MAX_DELAY_MS,
+  DEFAULT_MAX_DELIVERY_ATTEMPTS,
+  type DeliveryWorkerOptions,
+  type DeliveryCallback,
+  type DeliveryEventName,
+  type DeliveryEventHandler,
+} from "./delivery-worker.js";
+export {
+  Repackager,
+  type RepackagerOptions,
+  type RepackageResult,
+} from "./repackager.js";

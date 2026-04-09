@@ -308,6 +308,32 @@ export class PostgresStore implements Store {
     return toResult(rows[0] as Record<string, unknown>);
   }
 
+  async updateResult(id: string, updates: Partial<Result>): Promise<void> {
+    const sets: Record<string, unknown> = {};
+
+    if (updates.deliveryStatus !== undefined)
+      sets.delivery_status = updates.deliveryStatus;
+    if (updates.deliveryAttempts !== undefined)
+      sets.delivery_attempts = updates.deliveryAttempts;
+    if (updates.maxDeliveryAttempts !== undefined)
+      sets.max_delivery_attempts = updates.maxDeliveryAttempts;
+    if (updates.lastDeliveryError !== undefined)
+      sets.last_delivery_error = updates.lastDeliveryError;
+    if (updates.nextDeliveryAt !== undefined)
+      sets.next_delivery_at = updates.nextDeliveryAt;
+    if (updates.deliveredAt !== undefined)
+      sets.delivered_at = updates.deliveredAt;
+    if (updates.contentScrubbedAt !== undefined)
+      sets.content_scrubbed_at = updates.contentScrubbedAt;
+
+    if (Object.keys(sets).length === 0) return;
+
+    await this.sql`
+      UPDATE results SET ${this.sql(sets as Record<string, unknown>, ...Object.keys(sets))}
+      WHERE id = ${id}
+    `;
+  }
+
   async getUndeliveredResults(limit: number): Promise<Result[]> {
     const rows = await this.sql`
       SELECT * FROM results

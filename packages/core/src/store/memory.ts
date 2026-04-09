@@ -187,6 +187,15 @@ export class MemoryStore implements Store {
     return structuredClone(record);
   }
 
+  async updateResult(id: string, updates: Partial<Result>): Promise<void> {
+    const existing = this.results.get(id);
+    if (!existing) throw new Error(`Result not found: ${id}`);
+    const updated = { ...existing, ...updates };
+    // Preserve the original id — callers should not change it.
+    updated.id = existing.id;
+    this.results.set(id, updated);
+  }
+
   async getUndeliveredResults(limit: number): Promise<Result[]> {
     const undelivered: Result[] = [];
     for (const r of this.results.values()) {
