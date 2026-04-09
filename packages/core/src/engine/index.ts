@@ -8,6 +8,7 @@ export {
   PROVIDER_LIMITS,
   type BatchManagerOptions,
   type ProviderLimits,
+  type KeyResolver,
 } from "./batch-manager.js";
 export {
   StatusTracker,
