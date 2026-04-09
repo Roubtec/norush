@@ -7,15 +7,24 @@
     "node": ">=24"
   },
   "scripts": {
-    "build": "tsc",
+    "dev": "vite dev",
+    "build": "vite build",
+    "preview": "vite preview",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "svelte-check --tsconfig ./tsconfig.json"
   },
   "dependencies": {
-    "@norush/core": "workspace:*"
+    "@norush/core": "workspace:*",
+    "postgres": "^3.4.5"
   },
   "devDependencies": {
+    "@sveltejs/adapter-node": "^5.5.4",
+    "@sveltejs/kit": "^2.57.0",
+    "@sveltejs/vite-plugin-svelte": "^5.1.1",
+    "svelte": "^5.55.2",
+    "svelte-check": "^4.4.6",
     "typescript": "^5.8.3",
+    "vite": "^6.3.5",
     "vitest": "^3.1.1"
   }
 }
