@@ -60,6 +60,9 @@ importers:
       postgres:
         specifier: ^3.4.5
         version: 3.4.9
+      ulidx:
+        specifier: ^2.4.1
+        version: 2.4.1
     devDependencies:
       '@sveltejs/adapter-node':
         specifier: ^5.5.4

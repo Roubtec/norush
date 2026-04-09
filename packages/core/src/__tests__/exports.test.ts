@@ -13,6 +13,10 @@ import {
   OrphanRecovery,
   CircuitBreaker,
   createNorush,
+  deriveKey,
+  encrypt,
+  decrypt,
+  maskApiKey,
 } from "../index.js";
 
 // Type-only imports to verify they are exported
@@ -59,6 +63,7 @@ import type {
   NorushEngine as _NorushEngine,
   NorushEventName,
   NorushEventHandler,
+  EncryptedPayload,
 } from "../index.js";
 
 describe("@norush/core exports", () => {
@@ -122,6 +127,13 @@ describe("@norush/core exports", () => {
 
   it("exports createNorush factory function", () => {
     expect(typeof createNorush).toBe("function");
+  });
+
+  it("exports crypto vault functions", () => {
+    expect(typeof deriveKey).toBe("function");
+    expect(typeof encrypt).toBe("function");
+    expect(typeof decrypt).toBe("function");
+    expect(typeof maskApiKey).toBe("function");
   });
 
   // Type-level assertions — these verify that all type exports compile.
@@ -203,7 +215,9 @@ describe("@norush/core exports", () => {
     expect(_orphanResult).toBeDefined();
     expect(_norushEventName).toBeDefined();
     expect(_norushEventHandler).toBeDefined();
+    const _encPayload: EncryptedPayload = { blob: Buffer.alloc(0) };
     expect(_norushConfig).toBeDefined();
+    expect(_encPayload).toBeDefined();
     expect(_id).toBeDefined();
     expect(_batchId).toBeDefined();
     expect(_resultId).toBeDefined();
