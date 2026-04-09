@@ -16,7 +16,8 @@
   "dependencies": {
     "@norush/core": "workspace:*",
     "@workos-inc/node": "^8.12.1",
-    "postgres": "^3.4.5"
+    "postgres": "^3.4.5",
+    "ulidx": "^2.4.1"
   },
   "devDependencies": {
     "@sveltejs/adapter-node": "^5.5.4",
