@@ -132,15 +132,16 @@ export function runStoreContractTests(
       test("updateRequest modifies fields", async () => {
         store = await factory();
         const req = await store.createRequest(newRequest());
+        const batch = await store.createBatch(newBatch());
         await store.updateRequest(req.id, {
           status: "batched",
-          batchId: "batch-123",
+          batchId: batch.id,
         });
 
         const updated = await store.getRequest(req.id);
         expect(updated).not.toBeNull();
         expect(updated?.status).toBe("batched");
-        expect(updated?.batchId).toBe("batch-123");
+        expect(updated?.batchId).toBe(batch.id);
         expect(updated?.updatedAt.getTime()).toBeGreaterThanOrEqual(
           req.updatedAt.getTime(),
         );
