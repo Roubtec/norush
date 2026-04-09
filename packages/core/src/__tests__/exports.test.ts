@@ -4,6 +4,9 @@ import {
   resolveConfig,
   NoopTelemetry,
   ConsoleTelemetry,
+  MemoryStore,
+  PostgresStore,
+  migrate,
 } from "../index.js";
 
 // Type-only imports to verify they are exported
@@ -58,6 +61,20 @@ describe("@norush/core exports", () => {
   it("exports ConsoleTelemetry class", () => {
     const t = new ConsoleTelemetry();
     expect(t).toBeInstanceOf(ConsoleTelemetry);
+  });
+
+  it("exports MemoryStore class", () => {
+    const s = new MemoryStore();
+    expect(s).toBeInstanceOf(MemoryStore);
+  });
+
+  it("exports PostgresStore class", () => {
+    expect(PostgresStore).toBeDefined();
+    expect(typeof PostgresStore).toBe("function");
+  });
+
+  it("exports migrate function", () => {
+    expect(typeof migrate).toBe("function");
   });
 
   // Type-level assertions — these verify that all type exports compile.
