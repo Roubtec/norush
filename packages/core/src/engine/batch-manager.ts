@@ -33,7 +33,6 @@ import {
   selectKeys,
   isFailoverEligibleError,
   type ApiKeyInfo,
-  type KeyCandidate,
 } from "../keys/selector.js";
 
 // ---------------------------------------------------------------------------
@@ -259,8 +258,9 @@ export class BatchManager {
     const userId = requests[0].userId;
 
     // If we have a key resolver, use failover-aware submission.
-    if (this.keyResolver) {
-      await this.submitWithFailover(requests, provider, userId);
+    const resolver = this.keyResolver;
+    if (resolver) {
+      await this.submitWithFailover(requests, provider, userId, resolver);
       return;
     }
 
@@ -379,8 +379,9 @@ export class BatchManager {
     requests: Request[],
     provider: ProviderName,
     userId: string,
+    resolver: KeyResolver,
   ): Promise<void> {
-    const keys = await this.keyResolver!.getKeysForUser(userId, provider);
+    const keys = await resolver.getKeysForUser(userId, provider);
     const candidates = selectKeys(keys);
 
     if (candidates.length === 0) {
@@ -398,7 +399,7 @@ export class BatchManager {
       const candidate = candidates[i];
 
       try {
-        const adapter = await this.keyResolver!.buildProvider(candidate.id, provider);
+        const adapter = await resolver.buildProvider(candidate.id, provider);
 
         await this.submitBatchWithAdapter(
           requests,

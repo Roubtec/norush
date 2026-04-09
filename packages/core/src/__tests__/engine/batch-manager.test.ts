@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryStore } from "../../store/memory.js";
-import { BatchManager, PROVIDER_LIMITS } from "../../engine/batch-manager.js";
+import { BatchManager, PROVIDER_LIMITS, type KeyResolver } from "../../engine/batch-manager.js";
 import type { BatchingConfig } from "../../config/types.js";
 import type { Provider } from "../../interfaces/provider.js";
 import type { NewRequest, NorushRequest, ProviderBatchRef } from "../../types.js";
+import type { ApiKeyInfo } from "../../keys/selector.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -661,6 +662,414 @@ describe("BatchManager", () => {
       const inFlight = await store.getInFlightBatches();
       expect(inFlight.length).toBeGreaterThanOrEqual(1);
       expect(inFlight[0].requestCount).toBe(3);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Multi-token failover
+  // -------------------------------------------------------------------------
+
+  describe("multi-token failover", () => {
+    function makeKeyResolver(
+      keys: ApiKeyInfo[],
+      providersByKeyId: Map<string, Provider>,
+    ): KeyResolver {
+      return {
+        getKeysForUser: vi.fn().mockResolvedValue(keys),
+        buildProvider: vi.fn().mockImplementation(async (keyId: string) => {
+          const p = providersByKeyId.get(keyId);
+          if (!p) throw new Error(`No provider for key ${keyId}`);
+          return p;
+        }),
+      };
+    }
+
+    function makeApiKey(overrides: Partial<ApiKeyInfo> = {}): ApiKeyInfo {
+      return {
+        id: "key_01",
+        provider: "claude",
+        label: "primary",
+        priority: 0,
+        failoverEnabled: true,
+        revokedAt: null,
+        ...overrides,
+      };
+    }
+
+    it("submits with the primary key when it succeeds", async () => {
+      await store.createRequest(makeNewRequest({ userId: "user_01" }));
+
+      const primaryProvider = mockProvider();
+      const backupProvider = mockProvider();
+
+      const keys = [
+        makeApiKey({ id: "key_primary", label: "Primary", priority: 0 }),
+        makeApiKey({ id: "key_backup", label: "Backup", priority: 1 }),
+      ];
+
+      const providersByKeyId = new Map([
+        ["key_primary", primaryProvider],
+        ["key_backup", backupProvider],
+      ]);
+
+      const keyResolver = makeKeyResolver(keys, providersByKeyId);
+
+      const manager = new BatchManager({
+        store,
+        providers: new Map(),
+        batching: defaultBatching(),
+        keyResolver,
+      });
+
+      await manager.flush();
+
+      expect(primaryProvider.submitBatch).toHaveBeenCalledOnce();
+      expect(backupProvider.submitBatch).not.toHaveBeenCalled();
+    });
+
+    it("falls back to backup key on 429 rate limit error", async () => {
+      await store.createRequest(makeNewRequest({ userId: "user_01" }));
+
+      const primaryProvider = mockProvider({
+        submitBatch: vi.fn().mockRejectedValue(new Error("HTTP 429: rate limit exceeded")),
+      });
+      const backupProvider = mockProvider();
+
+      const keys = [
+        makeApiKey({ id: "key_primary", label: "Primary", priority: 0 }),
+        makeApiKey({ id: "key_backup", label: "Backup", priority: 1 }),
+      ];
+
+      const providersByKeyId = new Map([
+        ["key_primary", primaryProvider],
+        ["key_backup", backupProvider],
+      ]);
+
+      const keyResolver = makeKeyResolver(keys, providersByKeyId);
+
+      const manager = new BatchManager({
+        store,
+        providers: new Map(),
+        batching: defaultBatching(),
+        keyResolver,
+      });
+
+      await manager.flush();
+
+      expect(primaryProvider.submitBatch).toHaveBeenCalledOnce();
+      expect(backupProvider.submitBatch).toHaveBeenCalledOnce();
+    });
+
+    it("falls back to backup key on credit exhaustion error", async () => {
+      await store.createRequest(makeNewRequest({ userId: "user_01" }));
+
+      const primaryProvider = mockProvider({
+        submitBatch: vi.fn().mockRejectedValue(new Error("Insufficient credit balance")),
+      });
+      const backupProvider = mockProvider();
+
+      const keys = [
+        makeApiKey({ id: "key_primary", label: "Primary", priority: 0 }),
+        makeApiKey({ id: "key_backup", label: "Backup", priority: 1 }),
+      ];
+
+      const providersByKeyId = new Map([
+        ["key_primary", primaryProvider],
+        ["key_backup", backupProvider],
+      ]);
+
+      const keyResolver = makeKeyResolver(keys, providersByKeyId);
+
+      const manager = new BatchManager({
+        store,
+        providers: new Map(),
+        batching: defaultBatching(),
+        keyResolver,
+      });
+
+      await manager.flush();
+
+      expect(primaryProvider.submitBatch).toHaveBeenCalledOnce();
+      expect(backupProvider.submitBatch).toHaveBeenCalledOnce();
+    });
+
+    it("does NOT failover on non-rate-limit errors (e.g., network)", async () => {
+      await store.createRequest(makeNewRequest({ userId: "user_01" }));
+
+      const primaryProvider = mockProvider({
+        submitBatch: vi.fn().mockRejectedValue(new Error("ECONNREFUSED")),
+      });
+      const backupProvider = mockProvider();
+
+      const keys = [
+        makeApiKey({ id: "key_primary", label: "Primary", priority: 0 }),
+        makeApiKey({ id: "key_backup", label: "Backup", priority: 1 }),
+      ];
+
+      const providersByKeyId = new Map([
+        ["key_primary", primaryProvider],
+        ["key_backup", backupProvider],
+      ]);
+
+      const keyResolver = makeKeyResolver(keys, providersByKeyId);
+
+      const manager = new BatchManager({
+        store,
+        providers: new Map(),
+        batching: defaultBatching(),
+        keyResolver,
+      });
+
+      await manager.flush();
+
+      expect(primaryProvider.submitBatch).toHaveBeenCalledOnce();
+      expect(backupProvider.submitBatch).not.toHaveBeenCalled();
+    });
+
+    it("records the key used on the batch record", async () => {
+      await store.createRequest(makeNewRequest({ userId: "user_01" }));
+
+      const primaryProvider = mockProvider();
+
+      const keys = [
+        makeApiKey({ id: "key_primary", label: "Production Key", priority: 0 }),
+      ];
+
+      const providersByKeyId = new Map([
+        ["key_primary", primaryProvider],
+      ]);
+
+      const keyResolver = makeKeyResolver(keys, providersByKeyId);
+
+      const manager = new BatchManager({
+        store,
+        providers: new Map(),
+        batching: defaultBatching(),
+        keyResolver,
+      });
+
+      await manager.flush();
+
+      const inFlight = await store.getInFlightBatches();
+      expect(inFlight).toHaveLength(1);
+      expect(inFlight[0].apiKeyId).toBe("key_primary");
+      expect(inFlight[0].apiKeyLabel).toBe("Production Key");
+    });
+
+    it("records the fallback key on the batch record when primary fails", async () => {
+      await store.createRequest(makeNewRequest({ userId: "user_01" }));
+
+      const primaryProvider = mockProvider({
+        submitBatch: vi.fn().mockRejectedValue(new Error("429 rate limit")),
+      });
+      const backupProvider = mockProvider();
+
+      const keys = [
+        makeApiKey({ id: "key_primary", label: "Primary", priority: 0 }),
+        makeApiKey({ id: "key_backup", label: "Backup", priority: 1 }),
+      ];
+
+      const providersByKeyId = new Map([
+        ["key_primary", primaryProvider],
+        ["key_backup", backupProvider],
+      ]);
+
+      const keyResolver = makeKeyResolver(keys, providersByKeyId);
+
+      const manager = new BatchManager({
+        store,
+        providers: new Map(),
+        batching: defaultBatching(),
+        keyResolver,
+      });
+
+      await manager.flush();
+
+      const inFlight = await store.getInFlightBatches();
+      expect(inFlight).toHaveLength(1);
+      expect(inFlight[0].apiKeyId).toBe("key_backup");
+      expect(inFlight[0].apiKeyLabel).toBe("Backup");
+    });
+
+    it("handles all keys exhausted gracefully", async () => {
+      const reqRecord = await store.createRequest(makeNewRequest({ userId: "user_01" }));
+
+      const primaryProvider = mockProvider({
+        submitBatch: vi.fn().mockRejectedValue(new Error("429 rate limit")),
+      });
+      const backupProvider = mockProvider({
+        submitBatch: vi.fn().mockRejectedValue(new Error("Quota exceeded")),
+      });
+
+      const keys = [
+        makeApiKey({ id: "key_primary", label: "Primary", priority: 0 }),
+        makeApiKey({ id: "key_backup", label: "Backup", priority: 1 }),
+      ];
+
+      const providersByKeyId = new Map([
+        ["key_primary", primaryProvider],
+        ["key_backup", backupProvider],
+      ]);
+
+      const keyResolver = makeKeyResolver(keys, providersByKeyId);
+      const telemetry = {
+        counter: vi.fn(),
+        histogram: vi.fn(),
+        event: vi.fn(),
+      };
+
+      const manager = new BatchManager({
+        store,
+        providers: new Map(),
+        batching: defaultBatching(),
+        keyResolver,
+        telemetry,
+      });
+
+      await manager.flush();
+
+      // Both providers should have been attempted.
+      expect(primaryProvider.submitBatch).toHaveBeenCalledOnce();
+      expect(backupProvider.submitBatch).toHaveBeenCalledOnce();
+
+      // Request should be back to queued (last key also failed, so
+      // the batch was reset).
+      const stored = await store.getRequest(reqRecord.id);
+      expect(stored?.status).toBe("queued");
+      expect(stored?.batchId).toBeNull();
+
+      // Telemetry should record the exhaustion.
+      expect(telemetry.event).toHaveBeenCalledWith(
+        "batch_submit_error",
+        expect.objectContaining({
+          error: "All API keys exhausted during failover",
+          keysAttempted: 2,
+        }),
+      );
+    });
+
+    it("emits failover_used telemetry when backup key succeeds", async () => {
+      await store.createRequest(makeNewRequest({ userId: "user_01" }));
+
+      const primaryProvider = mockProvider({
+        submitBatch: vi.fn().mockRejectedValue(new Error("429 rate limit")),
+      });
+      const backupProvider = mockProvider();
+
+      const keys = [
+        makeApiKey({ id: "key_primary", label: "Primary", priority: 0 }),
+        makeApiKey({ id: "key_backup", label: "Backup", priority: 1 }),
+      ];
+
+      const providersByKeyId = new Map([
+        ["key_primary", primaryProvider],
+        ["key_backup", backupProvider],
+      ]);
+
+      const keyResolver = makeKeyResolver(keys, providersByKeyId);
+      const telemetry = {
+        counter: vi.fn(),
+        histogram: vi.fn(),
+        event: vi.fn(),
+      };
+
+      const manager = new BatchManager({
+        store,
+        providers: new Map(),
+        batching: defaultBatching(),
+        keyResolver,
+        telemetry,
+      });
+
+      await manager.flush();
+
+      expect(telemetry.event).toHaveBeenCalledWith(
+        "failover_used",
+        expect.objectContaining({
+          fromKeyId: "key_primary",
+          toKeyId: "key_backup",
+          attemptIndex: 1,
+        }),
+      );
+    });
+
+    it("handles no active keys gracefully", async () => {
+      await store.createRequest(makeNewRequest({ userId: "user_01" }));
+
+      const keyResolver = makeKeyResolver([], new Map());
+      const telemetry = {
+        counter: vi.fn(),
+        histogram: vi.fn(),
+        event: vi.fn(),
+      };
+
+      const manager = new BatchManager({
+        store,
+        providers: new Map(),
+        batching: defaultBatching(),
+        keyResolver,
+        telemetry,
+      });
+
+      await manager.flush();
+
+      expect(telemetry.event).toHaveBeenCalledWith(
+        "batch_submit_error",
+        expect.objectContaining({
+          error: "No active API keys found for user/provider",
+        }),
+      );
+    });
+
+    it("respects key priority order across multiple candidates", async () => {
+      await store.createRequest(makeNewRequest({ userId: "user_01" }));
+
+      const callOrder: string[] = [];
+
+      const provider1 = mockProvider({
+        submitBatch: vi.fn().mockImplementation(async () => {
+          callOrder.push("key_low");
+          throw new Error("429 rate limit");
+        }),
+      });
+      const provider2 = mockProvider({
+        submitBatch: vi.fn().mockImplementation(async () => {
+          callOrder.push("key_mid");
+          throw new Error("Quota exceeded");
+        }),
+      });
+      const provider3 = mockProvider({
+        submitBatch: vi.fn().mockImplementation(async () => {
+          callOrder.push("key_high");
+          return { providerBatchId: "pb_001", provider: "claude" as const };
+        }),
+      });
+
+      const keys = [
+        makeApiKey({ id: "key_high", label: "High", priority: 20 }),
+        makeApiKey({ id: "key_low", label: "Low", priority: 0 }),
+        makeApiKey({ id: "key_mid", label: "Mid", priority: 10 }),
+      ];
+
+      const providersByKeyId = new Map([
+        ["key_low", provider1],
+        ["key_mid", provider2],
+        ["key_high", provider3],
+      ]);
+
+      const keyResolver = makeKeyResolver(keys, providersByKeyId);
+
+      const manager = new BatchManager({
+        store,
+        providers: new Map(),
+        batching: defaultBatching(),
+        keyResolver,
+      });
+
+      await manager.flush();
+
+      // Keys should be tried in priority order: low(0) -> mid(10) -> high(20)
+      expect(callOrder).toEqual(["key_low", "key_mid", "key_high"]);
     });
   });
 });
