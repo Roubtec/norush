@@ -128,19 +128,35 @@ export class ClaudeAdapter implements Provider {
    */
   async submitBatch(requests: NorushRequest[]): Promise<ProviderBatchRef> {
     const batch = await this.client.messages.batches.create({
-      requests: requests.map((req) => ({
-        custom_id: req.id,
-        params: {
-          model: req.model,
-          ...req.params,
-          // Ensure max_tokens is set; Anthropic requires it.
-          max_tokens:
-            (req.params.max_tokens as number | undefined) ?? 4096,
-          // Ensure messages array exists
-          messages:
-            (req.params.messages as Anthropic.MessageParam[]) ?? [],
-        },
-      })),
+      requests: requests.map((req) => {
+        // Validate messages - required by Anthropic API; default silently
+        // masking caller bugs, so we require a valid array.
+        if (!Array.isArray(req.params.messages)) {
+          throw new Error(
+            `ClaudeAdapter: request "${req.id}" must include a "messages" array in params`,
+          );
+        }
+
+        // Validate max_tokens - must be a number if provided.
+        const maxTokensParam = req.params.max_tokens;
+        if (maxTokensParam !== undefined && typeof maxTokensParam !== "number") {
+          throw new Error(
+            `ClaudeAdapter: request "${req.id}" has invalid "max_tokens" in params: expected a number, got ${typeof maxTokensParam}`,
+          );
+        }
+
+        return {
+          custom_id: req.id,
+          params: {
+            ...req.params,
+            // req.model takes precedence over any model key in params.
+            model: req.model,
+            // Anthropic requires max_tokens; default to 4096 if not supplied.
+            max_tokens: typeof maxTokensParam === "number" ? maxTokensParam : 4096,
+            messages: req.params.messages as Anthropic.MessageParam[],
+          },
+        };
+      }),
     });
 
     return {

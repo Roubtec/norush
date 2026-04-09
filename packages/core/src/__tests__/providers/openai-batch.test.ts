@@ -205,6 +205,25 @@ describe("OpenAIBatchAdapter", () => {
         "Batch creation failed",
       );
     });
+
+    it("req.model takes precedence over model key in params", async () => {
+      mockFilesCreate.mockResolvedValue({ id: "file-model" });
+      mockBatchesCreate.mockResolvedValue({ id: "batch_model" });
+
+      const req = makeRequest({
+        model: "gpt-4o",
+        params: {
+          model: "should-be-ignored",
+          messages: [{ role: "user", content: "test" }],
+        },
+      });
+      await adapter.submitBatch([req]);
+
+      const blob = mockToFile.mock.calls[0][0] as Blob;
+      const text = await blob.text();
+      const parsed = JSON.parse(text);
+      expect(parsed.body.model).toBe("gpt-4o");
+    });
   });
 
   // -------------------------------------------------------------------------

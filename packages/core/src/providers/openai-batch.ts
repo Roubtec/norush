@@ -83,8 +83,8 @@ function buildJsonlLine(
     method: "POST",
     url: endpoint,
     body: {
-      model: req.model,
       ...req.params,
+      model: req.model,
     },
   };
   return JSON.stringify(line);
@@ -194,7 +194,7 @@ function mapResult(line: OpenAIOutputLine): NorushResult {
 
 export class OpenAIBatchAdapter implements Provider {
   private readonly client: OpenAI;
-  private readonly endpoint: string;
+  private readonly endpoint: NonNullable<OpenAIBatchAdapterOptions["endpoint"]>;
 
   constructor(options: OpenAIBatchAdapterOptions) {
     this.client = new OpenAI({
@@ -225,7 +225,7 @@ export class OpenAIBatchAdapter implements Provider {
     // Step 2: Create batch
     const batch = await this.client.batches.create({
       input_file_id: file.id,
-      endpoint: this.endpoint as "/v1/chat/completions",
+      endpoint: this.endpoint,
       completion_window: "24h",
     });
 
@@ -281,8 +281,9 @@ export class OpenAIBatchAdapter implements Provider {
   /**
    * Download and parse an OpenAI batch output/error JSONL file.
    *
-   * Streams the file content and processes line-by-line to keep
-   * memory usage bounded for large result sets.
+   * Downloads the full file content and processes it line-by-line.
+   * Note: The OpenAI Files API returns completed output as a single
+   * response body, so the full text is loaded before parsing.
    */
   private async *parseOutputFile(
     fileId: string,

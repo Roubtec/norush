@@ -154,6 +154,56 @@ describe("ClaudeAdapter", () => {
       expect(createArg.requests[0].params.max_tokens).toBe(2048);
     });
 
+    it("req.model takes precedence over model key in params", async () => {
+      mockBatchesCreate.mockResolvedValue({ id: "msgbatch_005" });
+
+      const req = makeRequest({
+        model: "claude-sonnet-4-5-20250929",
+        params: {
+          model: "should-be-ignored",
+          max_tokens: 1024,
+          messages: [{ role: "user", content: "test" }],
+        },
+      });
+      await adapter.submitBatch([req]);
+
+      const createArg = mockBatchesCreate.mock.calls[0][0];
+      expect(createArg.requests[0].params.model).toBe("claude-sonnet-4-5-20250929");
+    });
+
+    it("throws when messages is missing from params", async () => {
+      const req = makeRequest({ params: { max_tokens: 1024 } });
+
+      await expect(adapter.submitBatch([req])).rejects.toThrow(
+        /must include a "messages" array/,
+      );
+      expect(mockBatchesCreate).not.toHaveBeenCalled();
+    });
+
+    it("throws when messages is not an array", async () => {
+      const req = makeRequest({
+        params: { max_tokens: 1024, messages: "not-an-array" },
+      });
+
+      await expect(adapter.submitBatch([req])).rejects.toThrow(
+        /must include a "messages" array/,
+      );
+    });
+
+    it("throws when max_tokens is present but not a number", async () => {
+      const req = makeRequest({
+        params: {
+          max_tokens: "2048",
+          messages: [{ role: "user", content: "test" }],
+        },
+      });
+
+      await expect(adapter.submitBatch([req])).rejects.toThrow(
+        /invalid "max_tokens"/,
+      );
+      expect(mockBatchesCreate).not.toHaveBeenCalled();
+    });
+
     it("propagates SDK errors", async () => {
       mockBatchesCreate.mockRejectedValue(
         new Error("API rate limit exceeded"),
