@@ -13,10 +13,18 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const mockEnqueue = vi.fn();
 const mockFlush = vi.fn();
+const mockGetUserLimits = vi.fn().mockResolvedValue(null);
+const mockGetSlidingWindow = vi.fn().mockResolvedValue({ total: 0, succeeded: 0, failed: 0 });
+const mockIncrementPeriodRequests = vi.fn().mockResolvedValue(undefined);
 
 vi.mock("$lib/server/norush", () => ({
   getSql: () => mockSql,
   getEngine: () => Promise.resolve({ enqueue: mockEnqueue, flush: mockFlush }),
+  getStore: () => ({
+    getUserLimits: mockGetUserLimits,
+    getSlidingWindow: mockGetSlidingWindow,
+    incrementPeriodRequests: mockIncrementPeriodRequests,
+  }),
 }));
 
 vi.mock("$lib/server/api-auth", () => ({

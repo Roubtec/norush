@@ -14,7 +14,6 @@
  */
 
 import type {
-  HealthScore,
   RateLimitResult,
   SlidingWindow,
   UserLimits,
