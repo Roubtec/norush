@@ -104,6 +104,20 @@ export {
 } from "./providers/openai-batch.js";
 
 // ---------------------------------------------------------------------------
+// Engine (queue + batch manager)
+// ---------------------------------------------------------------------------
+
+export {
+  RequestQueue,
+  estimateBytes,
+  type RequestQueueOptions,
+  BatchManager,
+  PROVIDER_LIMITS,
+  type BatchManagerOptions,
+  type ProviderLimits,
+} from "./engine/index.js";
+
+// ---------------------------------------------------------------------------
 // Telemetry implementations
 // ---------------------------------------------------------------------------
 

@@ -174,6 +174,21 @@ export class PostgresStore implements Store {
     return rows.map((r) => toRequest(r as Record<string, unknown>));
   }
 
+  async assignBatchToRequests(
+    ids: string[],
+    batchId: string,
+    status: "batched",
+  ): Promise<void> {
+    if (ids.length === 0) return;
+    await this.sql`
+      UPDATE requests
+      SET batch_id = ${batchId},
+          status = ${status},
+          updated_at = now()
+      WHERE id = ANY(${this.sql.array(ids)})
+    `;
+  }
+
   // -- Batch lifecycle ------------------------------------------------------
 
   async createBatch(batch: NewBatch): Promise<Batch> {
