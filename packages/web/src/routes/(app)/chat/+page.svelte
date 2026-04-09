@@ -31,8 +31,9 @@
    * }} Message
    */
 
-  // Intentionally capture initial server data — updates arrive via polling.
+  // svelte-ignore state_referenced_locally — intentional snapshot; polling handles updates.
   const initialMessages = data.messages;
+  // svelte-ignore state_referenced_locally
   const initialLoadedAt = data.loadedAt;
 
   /** Reactive message list, updated via polling and submission. */
