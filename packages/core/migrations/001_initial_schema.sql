@@ -129,5 +129,5 @@ CREATE INDEX IF NOT EXISTS idx_event_log_entity ON event_log(entity_type, entity
 -- Deferred FK: requests.batch_id → batches(id). Declared after both tables
 -- exist because requests is defined before batches in this file.
 ALTER TABLE requests
-  ADD CONSTRAINT IF NOT EXISTS fk_requests_batch_id
+  ADD CONSTRAINT fk_requests_batch_id
   FOREIGN KEY (batch_id) REFERENCES batches(id) ON DELETE SET NULL;
