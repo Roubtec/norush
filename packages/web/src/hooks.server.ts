@@ -34,30 +34,36 @@ export const handle: Handle = async ({ event, resolve }) => {
   }
 
   // -- Session validation --------------------------------------------------
-  // Validate the session cookie on every request so `locals.user` is
-  // available on all routes, including /login (for the "already authenticated"
-  // redirect) and /auth/logout (for WorkOS session revocation).
-  // Access control (redirect to /login) is enforced in the (app) layout, not here.
-  const sessionData = event.cookies.get(SESSION_COOKIE);
-  if (sessionData) {
-    try {
-      const session = await validateSession(sessionData);
-      if (session.authenticated) {
-        event.locals.user = {
-          id: session.user.workosId,
-          email: session.user.email,
-          firstName: session.user.firstName,
-          lastName: session.user.lastName,
-          sessionId: session.sessionId,
-        };
-      } else {
-        // Invalid or expired session — clear the stale cookie to avoid
-        // repeated WorkOS calls on every subsequent request.
+  // Skip auth for API routes that use token-based auth instead of session cookies.
+  const publicPrefixes = ["/api/v1/"];
+  const isPublic = publicPrefixes.some((p) => event.url.pathname.startsWith(p));
+
+  if (!isPublic) {
+    // Validate the session cookie so `locals.user` is available on all
+    // non-API routes, including /login (for the "already authenticated"
+    // redirect) and /auth/logout (for WorkOS session revocation).
+    // Access control (redirect to /login) is enforced in the (app) layout, not here.
+    const sessionData = event.cookies.get(SESSION_COOKIE);
+    if (sessionData) {
+      try {
+        const session = await validateSession(sessionData);
+        if (session.authenticated) {
+          event.locals.user = {
+            id: session.user.workosId,
+            email: session.user.email,
+            firstName: session.user.firstName,
+            lastName: session.user.lastName,
+            sessionId: session.sessionId,
+          };
+        } else {
+          // Invalid or expired session — clear the stale cookie to avoid
+          // repeated WorkOS calls on every subsequent request.
+          event.cookies.delete(SESSION_COOKIE, { path: "/" });
+        }
+      } catch {
+        // Malformed cookie — clear it so the user isn't stuck in a loop.
         event.cookies.delete(SESSION_COOKIE, { path: "/" });
       }
-    } catch {
-      // Malformed cookie — clear it so the user isn't stuck in a loop.
-      event.cookies.delete(SESSION_COOKIE, { path: "/" });
     }
   }
 
