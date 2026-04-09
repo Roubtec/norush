@@ -7,6 +7,7 @@
 <script>
   import StatsCard from "$lib/components/StatsCard.svelte";
   import UsageChart from "$lib/components/UsageChart.svelte";
+  import LimitBar from "$lib/components/LimitBar.svelte";
 
   let { data } = $props();
 
@@ -176,62 +177,30 @@
     <div class="limits-section">
       <h2>Spend Limits</h2>
       <div class="limits-grid">
-        {#if limits.hardSpendLimitUsd != null}
-          <div class="limit-item">
-            <div class="limit-header">
-              <span class="limit-label">Spend</span>
-              <span class="limit-values">
-                {fmtUsd(limits.currentSpendUsd)} / {fmtUsd(limits.hardSpendLimitUsd)}
-              </span>
-            </div>
-            {#if spendUtilization != null}
-              <div class="utilization-bar">
-                <div
-                  class="utilization-fill"
-                  class:warning={spendUtilization > 75}
-                  class:danger={spendUtilization > 90}
-                  style:width="{spendUtilization}%"
-                ></div>
-              </div>
-              <span class="utilization-pct">{spendUtilization.toFixed(1)}% used</span>
-            {/if}
-          </div>
+        {#if limits.hardSpendLimitUsd != null && spendUtilization != null}
+          <LimitBar
+            label="Spend"
+            utilization={spendUtilization}
+            current={fmtUsd(limits.currentSpendUsd)}
+            max={fmtUsd(limits.hardSpendLimitUsd)}
+            showPct
+          />
         {/if}
         {#if limits.maxRequestsPerHour != null && requestUtilization != null}
-          <div class="limit-item">
-            <div class="limit-header">
-              <span class="limit-label">Requests / hour</span>
-              <span class="limit-values">
-                {fmtTokens(limits.currentPeriodRequests)} / {fmtTokens(limits.maxRequestsPerHour)}
-              </span>
-            </div>
-            <div class="utilization-bar">
-              <div
-                class="utilization-fill"
-                class:warning={requestUtilization > 75}
-                class:danger={requestUtilization > 90}
-                style:width="{requestUtilization}%"
-              ></div>
-            </div>
-          </div>
+          <LimitBar
+            label="Requests / hour"
+            utilization={requestUtilization}
+            current={fmtTokens(limits.currentPeriodRequests)}
+            max={fmtTokens(limits.maxRequestsPerHour)}
+          />
         {/if}
         {#if limits.maxTokensPerDay != null && tokenUtilization != null}
-          <div class="limit-item">
-            <div class="limit-header">
-              <span class="limit-label">Tokens / day</span>
-              <span class="limit-values">
-                {fmtTokens(limits.currentPeriodTokens)} / {fmtTokens(limits.maxTokensPerDay)}
-              </span>
-            </div>
-            <div class="utilization-bar">
-              <div
-                class="utilization-fill"
-                class:warning={tokenUtilization > 75}
-                class:danger={tokenUtilization > 90}
-                style:width="{tokenUtilization}%"
-              ></div>
-            </div>
-          </div>
+          <LimitBar
+            label="Tokens / day"
+            utilization={tokenUtilization}
+            current={fmtTokens(limits.currentPeriodTokens)}
+            max={fmtTokens(limits.maxTokensPerDay)}
+          />
         {/if}
       </div>
     </div>
@@ -345,55 +314,6 @@
     flex-direction: column;
     gap: 1rem;
     max-width: 32rem;
-  }
-
-  .limit-item {
-    display: flex;
-    flex-direction: column;
-    gap: 0.375rem;
-  }
-
-  .limit-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-  }
-
-  .limit-label {
-    font-size: 0.875rem;
-    font-weight: 500;
-  }
-
-  .limit-values {
-    font-size: 0.8125rem;
-    color: var(--color-text-muted);
-  }
-
-  .utilization-bar {
-    height: 0.5rem;
-    background: #f3f4f6;
-    border-radius: 9999px;
-    overflow: hidden;
-  }
-
-  .utilization-fill {
-    height: 100%;
-    background: var(--color-primary);
-    border-radius: 9999px;
-    transition: width 0.3s ease;
-  }
-
-  .utilization-fill.warning {
-    background: #f59e0b;
-  }
-
-  .utilization-fill.danger {
-    background: #ef4444;
-  }
-
-  .utilization-pct {
-    font-size: 0.75rem;
-    color: var(--color-text-muted);
   }
 
   /* Empty state */

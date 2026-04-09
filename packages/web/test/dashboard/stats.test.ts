@@ -133,22 +133,24 @@ describe("Period filtering", () => {
   it("returns only requests within the date range", async () => {
     const store = new MemoryStore();
 
-    // Create a request "in the past" by manipulating the store directly.
+    // Create a request and backdate it to 10 days ago so it falls outside the
+    // last-hour query window.
     const old = await store.createRequest(newRequest());
-    // Force its createdAt to 10 days ago.
-    await store.updateRequest(old.id, { status: "succeeded" });
+    await store.updateRequest(old.id, {
+      status: "succeeded",
+      createdAt: new Date(Date.now() - 10 * 86_400_000),
+    });
 
-    // Current requests.
+    // Create a recent request that should appear in the last-hour window.
     const recent = await store.createRequest(newRequest());
     await store.updateRequest(recent.id, { status: "succeeded" });
 
-    // Query for the last hour only.
+    // Query for the last hour only — only the recent request should appear.
     const from = new Date(Date.now() - 3600_000);
     const to = new Date(Date.now() + 3600_000);
     const stats = await store.getDetailedStats("user-1", { from, to });
 
-    // Both should be within the hour window (they were just created).
-    expect(stats.totalRequests).toBe(2);
+    expect(stats.totalRequests).toBe(1);
 
     // Query for a future window — should return 0.
     const futureFrom = new Date(Date.now() + 86_400_000);

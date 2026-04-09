@@ -373,6 +373,13 @@ export class MemoryStore implements Store {
       }
     >();
 
+    // Build a requestId → result index for O(1) lookups instead of scanning
+    // all results for every request (avoids O(requests × results) complexity).
+    const resultByRequestId = new Map<string, Result>();
+    for (const res of this.results.values()) {
+      resultByRequestId.set(res.requestId, res);
+    }
+
     for (const r of this.requests.values()) {
       if (
         r.userId === userId &&
@@ -393,12 +400,10 @@ export class MemoryStore implements Store {
         const g = groups.get(key)!;
         g.requestCount++;
 
-        // Sum tokens from the matching result.
-        for (const res of this.results.values()) {
-          if (res.requestId === r.id) {
-            if (res.inputTokens) g.inputTokens += res.inputTokens;
-            if (res.outputTokens) g.outputTokens += res.outputTokens;
-          }
+        const res = resultByRequestId.get(r.id);
+        if (res) {
+          if (res.inputTokens) g.inputTokens += res.inputTokens;
+          if (res.outputTokens) g.outputTokens += res.outputTokens;
         }
       }
     }

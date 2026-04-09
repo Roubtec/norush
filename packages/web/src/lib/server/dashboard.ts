@@ -20,9 +20,10 @@ export type DashboardStats = DetailedUsageStats;
 /**
  * Fetch detailed usage stats for a user within a date range.
  *
- * Runs two SQL queries in parallel:
+ * Runs three SQL queries in parallel:
  * 1. Per-provider/model aggregation with request counts and token sums.
  * 2. Average batch turnaround time for completed batches.
+ * 3. Distinct batch count (avoids double-counting batches spanning multiple models).
  *
  * Cost calculations use the shared pricing module from @norush/core.
  */
@@ -31,7 +32,7 @@ export async function getDetailedStatsFromDb(
   userId: string,
   period: { from: Date; to: Date },
 ): Promise<DashboardStats> {
-  const [breakdownRows, turnaroundRows] = await Promise.all([
+  const [breakdownRows, turnaroundRows, batchCountRows] = await Promise.all([
     // Per-provider/model breakdown with request status counts.
     sql`
       SELECT
@@ -41,8 +42,7 @@ export async function getDetailedStatsFromDb(
         COUNT(*) FILTER (WHERE r.status = 'succeeded')::int AS succeeded_count,
         COUNT(*) FILTER (WHERE r.status IN ('failed', 'failed_final'))::int AS failed_count,
         COALESCE(SUM(res.input_tokens), 0)::int AS input_tokens,
-        COALESCE(SUM(res.output_tokens), 0)::int AS output_tokens,
-        COUNT(DISTINCT r.batch_id)::int AS batch_count
+        COALESCE(SUM(res.output_tokens), 0)::int AS output_tokens
       FROM requests r
       LEFT JOIN results res ON res.request_id = r.id
       WHERE r.user_id = ${userId}
@@ -67,6 +67,17 @@ export async function getDetailedStatsFromDb(
             AND r.created_at <= ${period.to}
         )
     `,
+
+    // Count distinct batches across all provider/model groups to avoid double-counting
+    // batches that contain requests for multiple models.
+    sql`
+      SELECT COUNT(DISTINCT r.batch_id)::int AS total_batches
+      FROM requests r
+      WHERE r.user_id = ${userId}
+        AND r.created_at >= ${period.from}
+        AND r.created_at <= ${period.to}
+        AND r.batch_id IS NOT NULL
+    `,
   ]);
 
   // Aggregate totals across all groups.
@@ -75,7 +86,6 @@ export async function getDetailedStatsFromDb(
   let failedRequests = 0;
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
-  const batchIdSet = new Set<number>();
 
   const costBreakdown: CostBreakdownEntry[] = breakdownRows.map((row) => {
     const provider = row.provider as string;
@@ -85,15 +95,12 @@ export async function getDetailedStatsFromDb(
     const requestCount = (row.request_count as number) ?? 0;
     const succeeded = (row.succeeded_count as number) ?? 0;
     const failed = (row.failed_count as number) ?? 0;
-    const batchCount = (row.batch_count as number) ?? 0;
 
     totalRequests += requestCount;
     succeededRequests += succeeded;
     failedRequests += failed;
     totalInputTokens += inputTokens;
     totalOutputTokens += outputTokens;
-    // Track unique batch count across groups (approximate — groups may share batches).
-    batchIdSet.add(batchCount);
 
     return {
       provider: provider as CostBreakdownEntry["provider"],
@@ -121,13 +128,10 @@ export async function getDetailedStatsFromDb(
     0,
   );
 
-  // Sum batch_count from the breakdown groups. In practice batches usually
-  // contain a single model, so this is a close-enough approximation without
-  // an extra query for distinct batch IDs across all groups.
-  const totalBatchesFromGroups = breakdownRows.reduce(
-    (s, row) => s + ((row.batch_count as number) ?? 0),
-    0,
-  );
+  const batchCountRow = batchCountRows[0] as Record<string, unknown> | undefined;
+  const totalBatches = batchCountRow?.total_batches != null
+    ? (batchCountRow.total_batches as number)
+    : 0;
 
   return {
     totalRequests,
@@ -135,7 +139,7 @@ export async function getDetailedStatsFromDb(
     failedRequests,
     totalInputTokens,
     totalOutputTokens,
-    totalBatches: totalBatchesFromGroups,
+    totalBatches,
     costBreakdown,
     avgTurnaroundMs,
     totalBatchCostUsd,

@@ -3,6 +3,13 @@
  *
  * Fetches detailed usage stats and spend limits for the authenticated user.
  * Supports a `period` search param: "24h", "7d" (default), or "30d".
+ *
+ * Note: Uses direct SQL helpers (`getDetailedStatsFromDb`, `getUserLimitsFromDb`)
+ * rather than the Store interface. This is intentional — the SvelteKit server
+ * routes in this package consistently call `getSql()` directly, and the Store
+ * singleton (`getStore()`) requires the engine to be initialised first. The
+ * Store's `getDetailedStats()` / `getUserLimits()` implementations contain the
+ * same logic and are exercised by the store-contract tests.
  */
 
 import { redirect } from "@sveltejs/kit";
@@ -96,9 +103,10 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     stats = s;
     limits = l;
   } catch (err) {
-    console.error("[dashboard] Failed to load stats:", err);
+    const errorId = new Date().toISOString();
+    console.error(`[dashboard] Failed to load stats (${errorId}):`, err);
     loadError =
-      "Failed to load usage statistics. The database table may not exist yet.";
+      `Failed to load usage statistics. Please try again later. Reference: ${errorId}`;
   }
 
   return {
