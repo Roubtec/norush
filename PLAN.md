@@ -296,7 +296,10 @@ CREATE TABLE user_api_keys (
   user_id               TEXT NOT NULL REFERENCES users(id),
   provider              TEXT NOT NULL,        -- 'claude' | 'openai'
   label                 TEXT NOT NULL,        -- 'primary', 'backup', etc.
-  api_key_encrypted     BYTEA NOT NULL,       -- AES-256-GCM encrypted
+  api_key_encrypted     BYTEA NOT NULL,
+                        -- Self-contained blob: 1-byte version || 12-byte IV
+                        -- || ciphertext || 16-byte GCM auth tag.
+                        -- Encrypted with AES-256-GCM using NORUSH_MASTER_KEY.
   priority              INTEGER NOT NULL DEFAULT 0,  -- lower = tried first
   failover_enabled      BOOLEAN NOT NULL DEFAULT TRUE,
   created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -783,8 +786,9 @@ AES-256-GCM symmetric encryption for stored API keys.
 
 - Master key supplied via `NORUSH_MASTER_KEY` env var or secret manager — **not
   generated or stored by norush**. Knowable, deployable, IaC-compatible.
-- Each API key encrypted with a unique IV per record, stored alongside
-  ciphertext.
+- Each API key is stored as a self-contained blob in `api_key_encrypted`:
+  `version (1 byte) || IV (12 bytes) || ciphertext || GCM tag (16 bytes)`.
+  The version byte allows future algorithm migration without schema changes.
 - **Key rotation:** Manual. CLI command re-encrypts all keys with new master.
   UI may display "key age" notice (e.g., "90+ days") as non-blocking reminder.
 - Required before multi-user deployment. Plaintext in `MemoryStore` (tests
