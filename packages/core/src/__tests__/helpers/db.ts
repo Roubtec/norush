@@ -1,7 +1,8 @@
 /**
  * Test database setup/teardown helpers for PostgreSQL integration tests.
  *
- * Creates a fresh test database per suite and drops it afterwards.
+ * Creates a fresh test schema per suite within the configured database and
+ * drops that schema afterwards.
  */
 
 import postgres from "postgres";

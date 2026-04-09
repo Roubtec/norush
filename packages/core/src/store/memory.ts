@@ -33,7 +33,7 @@ export class MemoryStore implements Store {
       externalId: null,
       provider: req.provider,
       model: req.model,
-      params: req.params,
+      params: structuredClone(req.params),
       status: "queued",
       batchId: null,
       userId: req.userId,
@@ -57,7 +57,13 @@ export class MemoryStore implements Store {
   async updateRequest(id: string, updates: Partial<Request>): Promise<void> {
     const existing = this.requests.get(id);
     if (!existing) throw new Error(`Request not found: ${id}`);
-    const updated = { ...existing, ...updates, updatedAt: new Date() };
+    const { createdAt: _createdAt, ...mutableUpdates } = updates;
+    const updated = {
+      ...existing,
+      ...mutableUpdates,
+      createdAt: existing.createdAt,
+      updatedAt: new Date(),
+    };
     // Preserve the original id — callers should not change it.
     updated.id = existing.id;
     this.requests.set(id, updated);
@@ -110,8 +116,10 @@ export class MemoryStore implements Store {
   async updateBatch(id: string, updates: Partial<Batch>): Promise<void> {
     const existing = this.batches.get(id);
     if (!existing) throw new Error(`Batch not found: ${id}`);
-    const updated = { ...existing, ...updates, updatedAt: new Date() };
+    const { createdAt: _createdAt, ...mutableUpdates } = updates;
+    const updated = { ...existing, ...mutableUpdates, updatedAt: new Date() };
     updated.id = existing.id;
+    updated.createdAt = existing.createdAt;
     this.batches.set(id, updated);
   }
 
@@ -143,7 +151,7 @@ export class MemoryStore implements Store {
       id: ulid(),
       requestId: result.requestId,
       batchId: result.batchId,
-      response: result.response,
+      response: structuredClone(result.response),
       stopReason: result.stopReason ?? null,
       inputTokens: result.inputTokens ?? null,
       outputTokens: result.outputTokens ?? null,
@@ -192,6 +200,7 @@ export class MemoryStore implements Store {
       ) {
         r.params = { scrubbed: true };
         r.contentScrubbedAt = now;
+        r.updatedAt = now;
         count++;
       }
     }
@@ -240,8 +249,8 @@ export class MemoryStore implements Store {
         req.createdAt >= period.from &&
         req.createdAt <= period.to
       ) {
-        if (res.inputTokens) totalInputTokens += res.inputTokens;
-        if (res.outputTokens) totalOutputTokens += res.outputTokens;
+        if (res.inputTokens != null) totalInputTokens += res.inputTokens;
+        if (res.outputTokens != null) totalOutputTokens += res.outputTokens;
       }
     }
 

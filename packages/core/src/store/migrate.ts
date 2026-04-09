@@ -8,6 +8,7 @@
 
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import type postgres from "postgres";
 
 /** Path to the migrations directory (relative to package root). */
@@ -25,7 +26,7 @@ export async function migrate(
   sql: postgres.Sql,
   migrationsDir?: string,
 ): Promise<string[]> {
-  const dir = migrationsDir ?? new URL(MIGRATIONS_DIR).pathname;
+  const dir = migrationsDir ?? fileURLToPath(MIGRATIONS_DIR);
 
   // Ensure tracking table exists (outside the main transaction so it's
   // visible immediately).
@@ -43,25 +44,34 @@ export async function migrate(
 
   if (files.length === 0) return [];
 
-  // Determine which migrations have already been applied.
-  const applied = await sql<{ name: string }[]>`
-    SELECT name FROM schema_migrations ORDER BY name
-  `;
-  const appliedSet = new Set(applied.map((r) => r.name));
+  // Apply all pending migrations inside a single transaction, protected by a
+  // transaction-scoped advisory lock so concurrent startups cannot compute and
+  // run the same pending set at the same time.
+  return await sql.begin(async (tx) => {
+    await tx`
+      SELECT pg_advisory_xact_lock(922337203685477580::bigint)
+    `;
 
-  const pending = files.filter((f) => !appliedSet.has(f));
-  if (pending.length === 0) return [];
+    // Determine applied migrations after acquiring the lock so concurrent
+    // runners see a consistent, serialized view.
+    const applied = await tx<{ name: string }[]>`
+      SELECT name FROM schema_migrations ORDER BY name
+    `;
+    const appliedSet = new Set(applied.map((r) => r.name));
 
-  // Apply all pending migrations inside a single transaction.
-  await sql.begin(async (tx) => {
+    const pending = files.filter((f) => !appliedSet.has(f));
+    if (pending.length === 0) return [];
+
+    const appliedNow: string[] = [];
     for (const file of pending) {
       const content = await readFile(join(dir, file), "utf-8");
       await tx.unsafe(content);
       await tx`
         INSERT INTO schema_migrations (name) VALUES (${file})
       `;
+      appliedNow.push(file);
     }
-  });
 
-  return pending;
+    return appliedNow;
+  });
 }

@@ -125,3 +125,9 @@ CREATE INDEX idx_results_delivery_status ON results(delivery_status)
 CREATE INDEX idx_results_content_scrub ON results(content_scrubbed_at)
   WHERE content_scrubbed_at IS NULL;
 CREATE INDEX idx_event_log_entity ON event_log(entity_type, entity_id);
+
+-- Deferred FK: requests.batch_id → batches(id). Declared after both tables
+-- exist because requests is defined before batches in this file.
+ALTER TABLE requests
+  ADD CONSTRAINT fk_requests_batch_id
+  FOREIGN KEY (batch_id) REFERENCES batches(id) ON DELETE SET NULL;
