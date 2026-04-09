@@ -1,7 +1,7 @@
 <!--
   MessageList: scrollable container for chat messages.
 
-  Renders messages in reverse chronological order (newest at bottom)
+  Renders messages in chronological order (oldest at top, newest at bottom)
   and auto-scrolls to the latest message.
 -->
 <script>

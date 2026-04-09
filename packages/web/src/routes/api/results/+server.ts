@@ -32,7 +32,11 @@ export const GET: RequestHandler = async ({ locals, url }) => {
   }
 
   const sql = getSql();
+  // Capture cursor before the query so any updates landing during the SELECT
+  // are included in the next poll window (avoids a race between DB snapshot
+  // and timestamp generation).
+  const polledAt = new Date().toISOString();
   const results = await getResultsSince(sql, locals.user.id, since);
 
-  return json({ results, polledAt: new Date().toISOString() });
+  return json({ results, polledAt });
 };

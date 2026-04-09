@@ -7,6 +7,7 @@
 <script>
   import MessageList from "$lib/components/MessageList.svelte";
   import Composer from "$lib/components/Composer.svelte";
+  import { calculateSavings } from "$lib/savings.js";
 
   let { data } = $props();
 
@@ -52,19 +53,11 @@
 
   /** Total savings across all completed messages. */
   let totalSavings = $derived(
-    messages.reduce((sum, m) => {
-      if (m.result?.inputTokens != null && m.result?.outputTokens != null) {
-        const rates =
-          m.provider === "openai"
-            ? { input: 2.5 / 1_000_000, output: 10.0 / 1_000_000 }
-            : { input: 3.0 / 1_000_000, output: 15.0 / 1_000_000 };
-        const standardCost =
-          m.result.inputTokens * rates.input +
-          m.result.outputTokens * rates.output;
-        return sum + standardCost * 0.5;
-      }
-      return sum;
-    }, 0),
+    messages.reduce(
+      (sum, m) =>
+        sum + calculateSavings(m.provider, m.result?.inputTokens, m.result?.outputTokens),
+      0,
+    ),
   );
 
   /**

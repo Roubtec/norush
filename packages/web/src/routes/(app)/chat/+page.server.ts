@@ -17,6 +17,11 @@ export const load: PageServerLoad = async ({ locals }) => {
 
   const sql = getSql();
 
+  // Capture cursor before the query so any updates landing during the SELECT
+  // are included in the first poll window (avoids a race between DB snapshot
+  // and timestamp generation).
+  const loadedAt = new Date().toISOString();
+
   let messages: Awaited<ReturnType<typeof listMessages>> = [];
   let loadError: string | null = null;
 
@@ -30,6 +35,6 @@ export const load: PageServerLoad = async ({ locals }) => {
   return {
     messages,
     loadError,
-    loadedAt: new Date().toISOString(),
+    loadedAt,
   };
 };

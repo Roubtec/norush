@@ -5,26 +5,14 @@
   over standard real-time API rates.
 -->
 <script>
+  import { calculateSavings } from "$lib/savings.js";
+
   /**
    * @type {{ provider: string; inputTokens: number; outputTokens: number }}
    */
   let { provider, inputTokens, outputTokens } = $props();
 
-  /**
-   * Standard real-time API rates per token.
-   * @type {Record<string, { input: number; output: number }>}
-   */
-  const STANDARD_RATES = {
-    claude: { input: 3.0 / 1_000_000, output: 15.0 / 1_000_000 },
-    openai: { input: 2.5 / 1_000_000, output: 10.0 / 1_000_000 },
-  };
-
-  let savings = $derived((() => {
-    const rates = STANDARD_RATES[provider] ?? STANDARD_RATES.claude;
-    const standardCost =
-      inputTokens * rates.input + outputTokens * rates.output;
-    return standardCost * 0.5;
-  })());
+  let savings = $derived(calculateSavings(provider, inputTokens, outputTokens));
 
   let formattedSavings = $derived(
     savings < 0.01 && savings > 0

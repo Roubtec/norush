@@ -8,6 +8,7 @@
 
 import type postgres from "postgres";
 import type { ProviderName, RequestStatus } from "@norush/core";
+import { calculateSavings as sharedCalculateSavings } from "$lib/savings.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -100,17 +101,8 @@ export function validateMessageInput(input: {
 // ---------------------------------------------------------------------------
 
 /**
- * Standard real-time API rates per token (approximate averages).
- * Batch APIs typically offer 50% discount.
- */
-const STANDARD_RATES: Record<string, { input: number; output: number }> = {
-  claude: { input: 3.0 / 1_000_000, output: 15.0 / 1_000_000 },
-  openai: { input: 2.5 / 1_000_000, output: 10.0 / 1_000_000 },
-};
-
-/**
  * Calculate estimated savings from using batch API vs real-time.
- * Batch APIs typically offer 50% discount over standard rates.
+ * Delegates to the shared $lib/savings utility so rates stay in one place.
  *
  * @returns Estimated savings in USD.
  */
@@ -119,11 +111,7 @@ export function calculateSavings(
   inputTokens: number,
   outputTokens: number,
 ): number {
-  const rates = STANDARD_RATES[provider] ?? STANDARD_RATES.claude;
-  const standardCost =
-    inputTokens * rates.input + outputTokens * rates.output;
-  // Batch discount is 50% off standard rates
-  return standardCost * 0.5;
+  return sharedCalculateSavings(provider, inputTokens, outputTokens);
 }
 
 // ---------------------------------------------------------------------------
