@@ -61,6 +61,18 @@ describe("clampInterval", () => {
     expect(MIN_INTERVAL_MS).toBe(10_000);
     expect(MAX_INTERVAL_MS).toBe(900_000);
   });
+
+  it("throws RangeError for NaN", () => {
+    expect(() => clampInterval(NaN)).toThrow(RangeError);
+    expect(() => clampInterval(NaN)).toThrow(
+      "Polling interval must be a finite number, got: NaN",
+    );
+  });
+
+  it("throws RangeError for Infinity", () => {
+    expect(() => clampInterval(Infinity)).toThrow(RangeError);
+    expect(() => clampInterval(-Infinity)).toThrow(RangeError);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -376,6 +388,13 @@ describe("isPollingPreset", () => {
     expect(isPollingPreset("unknown")).toBe(false);
     expect(isPollingPreset("")).toBe(false);
     expect(isPollingPreset("LINEAR")).toBe(false);
+  });
+
+  it("returns false for prototype-chain keys (regression: prototype pollution)", () => {
+    expect(isPollingPreset("__proto__")).toBe(false);
+    expect(isPollingPreset("toString")).toBe(false);
+    expect(isPollingPreset("constructor")).toBe(false);
+    expect(isPollingPreset("hasOwnProperty")).toBe(false);
   });
 });
 

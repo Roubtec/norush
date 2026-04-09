@@ -33,18 +33,21 @@ export {
 // Registry
 // ---------------------------------------------------------------------------
 
-const presets: Record<PollingPreset, () => PollingStrategy> = {
-  linear: () => new LinearStrategy(),
-  backoff: () => new BackoffStrategy(),
-  "deadline-aware": () => new DeadlineAwareStrategy(),
-  eager: () => new EagerStrategy(),
-};
+const presets: Record<PollingPreset, () => PollingStrategy> = Object.assign(
+  Object.create(null) as Record<PollingPreset, () => PollingStrategy>,
+  {
+    linear: () => new LinearStrategy(),
+    backoff: () => new BackoffStrategy(),
+    "deadline-aware": () => new DeadlineAwareStrategy(),
+    eager: () => new EagerStrategy(),
+  },
+);
 
 /**
  * Returns true if `name` is a known preset strategy name.
  */
 export function isPollingPreset(name: string): name is PollingPreset {
-  return name in presets;
+  return Object.prototype.hasOwnProperty.call(presets, name);
 }
 
 /**

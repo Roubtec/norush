@@ -1,7 +1,9 @@
 /**
  * Built-in polling strategy presets.
  *
- * Each strategy is a pure function of PollContext with no side effects.
+ * Each strategy is side-effect-free and has no internal mutable state.
+ * Some strategies (DeadlineAwareStrategy, EagerStrategy) also depend on the
+ * current time via Date.now() in addition to the PollContext fields.
  * Clamping is applied externally (see clamp.ts), not inside these implementations.
  */
 
