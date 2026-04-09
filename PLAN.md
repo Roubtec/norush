@@ -1,26 +1,35 @@
-# norush - Design & Implementation Plan
+# norush — Design & Implementation Plan
 
-## 1. Problem Statement
+## 1. Overview
 
 LLM APIs from Anthropic and OpenAI both offer **deferred/batch processing** at
 **50% cost reduction**. These APIs are asynchronous: you submit requests, wait
 (minutes to hours), then retrieve results. Today, every developer who wants to
-use these APIs must build their own:
-
-- Request batching and submission logic
-- Persistent tracking of in-flight batches
-- Polling / status-check scheduling
-- Result retrieval and routing
-- Error handling, retries, expiration recovery
-- Multi-provider abstraction
+use these APIs must build their own request batching, persistent tracking,
+polling, result retrieval, error handling, retries, and multi-provider
+abstraction.
 
 **norush** eliminates this by providing a reusable deferred-execution engine
 that handles the full lifecycle, and then building a consumer-facing product on
 top of it.
 
+**What makes this non-trivial:**
+
+1. **Multi-provider abstraction** — One interface, multiple backends.
+2. **Lifecycle management** — Automatic batching, polling, retry on expiry,
+   result routing.
+3. **Persistence by design** — Every request/response pair is tracked and
+   recoverable. Crash-safe.
+4. **Broker model** — Delivers results to webhooks, enabling chaining through
+   norush's API.
+5. **Multi-tenant key management** — Many users submit through one server,
+   each with their own API keys.
+6. **Scheduling** — Integration with cron or timer-based execution for
+   environments that aren't always-on.
+
 ---
 
-## 2. Research Summary: Provider APIs
+## 2. Provider API Reference
 
 ### 2.1 Anthropic Message Batches API
 
@@ -57,7 +66,8 @@ Key details:
 | Auth | Bearer token |
 
 Key details:
-- **Two-step submission**: upload JSONL file first, then create batch referencing file ID.
+- **Two-step submission**: upload JSONL file first, then create batch
+  referencing file ID.
 - Output line order **may not match** input order — `custom_id` is essential.
 - Separate error file for failed requests (`error_file_id`).
 - Rate limits are in a separate pool from synchronous API.
@@ -90,10 +100,7 @@ offer it as a fallback mode when the caller wants cheaper-but-still-realtime.
 
 ## 3. Architecture
 
-### 3.1 Core Library: `@norush/core`
-
-A TypeScript/Node.js library (publishable to npm) that manages the full
-deferred-request lifecycle. Provider-agnostic at the consumer level.
+### 3.1 System Overview
 
 ```
 ┌─────────────────────────────────────────────────────┐
@@ -131,82 +138,134 @@ deferred-request lifecycle. Provider-agnostic at the consumer level.
            └───────────────────────┘
 ```
 
-### 3.2 Key Components
+### 3.2 Components
 
-#### Request Queue
-- Accepts individual prompt requests with metadata (provider, model, priority,
-  callback config).
-- Assigns a unique `norush_id` to each request.
-- Holds requests until a batch flush is triggered (by count threshold, byte
-  limit, time window, or manual flush).
+**Request Queue** — Accepts individual prompt requests with metadata (provider,
+model, priority, callback config). Assigns a ULID `norush_id` to each request.
+Holds requests until a batch flush is triggered (by count threshold, byte
+limit, time window, or manual flush).
 
-#### Batch Manager
-- Groups queued requests by provider + model (a batch can only go to one
-  provider endpoint).
-- Serializes to the provider-specific format (JSON body for Claude, JSONL file
-  for OpenAI).
-- Submits and records the provider's batch ID mapped to all `norush_id`s
-  within it.
+**Batch Manager** — Groups queued requests by `(provider, model, api_key)`.
+Serializes to the provider-specific format (JSON body for Claude, JSONL file
+for OpenAI). Submits and records the provider's batch ID mapped to all
+`norush_id`s within it.
 
-#### Provider Adapters
-- **ClaudeAdapter**: Wraps Anthropic's Message Batches API.
-- **OpenAIBatchAdapter**: Wraps OpenAI's Batch API (file upload + batch create).
-- **OpenAIFlexAdapter** (optional): Wraps flex synchronous calls with retry/backoff.
-- Each adapter implements a common interface:
-  ```ts
-  interface Provider {
-    submitBatch(requests: NorushRequest[]): Promise<ProviderBatchRef>
-    checkStatus(ref: ProviderBatchRef): Promise<BatchStatus>
-    fetchResults(ref: ProviderBatchRef): Promise<NorushResult[]>
-    cancelBatch(ref: ProviderBatchRef): Promise<void>
-  }
-  ```
+**Provider Adapters:**
+- `ClaudeAdapter` — Wraps Anthropic's Message Batches API.
+- `OpenAIBatchAdapter` — Wraps OpenAI's Batch API (file upload + batch create).
+- `OpenAIFlexAdapter` (Phase 4) — Wraps flex synchronous calls with
+  retry/backoff.
 
-#### Status Tracker
-- Runs a **poll loop** (configurable interval, default 60s) that checks all
-  in-flight batches.
-- Emits events: `batch:submitted`, `batch:processing`, `batch:completed`,
-  `batch:expired`, `batch:error`.
-- Handles retries on expiry (re-queue the requests into a new batch).
-- Can be driven by:
-  - An internal `setInterval` (for long-running Node processes).
-  - An external cron/timer calling `tracker.tick()` (for serverless / static
-    environments).
+**Status Tracker** — Runs a poll loop (configurable interval, default 60s)
+that checks all in-flight batches. Emits events: `batch:submitted`,
+`batch:processing`, `batch:completed`, `batch:expired`, `batch:error`. Handles
+retries on expiry (re-queue requests into a new batch). Can be driven by an
+internal `setInterval` (for long-running processes) or an external cron calling
+`tracker.tick()` (for serverless environments).
 
-#### Result Router (Two-Phase Pipeline)
+**Result Router (Two-Phase Pipeline):**
 - **Phase A — Ingestion:** Streams results from the provider one at a time,
-  persists each to the store immediately. Crash-safe: partial progress is
-  never lost.
-- **Phase B — Delivery:** A separate loop reads undelivered results from the
-  store and fans them out via the configured mechanism per-request:
-  - **Callback function** (in-process).
-  - **Webhook POST** (for remote consumers, with optional HMAC-SHA256 signing).
-  - **Event emitter** (for pub/sub patterns).
-  - **Storage write** (persist to DB/file for later retrieval).
-- Delivery tracks attempts, supports retry with backoff, and operates
-  independently of ingestion. See Section 9.3 for full design.
+  persists each to the store immediately. Crash-safe.
+- **Phase B — Delivery:** Reads undelivered results from the store and fans
+  them out: callback function (in-process), webhook POST (with optional
+  HMAC-SHA256 signing), event emitter, or storage write.
+- Delivery tracks attempts, supports retry with backoff, operates independently
+  of ingestion. See Section 6.2.
 
-#### Store (SPI = Service Provider Interface)
-- An interface for persistence. The core library does not bundle a database —
-  consumers provide an adapter.
-- Built-in adapters:
-  - `MemoryStore` — for tests and ephemeral use.
-  - `SQLiteStore` — for single-server / CLI deployments.
-  - `PostgresStore` (or similar) — for production web apps.
-- What's stored:
-  - Requests: `norush_id`, provider, model, params, status, created_at, batch_ref.
-  - Batches: `batch_id`, provider_batch_id, status, submitted_at, ended_at.
-  - Results: `norush_id`, response body, received_at, delivery_status.
+**Store (SPI)** — Persistence interface. Built-in adapters:
+- `MemoryStore` — For tests and ephemeral scripts. **Not crash-safe.**
+- `PostgresStore` — For all persistent environments (dev, staging, prod).
 
-### 3.3 Configuration
+### 3.3 Core Interfaces
+
+```ts
+// --- Provider adapter ---
+
+interface Provider {
+  submitBatch(requests: NorushRequest[]): Promise<ProviderBatchRef>
+  checkStatus(ref: ProviderBatchRef): Promise<BatchStatus>
+  fetchResults(ref: ProviderBatchRef): Promise<NorushResult[]>
+  cancelBatch(ref: ProviderBatchRef): Promise<void>
+}
+
+// --- Persistence ---
+
+interface Store {
+  // Request lifecycle
+  createRequest(req: NewRequest): Promise<Request>;
+  getRequest(id: string): Promise<Request | null>;
+  updateRequest(id: string, updates: Partial<Request>): Promise<void>;
+  getQueuedRequests(limit: number): Promise<Request[]>;
+
+  // Batch lifecycle
+  createBatch(batch: NewBatch): Promise<Batch>;
+  getBatch(id: string): Promise<Batch | null>;
+  updateBatch(id: string, updates: Partial<Batch>): Promise<void>;
+  getPendingBatches(): Promise<Batch[]>;
+  getInFlightBatches(): Promise<Batch[]>;
+
+  // Result lifecycle
+  createResult(result: NewResult): Promise<Result>;
+  getUndeliveredResults(limit: number): Promise<Result[]>;
+  markDelivered(id: string): Promise<void>;
+
+  // Retention
+  scrubExpiredContent(before: Date): Promise<number>;
+
+  // Telemetry / analytics
+  getStats(userId: string, period: DateRange): Promise<UsageStats>;
+}
+
+// --- Polling ---
+
+interface PollingStrategy {
+  /** Return the delay (ms) before the next poll, given current state. */
+  nextInterval(context: PollContext): number;
+}
+
+interface PollContext {
+  batchId: string;
+  provider: 'claude' | 'openai';
+  submittedAt: Date;
+  lastPolledAt: Date | null;
+  pollCount: number;
+  /** Provider's stated completion window (e.g., 24h). */
+  expiresAt: Date;
+}
+
+// --- Telemetry ---
+
+interface TelemetryHook {
+  counter(name: string, value: number, tags?: Record<string, string>): void;
+  histogram(name: string, value: number, tags?: Record<string, string>): void;
+  event(name: string, data?: Record<string, unknown>): void;
+}
+
+// --- Rate limiting ---
+
+interface HealthScore {
+  /** Value between 0.1 and 1.0. */
+  factor: number;
+  /** What's driving the score. */
+  reason: 'healthy' | 'partial_failures' | 'mostly_failing' | 'critical';
+}
+```
+
+### 3.4 Library Configuration
 
 ```ts
 const norush = createNorush({
   providers: {
-    claude: { apiKey: process.env.ANTHROPIC_API_KEY },
-    openai: { apiKey: process.env.OPENAI_API_KEY },
+    claude: [
+      { apiKey: process.env.ANTHROPIC_API_KEY },
+      { apiKey: process.env.ANTHROPIC_API_KEY_FALLBACK },
+    ],
+    openai: [
+      { apiKey: process.env.OPENAI_API_KEY },
+      { apiKey: process.env.OPENAI_API_KEY_FALLBACK },
+    ],
   },
-  store: new SQLiteStore('./norush.db'),
+  store: new PostgresStore(process.env.DATABASE_URL),
   batching: {
     maxRequests: 1000,       // flush when queue reaches this
     maxBytes: 50_000_000,    // flush at 50MB
@@ -221,18 +280,193 @@ const norush = createNorush({
 
 ---
 
-## 4. Consumer Applications
+## 4. Data Model
 
-### 4.1 Application A: "norush.chat" — Deferred Chat Web App
+### 4.1 PostgreSQL Schema
+
+```sql
+CREATE TABLE users (
+  id                    TEXT PRIMARY KEY,     -- ULID
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE user_api_keys (
+  id                    TEXT PRIMARY KEY,     -- ULID
+  user_id               TEXT NOT NULL REFERENCES users(id),
+  provider              TEXT NOT NULL,        -- 'claude' | 'openai'
+  label                 TEXT NOT NULL,        -- 'primary', 'backup', etc.
+  api_key_encrypted     BYTEA NOT NULL,
+                        -- Self-contained blob: 1-byte version || 12-byte IV
+                        -- || ciphertext || 16-byte GCM auth tag.
+                        -- Encrypted with AES-256-GCM using NORUSH_MASTER_KEY.
+  priority              INTEGER NOT NULL DEFAULT 0,  -- lower = tried first
+  failover_enabled      BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE user_limits (
+  user_id               TEXT PRIMARY KEY REFERENCES users(id),
+  max_requests_per_hour INTEGER,              -- NULL = unlimited
+  max_tokens_per_day    INTEGER,              -- NULL = unlimited
+  hard_spend_limit_usd  NUMERIC(10,2),        -- NULL = unlimited
+  current_period_requests INTEGER NOT NULL DEFAULT 0,
+  current_period_tokens   INTEGER NOT NULL DEFAULT 0,
+  period_reset_at       TIMESTAMPTZ NOT NULL,
+  updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE user_settings (
+  user_id               TEXT PRIMARY KEY REFERENCES users(id),
+  retention_policy      TEXT NOT NULL DEFAULT '7d',
+                        -- 'on_ack' | '1d' | '7d' | '30d' | custom e.g. '14d'
+                        -- Default set by consuming app (7d for library, 30d for chat)
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE requests (
+  id                    TEXT PRIMARY KEY,     -- norush_id (ULID)
+  external_id           TEXT,                 -- custom_id sent to provider
+  provider              TEXT NOT NULL,        -- 'claude' | 'openai'
+  model                 TEXT NOT NULL,        -- e.g. 'claude-sonnet-4-6'
+  params                JSONB NOT NULL,       -- full request params
+  status                TEXT NOT NULL DEFAULT 'queued',
+                        -- queued | batched | processing | succeeded
+                        -- | failed | expired | failed_final | canceled
+  batch_id              TEXT,                 -- FK to batches.id (current batch)
+  user_id               TEXT NOT NULL REFERENCES users(id),
+  callback_url          TEXT,                 -- optional webhook for this request
+  webhook_secret        TEXT,                 -- optional HMAC signing secret
+  retry_count           INTEGER NOT NULL DEFAULT 0, -- times repackaged into new batch
+  max_retries           INTEGER NOT NULL DEFAULT 5, -- per-request retry budget
+  content_scrubbed_at   TIMESTAMPTZ,          -- NULL until scrubbed by retention worker
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE batches (
+  id                    TEXT PRIMARY KEY,     -- internal batch ID (ULID)
+  provider              TEXT NOT NULL,
+  provider_batch_id     TEXT,                 -- ID from provider (NULL until confirmed)
+  api_key_id            TEXT NOT NULL REFERENCES user_api_keys(id),
+  api_key_label         TEXT,                 -- denormalized for auditing
+  status                TEXT NOT NULL DEFAULT 'pending',
+                        -- pending | submitted | processing | ended
+                        -- | expired | cancelled | failed
+  request_count         INTEGER NOT NULL DEFAULT 0,
+  succeeded_count       INTEGER NOT NULL DEFAULT 0,
+  failed_count          INTEGER NOT NULL DEFAULT 0,
+  submission_attempts   INTEGER NOT NULL DEFAULT 0,  -- orphan recovery counter
+  max_submission_attempts INTEGER NOT NULL DEFAULT 3,
+  provider_retries      INTEGER NOT NULL DEFAULT 0,  -- provider-failure retries (free)
+  max_provider_retries  INTEGER NOT NULL DEFAULT 5,
+  polling_strategy      TEXT,                 -- override, NULL = global default
+  submitted_at          TIMESTAMPTZ,
+  ended_at              TIMESTAMPTZ,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE results (
+  id                    TEXT PRIMARY KEY,     -- ULID
+  request_id            TEXT NOT NULL UNIQUE REFERENCES requests(id),
+  batch_id              TEXT NOT NULL REFERENCES batches(id),
+  response              JSONB NOT NULL,       -- full provider response
+  stop_reason           TEXT,                 -- end_turn, max_tokens, etc.
+  input_tokens          INTEGER,
+  output_tokens         INTEGER,
+  delivery_status       TEXT NOT NULL DEFAULT 'pending',
+                        -- pending | delivered | failed | no_target
+  delivery_attempts     INTEGER NOT NULL DEFAULT 0,
+  max_delivery_attempts INTEGER NOT NULL DEFAULT 5,
+  last_delivery_error   TEXT,
+  next_delivery_at      TIMESTAMPTZ,          -- retry scheduling (backoff)
+  delivered_at          TIMESTAMPTZ,
+  content_scrubbed_at   TIMESTAMPTZ,          -- NULL until scrubbed
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE event_log (
+  id                    TEXT PRIMARY KEY,     -- ULID
+  entity_type           TEXT NOT NULL,        -- 'batch' | 'request' | 'result'
+  entity_id             TEXT NOT NULL,
+  event                 TEXT NOT NULL,        -- 'submitted', 'orphan_recovered',
+                                              -- 'circuit_breaker_tripped', etc.
+  details               JSONB,               -- scrubbed alongside parent record
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Indexes for common query patterns
+CREATE INDEX idx_requests_status ON requests(status);
+CREATE INDEX idx_requests_user_id ON requests(user_id);
+CREATE INDEX idx_requests_batch_id ON requests(batch_id);
+CREATE INDEX idx_batches_status ON batches(status);
+CREATE INDEX idx_batches_updated_at ON batches(updated_at);
+CREATE INDEX idx_results_delivery_status ON results(delivery_status)
+  WHERE delivery_status IN ('pending', 'failed');
+CREATE INDEX idx_results_content_scrub ON results(content_scrubbed_at)
+  WHERE content_scrubbed_at IS NULL;
+CREATE INDEX idx_event_log_entity ON event_log(entity_type, entity_id);
+```
+
+### 4.2 PostgreSQL Rationale
+
+PostgreSQL for all environments — local dev (Docker `postgres:17`), CI, and
+cloud (Azure Database for PostgreSQL Flexible Server). No SQLite.
+
+- **Full parity** — no dialect surprises when deploying.
+- **JSONB** — binary JSON with indexing.
+- **TIMESTAMPTZ** — UTC-normalized timestamps (stores UTC internally, converts
+  on display based on session timezone; prevents ambiguous local-time bugs).
+- **BOOLEAN** — native booleans instead of integer flags.
+- **NUMERIC** — precise decimal for monetary values.
+- **REFERENCES** — enforced foreign keys.
+- **Partial indexes** — e.g., only index undelivered results.
+
+Local dev setup:
+```bash
+docker run -d --name norush-db -p 5432:5432 \
+  -e POSTGRES_DB=norush -e POSTGRES_PASSWORD=dev \
+  postgres:17
+```
+
+### 4.3 Store Adapters
+
+| Adapter | Use case | Notes |
+|---------|----------|-------|
+| `MemoryStore` | Unit tests; ephemeral scripts | No persistence; fastest; no external deps. **Not crash-safe** — if the process dies, in-flight state is lost. |
+| `PostgresStore` | Dev, CI, staging, production | Uses `postgres.js` (Porsager); connection string via `DATABASE_URL` |
+
+`MemoryStore` is first-class for: (1) tests that need fast, isolated,
+deterministic storage without Docker, and (2) ephemeral scripts where a
+developer batches a one-shot workload, waits for results in-process, and exits.
+For any workload where losing in-flight requests matters, use `PostgresStore`.
+
+### 4.4 Schema Notes
+
+- All primary keys are ULIDs (time-sortable, B-tree friendly). See Section
+  7.5.
+- `content_scrubbed_at` on `requests` and `results` supports the retention
+  worker (Section 6.6).
+- Indexes target hot query paths: finding queued requests, pending batches,
+  undelivered results, and records needing scrubbing.
+
+---
+
+## 5. Consumer Applications
+
+### 5.1 norush.chat — Deferred Chat Web App
 
 A web application where users log in, provide their own API keys, and use a
 chat interface designed around **non-urgent conversations**.
 
 **User flow:**
-1. User signs up / logs in.
-2. User adds their Anthropic and/or OpenAI API keys (encrypted at rest).
-3. User writes messages throughout the day — thoughts, questions, research
-   requests — with no expectation of immediate response.
+1. User signs up / logs in (WorkOS AuthKit).
+2. User adds their Anthropic and/or OpenAI API keys (AES-256-GCM encrypted).
+3. User writes messages — thoughts, questions, research requests — with no
+   expectation of immediate response.
 4. norush batches these and submits them using the user's API keys.
 5. Responses arrive (minutes to hours later) and appear in the chat history.
 6. User returns to read responses; can continue with follow-up messages.
@@ -245,19 +479,19 @@ chat interface designed around **non-urgent conversations**.
 
 **Architecture:**
 ```
-Browser (React/Next.js)
+Browser (SvelteKit)
     │
     ▼
-API Server (Node.js)
+API Server (SvelteKit server routes / Node.js)
     │
-    ├── Auth (OAuth / email+password)
-    ├── Key vault (encrypted API key storage)
+    ├── Auth (WorkOS AuthKit — social, passkeys, enterprise SSO)
+    ├── Key vault (AES-256-GCM encrypted API key storage)
     ├── @norush/core (batch engine)
-    ├── PostgresStore (persistence)
-    └── Cron worker (tick the status tracker)
+    ├── PostgresStore (local Docker / Azure Flexible Server)
+    └── Worker (single event loop polling + delivery + retention)
 ```
 
-### 4.2 Application B: "Broker Mode" — norush as a Service
+### 5.2 Broker Mode
 
 An extension of the chat app where users configure **webhook endpoints**.
 norush acts as a batch-processing broker:
@@ -269,7 +503,7 @@ norush acts as a batch-processing broker:
 This lets developers use norush as managed infrastructure without self-hosting
 the batch lifecycle.
 
-### 4.3 Application C: CLI / Library for Developers
+### 5.3 Developer Library
 
 Developers `npm install @norush/core` and use it directly in their own apps,
 scripts, or pipelines. Example: overnight news summarization, bulk content
@@ -277,140 +511,76 @@ generation, scheduled analysis jobs.
 
 ---
 
-## 5. What Makes norush Non-Trivial
+## 6. Design Decisions
 
-The natural question: why wouldn't someone just call the batch API directly?
+### 6.1 Request & Batch Lifecycle
 
-1. **Multi-provider abstraction** — One interface, multiple backends. Switch
-   models without changing application code.
-2. **Lifecycle management** — Automatic batching, polling, retry on expiry,
-   result routing. The "boring but necessary" plumbing.
-3. **Persistence by design** — Every request/response pair is tracked and
-   recoverable. Crash-safe: the process can restart and pick up where it left.
-4. **Broker model** — Delivers results to webhooks, enabling clients to
-   chain further work through norush's API on their own terms.
-5. **Multi-tenant key management** — The broker model lets many users submit
-   through one server, each with their own API keys.
-6. **Scheduling** — Integration with cron or timer-based execution for
-   environments that aren't always-on.
+#### Multi-User Key Isolation
 
----
+Separate batches per API key. A batch is always authenticated with exactly one
+key. Even if two users use the same provider and model, their requests form
+distinct batches because each user's key is the authentication boundary.
 
-## 6. Implementation Phases
+The Batch Manager groups requests by `(provider, model, api_key)`.
 
-### Phase 1: Core Library + SQLite Store (MVP)
-- [ ] Project scaffolding (TypeScript, build tooling, tests)
-- [ ] Define core interfaces: `Provider`, `Store`, `NorushRequest`, `NorushResult`
-- [ ] Implement `ClaudeAdapter` (Anthropic Message Batches API)
-- [ ] Implement `OpenAIBatchAdapter` (OpenAI Batch API)
-- [ ] Implement `MemoryStore` and `SQLiteStore`
-- [ ] Implement Request Queue + Batch Manager
-- [ ] Implement Status Tracker (poll loop)
-- [ ] Implement Result Router (callback + event emitter)
-- [ ] Integration tests with real API calls (small batches)
-- [ ] CLI tool for manual batch submission and status checking
+#### Write-Before-Submit Idempotency
 
-### Phase 2: Deferred Chat Web App
-- [ ] Next.js app scaffolding
-- [ ] Auth system (NextAuth or similar)
-- [ ] Encrypted API key storage
-- [ ] Chat UI (message list with sent/pending/received states)
-- [ ] Background worker for status polling
-- [ ] Notification system (in-app + optional email)
-- [ ] Deploy (Vercel + managed Postgres, or self-hosted)
+**Submission protocol:**
 
-### Phase 3: Broker Mode + API
-- [ ] REST API for programmatic prompt submission
-- [ ] Webhook delivery with retry and signing
-- [ ] Usage dashboard (batches sent, costs, response times)
-- [ ] Rate limiting and abuse prevention
+1. **Before calling the provider API**, write a batch record to the store with
+   `status: 'pending'` and `submission_attempts: 0`.
+2. Increment `submission_attempts` to 1 and call the provider API.
+3. On success, update with `provider_batch_id` and `status: 'submitted'`.
+4. On failure, leave `provider_batch_id` as NULL — now an orphan candidate.
 
-### Phase 4: Polish & Ecosystem
-- [ ] OpenAI Flex adapter as fallback mode
-- [ ] npm publish `@norush/core`
-- [ ] Documentation site
-- [ ] GitHub Actions / cron integration examples
-- [ ] Data retention cleanup job and configurable TTL policies
+**Orphan recovery:** On each poll cycle, the Status Tracker scans for batches
+where `status = 'pending'`, `provider_batch_id IS NULL`,
+`updated_at < NOW() - 5 minutes`, and `submission_attempts < max`. These are
+presumed orphans from a crashed process. The tracker increments
+`submission_attempts` and re-submits. At `max_submission_attempts` (default 3),
+the batch transitions to `status: 'failed'` and its requests become eligible
+for user re-submission.
 
----
+**Accepted trade-off:** Orphan recovery may cause double-submission if the
+original process was slow (not crashed), resulting in double billing. We accept
+this: better to pay twice and get results than pay once and lose them. The
+grace period and attempt cap keep this bounded.
 
-## 7. Technical Decisions
+#### Partial Batch Failures & Repackaging
 
-| Decision | Choice | Rationale |
-|----------|--------|-----------|
-| Language | TypeScript | Runs on server and edge; largest LLM-tooling ecosystem; both provider SDKs available |
-| Runtime | Node.js (>=20) | Stable LTS, good for long-running poll loops and web servers |
-| Default store | SQLite via `better-sqlite3` | Zero-config, single-file, perfect for CLI and single-server use |
-| Web framework | Next.js (App Router) | SSR + API routes + React in one; easy deployment |
-| Package manager | pnpm | Fast, disk-efficient, good monorepo support |
-| Monorepo | pnpm workspaces | Keep `@norush/core` and `@norush/web` in one repo |
-| Provider SDKs | `@anthropic-ai/sdk`, `openai` | Official SDKs; handle auth, retries, types |
-| Testing | Vitest | Fast, TS-native, compatible with Node APIs |
+Each request within a batch has its own status:
 
----
+| Request outcome | Action |
+|----------------|--------|
+| `succeeded` | Ingest result, queue for delivery |
+| `errored` (provider error) | Mark `failed`, eligible for repackaging |
+| `expired` (batch timed out) | Mark `expired`, eligible for repackaging |
+| `canceled` (batch canceled) | Mark `canceled`, eligible for user re-trigger |
 
-## 8. Data Model
+**Automatic repackaging:** Failed/expired requests where
+`retry_count < max_request_retries` are collected into a new batch. Their
+`retry_count` is incremented. Requests exceeding the request-level retry
+budget transition to `status: 'failed_final'`.
 
-See **Section 11** for the full data model (multi-key support, retry counters,
-delivery tracking, spend limits, audit log) and **Section 13.4** for the
-retention policy additions (`user_settings`, scrub timestamps).
+**User-triggered re-submission:** Users can explicitly re-trigger any request
+in a terminal state (`failed_final`, `canceled`, `expired`). This resets
+`retry_count` to 0 and sets `status` back to `queued`. Not constrained by
+retry budget (still constrained by spend limits).
 
----
+### 6.2 Result Pipeline
 
-## 9. Resolved Design Decisions
+#### Two-Phase Streaming
 
-### 9.1 Multi-User Key Isolation
+Decoupled ingestion from delivery for crash safety and independent retry.
 
-**Decision:** Separate batches per API key. A batch sent to a provider is
-always authenticated with exactly one API key, and billing is tied to that key.
-Even if two users happen to use the same provider and model, their requests
-form distinct batches because each user's key is the authentication boundary.
-
-Implication: the Batch Manager groups requests by `(provider, model, api_key)`,
-not just `(provider, model)`.
-
-### 9.2 Webhook Security
-
-**Decision:** HMAC-SHA256 signing is **optional**, activated only when the user
-provides a signing secret for their webhook endpoint.
-
-- If a signing secret is configured, norush includes an `X-Norush-Signature`
-  header on every webhook POST, computed as
-  `HMAC-SHA256(secret, request_body)`.
-- If no secret is configured, webhooks are sent unsigned. This keeps the
-  barrier to entry low for users who just want to receive results.
-- The user can rotate their signing secret at any time; norush uses whatever
-  is current at delivery time.
-
-### 9.3 Streaming Result Ingestion & Two-Phase Delivery
-
-**Decision:** Decouple result ingestion from result delivery as a two-phase
-pipeline.
-
-**Phase A — Ingestion:** As provider results stream in (e.g., Claude SDK's
+**Phase A — Ingestion:** As provider results stream in (Claude SDK's
 `results()` iterator, or line-by-line reading of OpenAI's output JSONL), each
-individual result is immediately written to the `results` table in the store.
-The batch does not need to be fully complete before individual results are
-persisted.
+result is immediately written to the `results` table. The batch does not need
+to be fully complete before individual results are persisted.
 
-**Phase B — Delivery (fan-out):** A separate delivery loop reads undelivered
-results from the store and fans them out to the configured destination
-(callback, webhook, event emitter). Delivery is tracked independently per
-result.
-
-**Why this matters:**
-- **Crash safety:** If ingestion crashes midway through streaming a batch's
-  results, the already-persisted results are not lost. On restart, ingestion
-  picks up from where it left off (results already in the store are
-  deduplicated by `request_id`).
-- **Memory efficiency:** No need to hold the entire batch response in memory.
-  Results are processed one at a time.
-- **Independent retry:** Delivery failures (e.g., webhook endpoint is down)
-  do not block ingestion of new results. Delivery retries operate on their
-  own schedule.
-- **Partial batch results:** When a batch has a mix of succeeded and failed
-  requests, succeeded results are ingested and delivered immediately — no
-  waiting for the entire batch to resolve.
+**Phase B — Delivery:** A separate loop reads undelivered results from the
+store and fans them out (callback, webhook, event emitter). Delivery is tracked
+independently per result.
 
 ```
 Provider API
@@ -433,170 +603,85 @@ Provider API
                     on failure: increment delivery_attempts, schedule retry
 ```
 
-### 9.4 Idempotency, Crash Recovery & Guardrails
+**Why:**
+- **Crash safety** — partial progress is never lost. On restart, already-
+  persisted results are deduplicated by `request_id`.
+- **Memory efficiency** — no need to hold entire batch response in memory.
+- **Independent retry** — delivery failures don't block ingestion.
+- **Partial results** — succeeded requests are delivered immediately, no
+  waiting for entire batch.
 
-**Decision:** Write-before-submit with orphan recovery and layered guardrails.
+#### OpenAI Output File Handling
 
-#### Submission Protocol
+The OpenAI adapter downloads the output file and iterates line-by-line, feeding
+each result into the same ingestion pipeline used by the Claude streaming path.
 
-1. **Before calling the provider API**, write a batch record to the store with
-   `status: 'pending'` and `submission_attempts: 0`.
-2. Increment `submission_attempts` to 1 and call the provider API.
-3. On success, update the batch record with `provider_batch_id` and
-   `status: 'submitted'`.
-4. On failure, leave `provider_batch_id` as NULL; the batch is now an orphan
-   candidate.
+- Claude batches may deliver individual results sooner (as they complete);
+  OpenAI batches deliver all at once (after download). This timing difference
+  is invisible to consumers.
+- For large output files, the adapter streams the download and parses JSONL
+  line-by-line to keep memory bounded.
 
-#### Orphan Recovery
+### 6.3 Polling
 
-On each poll cycle, the Status Tracker scans for batches where:
-- `status = 'pending'`
-- `provider_batch_id IS NULL`
-- `updated_at < NOW() - grace_period` (default: 5 minutes)
-- `submission_attempts < max_submission_attempts`
+#### Adaptive Batch Polling
 
-These are presumed orphans from a crashed process. The tracker increments
-`submission_attempts` and re-submits. If `submission_attempts` reaches
-`max_submission_attempts` (default: 3), the batch transitions to
-`status: 'failed'` and its requests become eligible for user-triggered
-re-submission.
+Pluggable polling strategies with built-in presets, clamped to safe ranges.
+Per-batch strategy assignment, defaulting to a global strategy.
 
-**Accepted trade-off:** Orphan recovery may cause double-submission if the
-original process was merely slow (not crashed). This can result in double
-billing. We accept this: it is better to pay twice and get the results than
-to pay once and lose them. The grace period and attempt cap keep this bounded.
+**Built-in presets:**
+
+| Preset | Behavior | Best for |
+|--------|----------|----------|
+| `linear` | Fixed interval (default 60s) | Simple, predictable |
+| `backoff` | Exponential: 30s → 60s → 120s → ... capped at 10min | Cost-sensitive, large batches |
+| `deadline-aware` | Slow early, accelerates as `expiresAt` approaches | Freshness without early waste |
+| `eager` | 15s for first 5 min, then fall back to `backoff` | Small batches expected to complete quickly |
+
+**Clamping** (enforced regardless of strategy):
+- Minimum interval: **10 seconds** (protects against rate limits).
+- Maximum interval: **15 minutes** (ensures we don't miss expiry windows).
+
+**Assignment:** Global default in config. Each batch can override at creation
+time. Users can select presets or provide a custom strategy function.
+
+#### Chat UI Polling
+
+The chat UI uses HTTP polling (30–60s interval) to check for new results. No
+WebSocket or SSE.
+
+Rationale: norush is deferred-processing by design. Users submit and come back
+later. A `GET /api/results?since={timestamp}` endpoint on a 30s timer is
+simpler to build, debug, deploy, and scale than WebSocket. If push is ever
+needed, SSE is the lighter upgrade path.
+
+### 6.4 Rate Limiting, Spend Controls & Safety
 
 #### Guardrails
 
 | Guardrail | Scope | Default | Purpose |
 |-----------|-------|---------|---------|
-| `max_submission_attempts` | Per batch | 3 | Cap retries of orphaned batches (each attempt may cost money) |
-| `max_provider_retries` | Per batch | 5 | Cap retries of batches that the provider rejected/expired (these are free) |
-| `max_requests_per_period` | Per user | Configurable | Spend cap: max requests a user can submit in a rolling window |
-| `max_tokens_per_period` | Per user | Configurable | Spend cap: estimated token budget per rolling window |
-| `hard_spend_limit` | Per user | Configurable | Absolute ceiling; rejects new requests when reached |
-| `circuit_breaker_threshold` | Global | 5 consecutive failures | Pause all submissions if failures cascade, to prevent runaway costs |
-| `circuit_breaker_cooldown` | Global | 10 minutes | How long to wait before retrying after circuit breaker trips |
+| `max_submission_attempts` | Per batch | 3 | Cap retries of orphaned batches (each may cost money) |
+| `max_provider_retries` | Per batch | 5 | Cap retries of provider-rejected/expired batches (free) |
+| `max_requests_per_period` | Per user | Configurable | Spend cap: max requests per rolling window |
+| `max_tokens_per_period` | Per user | Configurable | Spend cap: estimated token budget per window |
+| `hard_spend_limit` | Per user | Configurable | Absolute ceiling; rejects new requests |
+| `circuit_breaker_threshold` | Global | 5 consecutive | Pause all submissions on cascading failures |
+| `circuit_breaker_cooldown` | Global | 10 minutes | Wait before retrying after circuit breaker trips |
 
-Every batch record carries counters:
-- `submission_attempts` — how many times we tried to submit to the provider.
-- `provider_retries` — how many times the provider failed/expired and we re-queued.
+**Per-user spend limits:** When a user hits their norush spend limit, new
+requests are rejected at queue time. Already-queued requests are not submitted
+until the limit resets. In-flight batches (already submitted to the provider)
+are allowed to complete — we don't cancel work that's already been paid for.
 
-Every request record carries:
-- `retry_count` — how many batches this request has been part of (for requests
-  that were repackaged after partial batch failure).
+**Circuit breaker:** If N consecutive batch submissions fail (across all users),
+norush pauses submissions and emits `circuit_breaker:tripped`. After cooldown,
+resumes with a single probe batch. If the probe succeeds, normal operation
+resumes. If it fails, cooldown resets.
 
-The circuit breaker is a global safety net. If N consecutive batch submissions
-fail (across all users), norush pauses submissions entirely and emits a
-`circuit_breaker:tripped` event. After the cooldown, it resumes with a single
-probe batch. If the probe succeeds, normal operation resumes. If it fails,
-the cooldown resets.
+#### Multi-Token Failover
 
-### 9.5 Adaptive Polling
-
-**Decision:** Pluggable polling strategies with built-in presets, clamped to
-safe ranges. Per-batch strategy assignment, defaulting to a global strategy.
-
-#### Strategy Interface
-
-```ts
-interface PollingStrategy {
-  /** Return the delay (ms) before the next poll, given current state. */
-  nextInterval(context: PollContext): number;
-}
-
-interface PollContext {
-  batchId: string;
-  provider: 'claude' | 'openai';
-  submittedAt: Date;
-  lastPolledAt: Date | null;
-  pollCount: number;
-  /** Provider's stated completion window (e.g., 24h) */
-  expiresAt: Date;
-}
-```
-
-#### Built-In Presets
-
-| Preset | Behavior | Best for |
-|--------|----------|----------|
-| `linear` | Fixed interval (default 60s) | Simple, predictable |
-| `backoff` | Exponential backoff: 30s → 60s → 120s → ... capped at 10min | Cost-sensitive users, large batches |
-| `deadline-aware` | Slow early, accelerates as `expiresAt` approaches. Backoff for the first 50% of the window, then linear 30s for the final 50% | Maximizing freshness without early waste |
-| `eager` | Poll every 15s for the first 5 min, then fall back to `backoff` | Small batches expected to complete quickly |
-
-#### Clamping
-
-Regardless of strategy (including user-supplied), norush enforces:
-- **Minimum interval:** 10 seconds (protects against API rate limits on status
-  endpoints).
-- **Maximum interval:** 15 minutes (ensures we don't miss expiry windows).
-
-#### Assignment
-
-- A global default strategy is set in norush configuration.
-- Each batch can override with a specific strategy at creation time.
-- In future iterations, users can select from presets or provide a custom
-  strategy function (within clamped limits).
-
----
-
-## 10. Credit Limits, Partial Failures & Multi-Token Failover
-
-### 10.1 The Problem
-
-Provider API limits can cause a batch to **partially succeed**: some requests
-complete, others fail because a rate limit, token quota, or spend cap was hit
-mid-batch. Additionally, norush itself may enforce per-user spend limits that
-prevent new batches from being submitted.
-
-### 10.2 Per-Request Status Within a Batch
-
-Each request within a batch has its own status independent of the batch's
-overall status. When a batch ends, norush inspects per-request results:
-
-| Request outcome | Action |
-|----------------|--------|
-| `succeeded` | Ingest result, queue for delivery |
-| `errored` (provider error) | Mark as `failed`, eligible for repackaging |
-| `expired` (batch timed out before processing) | Mark as `expired`, eligible for repackaging |
-| `canceled` (batch was canceled) | Mark as `canceled`, eligible for user re-trigger |
-
-"Eligible for repackaging" means the request can be automatically included in
-a retry batch (subject to the retry budget from Section 9.4). "Eligible for
-user re-trigger" means the request sits in a terminal state until the user
-explicitly asks to retry it.
-
-### 10.3 Automatic Repackaging
-
-When a batch completes with a mix of succeeded and failed requests:
-
-1. **Succeeded requests:** Results are immediately ingested and queued for
-   delivery (per Section 9.3).
-2. **Failed/expired requests:** If `retry_count < max_provider_retries`, these
-   requests are collected into a new batch and re-queued. Their `retry_count`
-   is incremented. The new batch follows the same lifecycle as any other batch.
-3. **Exhausted retries:** Requests that exceed their retry budget transition to
-   `status: 'failed_final'`. They remain in the store and can be re-triggered
-   by the user at any time.
-
-### 10.4 User-Triggered Re-Submission
-
-Users can explicitly re-trigger any request in a terminal state (`failed_final`,
-`canceled`, `expired_final`). This:
-
-1. Resets `retry_count` to 0.
-2. Sets `status` back to `queued`.
-3. The request enters the normal batching flow again.
-
-This is a deliberate user action, not an automatic retry — so it is not
-constrained by the retry budget (though it is still constrained by the user's
-spend limits).
-
-### 10.5 Multi-Token Failover
-
-Users may configure **multiple API keys** per provider (or even for the same
-provider, e.g., keys from different billing accounts or organizations).
+Users may configure multiple API keys per provider:
 
 ```ts
 providers: {
@@ -610,317 +695,431 @@ providers: {
 }
 ```
 
-**Failover behavior:**
+Failover behavior:
+1. Batches use the **primary key** by default.
+2. On rate limit or credit exhaustion, norush **tries the next key** (if
+   failover is enabled for that key pair).
+3. If all keys exhausted, batch follows normal retry/failure flow.
+4. Users can **disable failover** per key for strict billing separation.
+5. Key selection recorded on batch record (`api_key_label`) for auditability.
 
-1. Batches are submitted using the **first (primary) key** by default.
-2. If submission fails due to a rate limit or credit exhaustion error, norush
-   **tries the next key** in the list (if one exists and the user has enabled
-   failover for that key pair).
-3. If all keys for a provider are exhausted, the batch follows the normal
-   retry/failure flow.
-4. Users can **disable failover** per key if they want strict control over
-   which key is used (e.g., to keep billing separate).
-5. Key selection is recorded on the batch record (`api_key_label`) for
-   auditability.
+#### Adaptive Rate Limiting with Health Scores
 
-### 10.6 norush-Level Spend Limits
+Per-user rate limiting with a dynamic health score that tightens limits when
+batches are failing.
 
-Independent of provider-side limits, norush enforces its own per-user limits
-(Section 9.4 guardrails). When a user hits their norush spend limit:
+**Formula:** `effective_limit = base_limit × health_factor`
 
-- New requests are **rejected at queue time** with a clear error.
-- Already-queued requests are **not submitted** until the limit resets or the
-  user raises it.
-- In-flight batches (already submitted to the provider) are allowed to complete
-  — we don't cancel work that's already been paid for.
+**Health computation:**
 
----
+```ts
+function computeHealth(window: SlidingWindow): HealthScore {
+  const { succeeded, failed, total } = window;
+  if (total === 0) return { factor: 1.0, reason: 'healthy' };
 
-## 11. Updated Data Model
+  const successRate = succeeded / total;
 
-```sql
--- Per-user configuration and limits
-CREATE TABLE users (
-  id                    TEXT PRIMARY KEY,
-  created_at            TEXT NOT NULL,
-  updated_at            TEXT NOT NULL
-);
-
-CREATE TABLE user_api_keys (
-  id                    TEXT PRIMARY KEY,
-  user_id               TEXT NOT NULL,       -- FK to users.id
-  provider              TEXT NOT NULL,        -- 'claude' | 'openai'
-  label                 TEXT NOT NULL,        -- 'primary', 'backup', etc.
-  api_key_encrypted     BLOB NOT NULL,        -- encrypted at rest
-  priority              INTEGER NOT NULL DEFAULT 0,  -- lower = tried first
-  failover_enabled      INTEGER NOT NULL DEFAULT 1,
-  created_at            TEXT NOT NULL,
-  updated_at            TEXT NOT NULL
-);
-
-CREATE TABLE user_limits (
-  user_id               TEXT PRIMARY KEY,     -- FK to users.id
-  max_requests_per_hour INTEGER,              -- NULL = unlimited
-  max_tokens_per_day    INTEGER,              -- NULL = unlimited
-  hard_spend_limit_usd  REAL,                 -- NULL = unlimited
-  current_period_requests INTEGER NOT NULL DEFAULT 0,
-  current_period_tokens   INTEGER NOT NULL DEFAULT 0,
-  period_reset_at       TEXT NOT NULL,
-  updated_at            TEXT NOT NULL
-);
-
--- A single prompt/request submitted by a consumer
-CREATE TABLE requests (
-  id                    TEXT PRIMARY KEY,     -- norush_id (ULID)
-  external_id           TEXT,                 -- custom_id sent to provider
-  provider              TEXT NOT NULL,        -- 'claude' | 'openai'
-  model                 TEXT NOT NULL,        -- e.g. 'claude-sonnet-4-6'
-  params                JSON NOT NULL,        -- full request params
-  status                TEXT NOT NULL DEFAULT 'queued',
-                        -- queued | batched | processing | succeeded
-                        -- | failed | expired | failed_final | canceled
-  batch_id              TEXT,                 -- FK to batches.id (current batch)
-  user_id               TEXT NOT NULL,        -- FK to users.id
-  callback_url          TEXT,                 -- optional webhook for this request
-  webhook_secret        TEXT,                 -- optional HMAC signing secret
-  retry_count           INTEGER NOT NULL DEFAULT 0, -- times repackaged into a new batch
-  max_retries           INTEGER NOT NULL DEFAULT 5, -- per-request retry budget
-  created_at            TEXT NOT NULL,
-  updated_at            TEXT NOT NULL
-);
-
--- A batch submitted to a provider
-CREATE TABLE batches (
-  id                    TEXT PRIMARY KEY,     -- internal batch ID (ULID)
-  provider              TEXT NOT NULL,
-  provider_batch_id     TEXT,                 -- ID returned by provider (NULL until confirmed)
-  api_key_id            TEXT NOT NULL,        -- FK to user_api_keys.id (which key was used)
-  api_key_label         TEXT,                 -- denormalized for easy auditing
-  status                TEXT NOT NULL DEFAULT 'pending',
-                        -- pending | submitted | processing | ended
-                        -- | expired | cancelled | failed
-  request_count         INTEGER NOT NULL DEFAULT 0,
-  succeeded_count       INTEGER NOT NULL DEFAULT 0,
-  failed_count          INTEGER NOT NULL DEFAULT 0,
-  submission_attempts   INTEGER NOT NULL DEFAULT 0,  -- times we tried to submit (orphan recovery)
-  max_submission_attempts INTEGER NOT NULL DEFAULT 3,
-  provider_retries      INTEGER NOT NULL DEFAULT 0,  -- times provider failed and we re-queued
-  max_provider_retries  INTEGER NOT NULL DEFAULT 5,
-  polling_strategy      TEXT,                 -- override strategy name, NULL = use global default
-  submitted_at          TEXT,
-  ended_at              TEXT,
-  created_at            TEXT NOT NULL,
-  updated_at            TEXT NOT NULL
-);
-
--- Responses received from providers
-CREATE TABLE results (
-  id                    TEXT PRIMARY KEY,     -- ULID
-  request_id            TEXT NOT NULL UNIQUE, -- FK to requests.id (1:1)
-  batch_id              TEXT NOT NULL,        -- FK to batches.id
-  response              JSON NOT NULL,        -- full provider response
-  stop_reason           TEXT,                 -- end_turn, max_tokens, etc.
-  input_tokens          INTEGER,
-  output_tokens         INTEGER,
-  -- Delivery tracking (Phase B of two-phase pipeline)
-  delivery_status       TEXT NOT NULL DEFAULT 'pending',
-                        -- pending | delivered | failed | no_target
-  delivery_attempts     INTEGER NOT NULL DEFAULT 0,
-  max_delivery_attempts INTEGER NOT NULL DEFAULT 5,
-  last_delivery_error   TEXT,                 -- last failure reason
-  next_delivery_at      TEXT,                 -- for retry scheduling (backoff)
-  delivered_at          TEXT,
-  created_at            TEXT NOT NULL
-);
-
--- Audit log for significant events (optional but recommended)
-CREATE TABLE event_log (
-  id                    TEXT PRIMARY KEY,
-  entity_type           TEXT NOT NULL,        -- 'batch' | 'request' | 'result'
-  entity_id             TEXT NOT NULL,
-  event                 TEXT NOT NULL,        -- 'submitted', 'orphan_recovered',
-                                              -- 'circuit_breaker_tripped', etc.
-  details               JSON,
-  created_at            TEXT NOT NULL
-);
+  if (successRate >= 0.9) return { factor: 1.0, reason: 'healthy' };
+  if (successRate >= 0.5) return { factor: 0.5, reason: 'partial_failures' };
+  if (successRate > 0)    return { factor: 0.25, reason: 'mostly_failing' };
+  return                           { factor: 0.1, reason: 'critical' };
+}
 ```
 
-### Key differences from the original draft:
+**Sliding window:** Configurable (default 1 hour). Tracks batches submitted,
+succeeded, partially failed, fully failed. Updated on each batch completion.
 
-- **`user_api_keys`** — Supports multiple keys per provider with priority
-  ordering and failover toggle.
-- **`user_limits`** — Per-user spend caps with rolling counters.
-- **`requests.retry_count` / `max_retries`** — Per-request retry budget
-  tracking for repackaging.
-- **`batches.submission_attempts` / `max_submission_attempts`** — Orphan
-  recovery counter.
-- **`batches.provider_retries` / `max_provider_retries`** — Provider-failure
-  retry counter (separate from orphan retries since these are free).
-- **`batches.api_key_id` / `api_key_label`** — Track which key was used.
-- **`batches.polling_strategy`** — Per-batch polling override.
-- **`results.delivery_*` fields** — Full delivery lifecycle tracking for
-  the two-phase pipeline.
-- **`event_log`** — Audit trail for debugging and observability.
+| Health | Factor | Behavior |
+|--------|--------|----------|
+| `healthy` | 1.0 | Full rate. Normal operation. |
+| `partial_failures` | 0.5 | Half rate. Likely hitting provider quota. |
+| `mostly_failing` | 0.25 | Quarter rate. Likely exhausted API budget. |
+| `critical` | 0.1 | Near-minimum. All recent batches failed. |
 
----
+**Recovery:** Computed on every request admission using the current window. As
+failed batches age out and successes enter, factor recovers automatically.
+**Minimum throughput guarantee:** Even at `critical`, at least 1 request per
+period is allowed — the avenue to prove recovery.
 
-## 12. Additional Resolved Decisions
+**429 response headers:**
+- `Retry-After` (seconds until window slides)
+- `X-Norush-Health: partial_failures` (reason)
+- `X-Norush-Effective-Limit: 50` (current effective limit)
 
-### 12.1 Encryption at Rest for API Keys
+**Why adaptive over simple:** Simple rate limiting protects norush from volume
+abuse. Adaptive additionally protects **users from wasting money** — throttling
+down during failures is a service, not just a defense.
 
-**Decision:** AES-256-GCM symmetric encryption with an externally provided
-master key.
+### 6.5 Webhook Delivery
 
-- The master key is **not generated or stored by norush**. It is supplied via
-  environment variable (`NORUSH_MASTER_KEY`) or secret manager reference at
-  startup.
-- This means the key is a **knowable, deployable secret** — compatible with
-  IaC (Terraform, Pulumi), container orchestration (K8s Secrets, ECS task
-  definitions), and horizontal scaling (all instances share the same key).
-- Each API key is encrypted with a unique IV (initialization vector) derived
-  per record, stored alongside the ciphertext.
-- **Key rotation:** Manual for now. The user can rotate their master key by
-  running a migration command that re-encrypts all stored API keys with the
-  new key. The UI may display a "key age" notice (e.g., "Master key has been
-  in use for 90+ days") as a non-blocking reminder, not a hard requirement.
-- This is not critical-path for the core library MVP — the `MemoryStore` and
-  early `SQLiteStore` can store keys in plaintext during development. Encryption
-  is required before any multi-user deployment.
+#### HMAC-SHA256 Signing
 
-### 12.2 OpenAI Output File Handling
+Optional, activated when the user provides a signing secret. norush includes:
+- `X-Norush-Timestamp` — Unix timestamp (seconds) for when the webhook was
+  signed.
+- `X-Norush-Signature` — computed as
+  `HMAC-SHA256(secret, timestamp + "." + method + "." + path + "." + request_body)`.
 
-**Decision:** The OpenAI adapter downloads the completed output file and
-iterates line-by-line, feeding each result into the same ingestion pipeline
-used by the Claude streaming path.
+This binds the signature to both request metadata and payload, and allows
+consumers to reject replayed requests. Consumers must verify the signature and
+reject webhooks whose `X-Norush-Timestamp` falls outside a maximum allowed
+clock-skew window (recommended: 5 minutes). Without a secret, webhooks are sent
+unsigned. Users can rotate secrets at any time; norush uses whatever is current
+at delivery time.
+#### Delivery Guarantees
 
-- This means Claude batches may deliver individual results **sooner** (as they
-  complete within the batch), while OpenAI batches deliver all results at once
-  (after the full batch completes and the output file is downloaded).
-- From the consumer's perspective, this is invisible — results arrive via the
-  same delivery mechanism regardless of provider. The timing difference is a
-  provider characteristic, not a norush design choice.
-- For very large OpenAI output files, the adapter streams the file download
-  (not buffering the entire file in memory) and parses JSONL line-by-line.
-  This keeps memory usage bounded regardless of batch size.
+At-least-once delivery with exponential backoff:
+- Every payload includes `norush_id` for consumer-side deduplication.
+- Retry: 10s → 20s → 40s → ... capped at 10 min, up to `max_delivery_attempts`
+  (default 5).
+- After exhausting retries, `delivery_status` → `failed`. Result stays in store
+  and can be re-delivered via user action.
+- `X-Norush-Attempt: 3` header indicates retry count.
+- **Separate retry domain:** Webhook delivery retries are independent of batch
+  submission retries and polling. A down webhook doesn't block result ingestion.
 
-### 12.3 Webhook Delivery Guarantees
+### 6.6 Security & Data Governance
 
-**Decision:** At-least-once delivery with exponential backoff and idempotency
-support.
+#### Encryption at Rest
 
-- Every webhook payload includes `norush_id` (the request's unique ID) so
-  that consumers can **deduplicate** on their end. norush guarantees
-  at-least-once delivery, not exactly-once.
-- Retry schedule: exponential backoff starting at 10s, doubling up to a cap
-  of 10 minutes, for up to `max_delivery_attempts` (default 5) tries.
-- After exhausting retries, the result's `delivery_status` transitions to
-  `failed`. The result remains in the store (subject to retention policy) and
-  can be re-delivered via user action or API call.
-- Webhook payloads include a delivery attempt counter (`X-Norush-Attempt: 3`)
-  so the consumer knows if this is a retry.
-- **Separate retry domain from provider interactions:** Webhook delivery
-  retries are independent of batch submission retries and polling. A webhook
-  endpoint being down does not affect norush's ability to ingest new results
-  or submit new batches.
+AES-256-GCM symmetric encryption for stored API keys.
 
-### 12.4 Scope Boundary: No Built-In Pipeline Orchestration
+- Master key supplied via `NORUSH_MASTER_KEY` env var or secret manager — **not
+  generated or stored by norush**. Knowable, deployable, IaC-compatible.
+- Each API key is stored as a self-contained blob in `api_key_encrypted`:
+  `version (1 byte) || IV (12 bytes) || ciphertext || GCM tag (16 bytes)`.
+  The version byte allows future algorithm migration without schema changes.
+- **Key rotation:** Manual. CLI command re-encrypts all keys with new master.
+  UI may display "key age" notice (e.g., "90+ days") as non-blocking reminder.
+- Required before multi-user deployment. Plaintext in `MemoryStore` (tests
+  only) is acceptable during early solo development.
 
-**Decision:** norush does **not** own prompt chaining, transformation, or
-multi-step workflow logic. It is a broker, not a workflow engine.
+#### Data Retention
 
-**Rationale:** norush's value is in the batch lifecycle — accept requests,
-submit them cheaply, track progress, deliver results. Business logic about
-what to do with results belongs to the consumer:
-
-- **Chat users** interact with results manually. No automation needed.
-- **API consumers** receive results via webhook. If they want to chain further
-  work, their webhook handler submits new requests through the norush API.
-  norush processes those lazily, delivers results, and the cycle repeats.
-
-This keeps norush focused and avoids becoming a workflow orchestration platform
-(a different product category — Temporal, Step Functions, etc.). The webhook →
-re-submit loop is the chaining mechanism, and it lives entirely in user code.
-
-If a pattern emerges where many consumers build the same chaining logic, we
-can revisit with a lightweight convenience layer. But the starting position is:
-norush is transport and lifecycle management, not business logic.
-
----
-
-## 13. Data Retention Policy
-
-### 13.1 The Problem
-
-norush stores prompt/response pairs that may contain sensitive user data. We
-must avoid becoming an unbounded custodian of this data. Storage bloat is a
-practical concern; liability for sensitive content is a legal one.
-
-### 13.2 Configurable Retention
-
-Each user can configure a retention policy that controls how long request
-params and response bodies are kept. The policy applies **after successful
-delivery** (or after the request reaches a terminal state if no webhook is
-configured).
+norush stores prompt/response pairs that may contain sensitive data. Retention
+policy controls how long content is kept after delivery (or terminal state).
 
 | Policy | Behavior |
 |--------|----------|
-| `on_ack` | Scrub `params` and `response` JSON immediately after the webhook receives a 2xx ACK. Metadata (IDs, timestamps, token counts, status) is retained. |
-| `1d` | Scrub content 1 day after delivery / terminal state. |
-| `7d` | Scrub content after 7 days. |
-| `30d` | Scrub content after 30 days. **(Default)** |
+| `on_ack` | Scrub immediately after webhook 2xx ACK. **Encouraged for API/broker consumers.** |
+| `1d` | Scrub 1 day after delivery / terminal state. |
+| `7d` | Scrub after 7 days. **Default for `@norush/core` library.** |
+| `30d` | Scrub after 30 days. **Default for norush.chat** (chat history is the product). |
 | `custom` | User-specified duration in days. |
 
-"Scrub" means replacing the `params` and `response` JSON fields with a
-tombstone value (e.g., `{"scrubbed": true, "scrubbed_at": "..."}`) rather
-than deleting the row. This preserves the metadata for billing, analytics,
-and debugging (we can still see "request X was submitted at time Y, used
-N tokens, was delivered successfully") without retaining the actual content.
+"Scrub" = replace `params` and `response` JSON with a tombstone
+(`{"scrubbed": true, "scrubbed_at": "..."}`). Metadata (IDs, timestamps, token
+counts, status) is preserved for billing, analytics, and debugging.
 
-### 13.3 Implementation
+**Implementation:**
+- Retention worker runs periodically (e.g., every hour).
+- Respects user-configured policy from `user_settings`.
+- Scrubbing is idempotent.
+- `event_log` details scrubbed alongside parent records.
+- **Hard upper limit:** System-wide maximum (e.g., 90 days) regardless of user
+  setting. Configurable by operator.
 
-- A **retention worker** runs periodically (e.g., every hour) and scans for
-  records past their retention window.
-- The worker respects the user's configured policy from `user_settings`.
-- Scrubbing is idempotent — running it twice on the same record is harmless.
-- The `event_log` entries for scrubbed records are also cleaned (any `details`
-  JSON that may contain prompt/response fragments).
-- **Hard upper limit:** Even if a user sets a longer retention, norush enforces
-  a system-wide maximum (e.g., 90 days) to bound storage growth. Configurable
-  by the operator.
+#### Scope Boundary
 
-### 13.4 Data Model Addition
+norush does **not** own prompt chaining, transformation, or multi-step workflow
+logic. It is a broker, not a workflow engine.
 
-```sql
-CREATE TABLE user_settings (
-  user_id               TEXT PRIMARY KEY,     -- FK to users.id
-  retention_policy      TEXT NOT NULL DEFAULT '30d',
-                        -- 'on_ack' | '1d' | '7d' | '30d' | custom like '14d'
-  created_at            TEXT NOT NULL,
-  updated_at            TEXT NOT NULL
-);
+- **Chat users** interact with results manually.
+- **API consumers** receive results via webhook. Chaining = their webhook
+  handler submits new requests through the norush API.
+
+The webhook → re-submit loop is the chaining mechanism, and it lives entirely
+in user code. If a common chaining pattern emerges, we can add a lightweight
+convenience layer, but the starting position is: norush is transport and
+lifecycle management, not business logic.
+
+### 6.7 Configuration & Observability
+
+#### Three-Tier Configuration
+
+```
+┌─────────────────────────────────────────────────┐
+│  Tier 1: Environment (env vars)                  │
+│  Set by: infrastructure / deployment pipeline    │
+│  NORUSH_MASTER_KEY, DATABASE_URL, WORKOS_API_KEY │
+│  WORKOS_CLIENT_ID, NODE_ENV                      │
+└──────────────────────┬──────────────────────────┘
+                       │ overrides defaults
+┌──────────────────────▼──────────────────────────┐
+│  Tier 2: Operator config (file or env)           │
+│  Set by: whoever deploys norush                  │
+│  Retention cap, circuit breaker thresholds,      │
+│  polling defaults, max batch sizes, global rate  │
+│  limits, feature flags                           │
+└──────────────────────┬──────────────────────────┘
+                       │ overrides operator defaults
+┌──────────────────────▼──────────────────────────┐
+│  Tier 3: User settings (database)                │
+│  Set by: end users via UI or API                 │
+│  Retention policy (within cap), API keys,        │
+│  webhook URLs, spend limits, polling strategy    │
+└─────────────────────────────────────────────────┘
 ```
 
-Add to `requests`:
-```sql
-  content_scrubbed_at   TEXT,  -- NULL until scrubbed
-```
+**Precedence rules:**
+- User settings cannot exceed operator caps (e.g., 120d retention clamped to
+  90d operator cap).
+- Operator config cannot override environment settings.
+- Defaults cascade: user → operator → library default (7d).
 
-Add to `results`:
-```sql
-  content_scrubbed_at   TEXT,  -- NULL until scrubbed
-```
+Implementation: `resolveConfig(env, operator, user)` merges tiers with
+clamping. Tested with unit tests.
+
+#### Telemetry
+
+Define hooks and metric interfaces now. Wire up implementations later.
+
+| Category | Metrics | Purpose |
+|----------|---------|---------|
+| Volume | `requests_queued`, `batches_submitted`, `results_ingested`, `deliveries_attempted` | Throughput |
+| Latency | `batch_turnaround_ms`, `delivery_latency_ms` | Performance |
+| Errors | `submission_failures`, `delivery_failures`, `circuit_breaker_trips`, `orphan_recoveries` | Reliability |
+| Cost | `input_tokens_total`, `output_tokens_total` (per-model, per-user) | Billing analytics |
+| Size | `batch_request_count`, `request_param_bytes`, `response_bytes` | Capacity planning |
+
+Ship `NoopTelemetry` (default) and `ConsoleTelemetry` (debugging). Instrument
+all key paths from day one. Prometheus / Datadog / OpenTelemetry adapters are
+Phase 4 — hooks in place so adding them requires zero rework.
+
+Token counts, batch sizes, and timing data survive content scrubbing, enabling
+usage analysis and pricing research without retaining prompt/response content.
+
+### 6.8 Authentication
+
+WorkOS AuthKit for norush.chat:
+
+- **Free tier:** 1M MAUs at no cost.
+- **Features:** Email/password, social login (Google, GitHub), magic link,
+  passkeys, MFA, enterprise SSO (SAML, Entra/Azure AD, Okta).
+- **Integration:** Official TypeScript SDK. Drop-in hosted UI or embedded
+  components.
+- **Why not vanilla OAuth:** WorkOS gives enterprise-grade auth with less code
+  than a single OAuth integration. Corporate identity provider support is a
+  config change, not code.
+- **Lock-in risk:** Moderate. Auth is an integration surface, not a data store.
+  Migration to Auth0, Clerk, or self-hosted is scoped to the auth layer.
 
 ---
 
-## 14. Remaining Open Questions
+## 7. Technical Stack & Infrastructure
 
-- **Auth system for norush.chat:** OAuth providers (GitHub, Google) vs.
-  email/password vs. magic link? Affects the user model and onboarding UX.
-  Not a core library concern.
-- **Operator vs. user configuration:** Some settings (system-wide retention
-  cap, circuit breaker thresholds, master encryption key) are operator-level.
-  Others (retention policy, API keys, webhook URLs) are user-level. Need a
-  clear config hierarchy: environment → operator config → user settings.
-- **Observability:** What metrics should norush expose? Prometheus-style
-  counters (batches_submitted, results_delivered, delivery_failures) seem
-  natural. Not critical for MVP but worth designing hooks for early.
+### 7.1 Stack Summary
+
+| Decision | Choice | Rationale |
+|----------|--------|-----------|
+| Language | TypeScript | Server + edge; largest LLM-tooling ecosystem |
+| Runtime | Node.js >=24 | Active LTS (Krypton); poll loops + web servers |
+| Database | PostgreSQL 17 everywhere | Full dev/prod parity; JSONB, TIMESTAMPTZ, partial indexes |
+| PG client | `postgres.js` (Porsager) | ESM-native, zero deps, tagged template queries |
+| Migrations | Raw SQL + minimal runner | Plain `.sql` files, `schema_migrations` table |
+| IDs | `ulidx` | Time-sortable, B-tree friendly, actively maintained |
+| Cloud | Azure Container Apps | Managed containers, scale-to-zero, web + worker |
+| Web framework | SvelteKit (Svelte 5) | SSR + API routes, lighter than Next.js, runes |
+| Auth | WorkOS AuthKit | 1M MAUs free; social, passkeys, enterprise SSO |
+| Docker | Single image, two entrypoints | One build/test/push pipeline |
+| Worker | Single event loop (`setInterval`) | I/O-bound concerns; split later if needed |
+| Provider SDKs | `@anthropic-ai/sdk`, `openai` | Official; auth, retries, types |
+| Testing | Vitest | Fast, TS-native |
+| Package manager | pnpm workspaces | `@norush/core` + `@norush/web` monorepo |
+| CI/CD | GitHub Actions | Zero friction with GitHub + Azure |
+
+### 7.2 Deployment: Azure Container Apps
+
+- Runs standard Docker containers. Supports multiple containers (web + worker).
+  Consumption plan scales to zero. Managed HTTPS, custom domains, secrets
+  integration (Azure Key Vault).
+- **Database:** Azure Database for PostgreSQL Flexible Server. Same
+  `DATABASE_URL` as local dev.
+- **Why not Static Web Apps:** No long-running workers.
+- **Why not Azure Functions:** Fragments architecture into separate units.
+- **Why not App Service:** Container Apps has better scaling (scale-to-zero,
+  KEDA).
+- **Portability:** Dockerfile runs anywhere — AWS ECS, GCP Cloud Run,
+  self-hosted.
+
+### 7.3 Docker: Single Image, Two Entrypoints
+
+```dockerfile
+FROM node:24-slim AS base
+# ... install pnpm, copy monorepo, install deps, build ...
+
+FROM base AS runtime
+COPY --from=base /app /app
+WORKDIR /app
+ENTRYPOINT ["node", "packages/web/dist/server.js"]
+```
+
+```yaml
+# Azure Container Apps
+- name: web
+  image: norush:latest
+  # Default entrypoint (web server)
+
+- name: worker
+  image: norush:latest
+  command: ["node", "packages/core/dist/worker.js"]
+```
+
+| Container | Entrypoint | Responsibilities |
+|-----------|-----------|-----------------|
+| `web` | `packages/web/dist/server.js` | SvelteKit app, API routes, WorkOS auth, chat UI |
+| `worker` | `packages/core/dist/worker.js` | Batch submission, polling, ingestion, delivery, retention |
+
+Both share `DATABASE_URL` and `NORUSH_MASTER_KEY`. Communicate only through
+the database.
+
+### 7.4 PostgreSQL Client & Migrations
+
+**postgres.js** — ESM-native, zero deps, tagged template queries make SQL
+injection structurally impossible:
+```ts
+const rows = await sql`
+  SELECT * FROM requests WHERE user_id = ${userId} AND status = ${status}
+`;
+```
+
+**Migrations** — Numbered `.sql` files in `packages/core/migrations/`:
+```
+001_initial_schema.sql
+002_add_health_score_fields.sql
+...
+```
+
+Runner (~50 lines): reads directory, compares against `schema_migrations`
+table, applies unapplied migrations in order inside a transaction. Callable as
+`norush migrate` CLI or programmatically. If complexity grows (rollbacks, data
+transforms), adopt a library later without losing existing SQL files.
+
+### 7.5 ULID Generation
+
+`ulidx` for all primary key generation. ULIDs encode a millisecond timestamp
+(first 48 bits) + 80 bits of randomness:
+
+- **Lexicographic sort = creation order** — `ORDER BY id` gives chronological
+  order.
+- **B-tree friendly** — monotonically increasing inserts at rightmost leaf page.
+- **Extractable timestamp** — decode creation time from the ID without DB
+  lookup.
+
+`ulidx` over `ulid`: the original package stalled (~2021); `ulidx` is the
+actively maintained successor (native ESM, zero deps).
+
+### 7.6 Worker Process
+
+Single Node.js process with `setInterval` for each concern: batch polling,
+result delivery, retention scrubbing. All I/O-bound — single event loop handles
+this naturally. Split into separate processes only if a concern becomes
+CPU-bound.
+
+### 7.7 CI/CD: GitHub Actions
+
+- **On push/PR:** Lint + type-check + test.
+- **On merge to main:** Build + push Docker image.
+- **Deploy:** Azure Container Apps via Azure's official GitHub Actions.
+- YAML-based; portable to other CI providers if needed.
+
+---
+
+## 8. Implementation Phases
+
+### Phase 1: Core Library MVP
+
+**Goal:** Working `@norush/core` that can batch, submit, poll, and deliver.
+
+**Project setup:**
+- [ ] pnpm monorepo: `@norush/core` + `@norush/web` workspaces
+- [ ] TypeScript config, build tooling
+- [ ] Vitest test setup
+- [ ] GitHub Actions: lint + type-check + test on push/PR
+- [ ] Docker Compose for local PostgreSQL 17
+
+**Persistence:**
+- [ ] Initial migration (`001_initial_schema.sql`) — full schema from Sec 4.1
+- [ ] Migration runner (~50 lines, `schema_migrations` table)
+- [ ] `PostgresStore` implementation (all `Store` interface methods)
+- [ ] `MemoryStore` for unit tests
+
+**Core interfaces & types:**
+- [ ] `Provider`, `Store`, `NorushRequest`, `NorushResult`, `Batch` (Sec 3.3)
+- [ ] `PollingStrategy` + 4 presets: linear, backoff, deadline-aware, eager
+      (Sec 6.3)
+- [ ] `TelemetryHook` + `NoopTelemetry` + `ConsoleTelemetry` (Sec 6.7)
+- [ ] `HealthScore` type (Sec 6.4)
+- [ ] Config types + `resolveConfig(env, operator, user)` with clamping
+      (Sec 6.7)
+
+**Provider adapters:**
+- [ ] `ClaudeAdapter` — Anthropic Message Batches API (Sec 2.1)
+- [ ] `OpenAIBatchAdapter` — OpenAI Batch API with JSONL file upload (Sec 2.2)
+
+**Engine:**
+- [ ] Request Queue — accept, assign ULID, flush triggers (count/bytes/time)
+- [ ] Batch Manager — group by `(provider, model, api_key)`, format, submit
+- [ ] Write-before-submit idempotency + orphan recovery (Sec 6.1)
+- [ ] Status Tracker — poll loop with adaptive strategy (Sec 6.3)
+- [ ] Two-phase Result Router — ingestion + delivery via callbacks/events
+      (Sec 6.2)
+- [ ] Partial batch failure handling + automatic repackaging (Sec 6.1)
+- [ ] Guardrails: submission attempt caps, provider retry caps, circuit
+      breaker (Sec 6.4)
+
+**Testing:**
+- [ ] Unit tests with `MemoryStore`
+- [ ] Integration tests against real provider APIs (small batches)
+- [ ] Config resolution edge cases
+
+### Phase 2: Deferred Chat Web App
+
+**Goal:** norush.chat deployed on Azure.
+
+**Web application:**
+- [ ] SvelteKit app scaffolding (Svelte 5, runes)
+- [ ] WorkOS AuthKit integration — login, signup, session management (Sec 6.8)
+- [ ] AES-256-GCM API key encryption via `NORUSH_MASTER_KEY` (Sec 6.6)
+- [ ] Chat UI — message list with queued/pending/received states
+- [ ] HTTP polling for result updates, 30–60s interval (Sec 6.3)
+- [ ] Cost savings indicator
+- [ ] Notification system (in-app + optional email)
+
+**Infrastructure:**
+- [ ] Dockerfile — single image, multi-stage build, two entrypoints (Sec 7.3)
+- [ ] Worker entrypoint — single event loop: polling + delivery + retention
+      (Sec 7.6)
+- [ ] Azure Container Apps deployment — web + worker containers (Sec 7.2)
+- [ ] Azure Database for PostgreSQL Flexible Server
+- [ ] GitHub Actions: build + push Docker image on merge to main (Sec 7.7)
+
+### Phase 3: Broker Mode + REST API
+
+**Goal:** Programmatic access with webhook delivery and safety controls.
+
+**API & delivery:**
+- [ ] REST API for request submission, status queries, result retrieval
+- [ ] Webhook delivery with HMAC-SHA256 signing (Sec 6.5)
+- [ ] At-least-once delivery with exponential backoff (Sec 6.5)
+- [ ] Multi-token failover — multiple keys per provider with priority (Sec 6.4)
+- [ ] User-triggered re-submission of terminal requests (Sec 6.1)
+
+**Safety & monitoring:**
+- [ ] Per-user spend limits — request/token/USD caps (Sec 6.4)
+- [ ] Adaptive rate limiting with health scores (Sec 6.4)
+- [ ] Usage dashboard (batches, costs, response times)
+
+### Phase 4: Polish & Ecosystem
+
+**Goal:** Production-ready, publishable, observable.
+
+- [ ] OpenAI Flex adapter — cheap synchronous fallback (Sec 2.3)
+- [ ] Data retention worker — periodic scrubbing + hard cap enforcement
+      (Sec 6.6)
+- [ ] Master key rotation CLI command (Sec 6.6)
+- [ ] npm publish `@norush/core`
+- [ ] Documentation site
+- [ ] Prometheus / Datadog / OpenTelemetry adapters (Sec 6.7)
+- [ ] GitHub Actions / cron integration examples
+- [ ] Deploy-to-Azure template
