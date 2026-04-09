@@ -68,6 +68,28 @@ export { PostgresStore } from "./store/postgres.js";
 export { migrate } from "./store/migrate.js";
 
 // ---------------------------------------------------------------------------
+// Polling strategies
+// ---------------------------------------------------------------------------
+
+export {
+  LinearStrategy,
+  BackoffStrategy,
+  DeadlineAwareStrategy,
+  EagerStrategy,
+  type PollingPreset,
+} from "./polling/strategies.js";
+
+export {
+  clampInterval,
+  MIN_INTERVAL_MS,
+  MAX_INTERVAL_MS,
+  isPollingPreset,
+  getStrategy,
+  withClamping,
+  getClampedStrategy,
+} from "./polling/index.js";
+
+// ---------------------------------------------------------------------------
 // Telemetry implementations
 // ---------------------------------------------------------------------------
 
