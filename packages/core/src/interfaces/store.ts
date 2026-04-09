@@ -1,11 +1,14 @@
 import type {
   Batch,
+  BatchId,
   DateRange,
   NewBatch,
   NewRequest,
   NewResult,
+  NorushId,
   Request,
   Result,
+  ResultId,
   UsageStats,
 } from "../types.js";
 
@@ -22,10 +25,10 @@ export interface Store {
   createRequest(req: NewRequest): Promise<Request>;
 
   /** Retrieve a request by ID, or null if not found. */
-  getRequest(id: string): Promise<Request | null>;
+  getRequest(id: NorushId): Promise<Request | null>;
 
   /** Apply partial updates to a request record. */
-  updateRequest(id: string, updates: Partial<Request>): Promise<void>;
+  updateRequest(id: NorushId, updates: Partial<Request>): Promise<void>;
 
   /** Fetch up to `limit` requests in 'queued' status, ordered by creation. */
   getQueuedRequests(limit: number): Promise<Request[]>;
@@ -36,10 +39,10 @@ export interface Store {
   createBatch(batch: NewBatch): Promise<Batch>;
 
   /** Retrieve a batch by ID, or null if not found. */
-  getBatch(id: string): Promise<Batch | null>;
+  getBatch(id: BatchId): Promise<Batch | null>;
 
   /** Apply partial updates to a batch record. */
-  updateBatch(id: string, updates: Partial<Batch>): Promise<void>;
+  updateBatch(id: BatchId, updates: Partial<Batch>): Promise<void>;
 
   /** Fetch all batches in 'pending' status (not yet submitted). */
   getPendingBatches(): Promise<Batch[]>;
@@ -56,7 +59,7 @@ export interface Store {
   getUndeliveredResults(limit: number): Promise<Result[]>;
 
   /** Mark a result as successfully delivered. */
-  markDelivered(id: string): Promise<void>;
+  markDelivered(id: ResultId): Promise<void>;
 
   // -- Retention ------------------------------------------------------------
 

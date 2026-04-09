@@ -4,7 +4,10 @@
  * Merges environment (Tier 1), operator (Tier 2), and user (Tier 3) config
  * with correct precedence and clamping:
  *
- * - Environment settings are immutable and always win.
+ * - Environment settings govern infrastructure concerns (database URL, master
+ *   key) and are immutable; they are accepted for API consistency and future
+ *   enforcement but are not merged into ResolvedConfig, which covers only
+ *   user-facing runtime settings (retention, batching, polling, circuit breaker).
  * - Operator settings override library defaults.
  * - User settings override operator defaults but are clamped to operator caps.
  *
@@ -46,8 +49,8 @@ const DEFAULT_CIRCUIT_BREAKER_COOLDOWN_MS = 600_000; // 10 minutes
 // ---------------------------------------------------------------------------
 
 /**
- * Clamp a value to be at most `cap`. If either value is undefined, fall back
- * to `fallback`. Guarantees the result never exceeds `cap` when cap is defined.
+ * Clamp a value to be at most `cap`. Resolution order: user → operator → fallback.
+ * Guarantees the result never exceeds `cap` when cap is defined.
  */
 function clampMax(
   userValue: number | undefined,
@@ -62,9 +65,8 @@ function clampMax(
 }
 
 /**
- * Clamp a value to be at least `floor`. If either value is undefined, fall
- * back to `fallback`. Guarantees the result is never below `floor` when floor
- * is defined.
+ * Clamp a value to be at least `floor`. Resolution order: user → operator → fallback.
+ * Guarantees the result is never below `floor` when floor is defined.
  */
 function clampMin(
   userValue: number | undefined,

@@ -5,9 +5,9 @@
  * Tier 2: Operator   — set by whoever deploys norush (file or env).
  * Tier 3: User       — set by end users via UI or API (database).
  *
- * Resolution: env overrides operator defaults; operator overrides user defaults.
- * User settings cannot exceed operator caps (clamped).
- * Operator config cannot override environment settings.
+ * Resolution: environment settings are immutable and cannot be overridden by
+ * operator or user config. For resolved values, defaults cascade user →
+ * operator → library default, with user settings clamped to operator caps.
  */
 
 import type { ProviderName } from "../types.js";

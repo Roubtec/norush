@@ -204,7 +204,7 @@ export interface NorushResult {
 // ---------------------------------------------------------------------------
 
 export interface PollContext {
-  batchId: string;
+  batchId: BatchId;
   provider: ProviderName;
   submittedAt: Date;
   lastPolledAt: Date | null;
