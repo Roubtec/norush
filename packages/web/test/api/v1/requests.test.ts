@@ -52,6 +52,7 @@ const mockSql = new Proxy(
 
 import { POST, GET } from "../../../src/routes/api/v1/requests/+server";
 import { GET as getRequestById } from "../../../src/routes/api/v1/requests/[id]/+server";
+import { POST as redeliverPost } from "../../../src/routes/api/v1/requests/[id]/redeliver/+server";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -567,5 +568,109 @@ describe("GET /api/v1/requests/:id", () => {
 
     // Result should be null when no result exists
     expect(data.request.result).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/v1/requests/:id/redeliver
+// ---------------------------------------------------------------------------
+
+function makeRedeliverEvent(id: string, authHeader = "Bearer valid_token") {
+  const url = new URL(`http://localhost/api/v1/requests/${id}/redeliver`);
+
+  return {
+    request: new Request(url.toString(), {
+      method: "POST",
+      headers: authHeader ? { authorization: authHeader } : {},
+    }),
+    url,
+    locals: {},
+    params: { id },
+    cookies: {} as never,
+    getClientAddress: () => "127.0.0.1",
+    isDataRequest: false,
+    isSubRequest: false,
+    platform: undefined,
+    route: { id: "/api/v1/requests/[id]/redeliver" },
+    fetch: globalThis.fetch,
+    setHeaders: vi.fn(),
+  };
+}
+
+describe("POST /api/v1/requests/:id/redeliver", () => {
+  it("rejects unauthenticated requests (no token)", async () => {
+    const event = makeRedeliverEvent("req_01", "");
+    const response = await redeliverPost(event as never);
+    expect(response.status).toBe(401);
+    const data = await response.json();
+    expect(data.error.code).toBe("unauthorized");
+  });
+
+  it("rejects requests with invalid Bearer token", async () => {
+    const event = makeRedeliverEvent("req_01", "Bearer invalid_token");
+    const response = await redeliverPost(event as never);
+    expect(response.status).toBe(401);
+    const data = await response.json();
+    expect(data.error.code).toBe("unauthorized");
+  });
+
+  it("returns 404 for non-existent request", async () => {
+    mockSqlResult = [];
+    const event = makeRedeliverEvent("req_nonexistent");
+    const response = await redeliverPost(event as never);
+    expect(response.status).toBe(404);
+    const data = await response.json();
+    expect(data.error.code).toBe("not_found");
+  });
+
+  it("returns 409 when request has no result yet", async () => {
+    mockSqlResult = [
+      {
+        request_id: "req_01",
+        callback_url: "https://example.com/hook",
+        result_id: null,
+        delivery_status: null,
+      },
+    ];
+    const event = makeRedeliverEvent("req_01");
+    const response = await redeliverPost(event as never);
+    expect(response.status).toBe(409);
+    const data = await response.json();
+    expect(data.error.code).toBe("no_result");
+  });
+
+  it("returns 409 when request has no callback URL", async () => {
+    mockSqlResult = [
+      {
+        request_id: "req_01",
+        callback_url: null,
+        result_id: "res_01",
+        delivery_status: "delivered",
+      },
+    ];
+    const event = makeRedeliverEvent("req_01");
+    const response = await redeliverPost(event as never);
+    expect(response.status).toBe(409);
+    const data = await response.json();
+    expect(data.error.code).toBe("no_callback_url");
+  });
+
+  it("successfully schedules re-delivery and returns 200", async () => {
+    mockSqlResult = [
+      {
+        request_id: "req_01",
+        callback_url: "https://example.com/hook",
+        result_id: "res_01",
+        delivery_status: "delivered",
+      },
+    ];
+    const event = makeRedeliverEvent("req_01");
+    const response = await redeliverPost(event as never);
+    expect(response.status).toBe(200);
+    const data = await response.json();
+    expect(data.message).toBe("Re-delivery scheduled");
+    expect(data.requestId).toBe("req_01");
+    expect(data.resultId).toBe("res_01");
+    expect(data.previousDeliveryStatus).toBe("delivered");
   });
 });
