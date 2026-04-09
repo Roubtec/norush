@@ -371,10 +371,10 @@ export class MemoryStore implements Store {
           input.maxRequestsPerHour !== undefined
             ? input.maxRequestsPerHour
             : existing.maxRequestsPerHour,
-        maxTokensPerDay:
-          input.maxTokensPerDay !== undefined
-            ? input.maxTokensPerDay
-            : existing.maxTokensPerDay,
+        maxTokensPerPeriod:
+          input.maxTokensPerPeriod !== undefined
+            ? input.maxTokensPerPeriod
+            : existing.maxTokensPerPeriod,
         hardSpendLimitUsd:
           input.hardSpendLimitUsd !== undefined
             ? input.hardSpendLimitUsd
@@ -388,7 +388,7 @@ export class MemoryStore implements Store {
     const record: UserLimits = {
       userId,
       maxRequestsPerHour: input.maxRequestsPerHour ?? null,
-      maxTokensPerDay: input.maxTokensPerDay ?? null,
+      maxTokensPerPeriod: input.maxTokensPerPeriod ?? null,
       hardSpendLimitUsd: input.hardSpendLimitUsd ?? null,
       currentPeriodRequests: 0,
       currentPeriodTokens: 0,

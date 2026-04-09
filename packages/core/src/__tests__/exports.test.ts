@@ -277,7 +277,7 @@ describe("@norush/core exports", () => {
     const _userLimits: UserLimits = {
       userId: "u1",
       maxRequestsPerHour: 100,
-      maxTokensPerDay: null,
+      maxTokensPerPeriod: null,
       hardSpendLimitUsd: null,
       currentPeriodRequests: 0,
       currentPeriodTokens: 0,

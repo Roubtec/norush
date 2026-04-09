@@ -17,7 +17,7 @@ function makeUserLimits(overrides: Partial<UserLimits> = {}): UserLimits {
   return {
     userId: "user_01",
     maxRequestsPerHour: 100,
-    maxTokensPerDay: 1_000_000,
+    maxTokensPerPeriod: 1_000_000,
     hardSpendLimitUsd: 50.0,
     currentPeriodRequests: 0,
     currentPeriodTokens: 0,
@@ -41,12 +41,12 @@ const EMPTY_WINDOW: SlidingWindow = { total: 0, succeeded: 0, failed: 0 };
 describe("checkRateLimit", () => {
   describe("when no limits are configured", () => {
     it("allows the request", () => {
-      const result = checkRateLimit(null, HEALTHY_WINDOW, NOW);
+      const result = checkRateLimit(null, HEALTHY_WINDOW, 1, NOW);
       expect(result.allowed).toBe(true);
     });
 
     it("still computes health score", () => {
-      const result = checkRateLimit(null, DEGRADED_WINDOW, NOW);
+      const result = checkRateLimit(null, DEGRADED_WINDOW, 1, NOW);
       expect(result.health?.reason).toBe("partial_failures");
     });
   });
@@ -57,7 +57,7 @@ describe("checkRateLimit", () => {
         hardSpendLimitUsd: 50.0,
         currentSpendUsd: 50.0,
       });
-      const result = checkRateLimit(limits, HEALTHY_WINDOW, NOW);
+      const result = checkRateLimit(limits, HEALTHY_WINDOW, 1, NOW);
       expect(result.allowed).toBe(false);
       expect(result.reason).toBe("hard_spend_limit_exceeded");
     });
@@ -67,7 +67,7 @@ describe("checkRateLimit", () => {
         hardSpendLimitUsd: 50.0,
         currentSpendUsd: 75.0,
       });
-      const result = checkRateLimit(limits, HEALTHY_WINDOW, NOW);
+      const result = checkRateLimit(limits, HEALTHY_WINDOW, 1, NOW);
       expect(result.allowed).toBe(false);
       expect(result.reason).toBe("hard_spend_limit_exceeded");
     });
@@ -77,7 +77,7 @@ describe("checkRateLimit", () => {
         hardSpendLimitUsd: 50.0,
         currentSpendUsd: 49.99,
       });
-      const result = checkRateLimit(limits, HEALTHY_WINDOW, NOW);
+      const result = checkRateLimit(limits, HEALTHY_WINDOW, 1, NOW);
       expect(result.allowed).toBe(true);
     });
 
@@ -86,7 +86,7 @@ describe("checkRateLimit", () => {
         hardSpendLimitUsd: null,
         currentSpendUsd: 1_000_000,
       });
-      const result = checkRateLimit(limits, HEALTHY_WINDOW, NOW);
+      const result = checkRateLimit(limits, HEALTHY_WINDOW, 1, NOW);
       expect(result.allowed).toBe(true);
     });
   });
@@ -97,7 +97,7 @@ describe("checkRateLimit", () => {
         maxRequestsPerHour: 100,
         currentPeriodRequests: 50,
       });
-      const result = checkRateLimit(limits, HEALTHY_WINDOW, NOW);
+      const result = checkRateLimit(limits, HEALTHY_WINDOW, 1, NOW);
       expect(result.allowed).toBe(true);
     });
 
@@ -106,7 +106,7 @@ describe("checkRateLimit", () => {
         maxRequestsPerHour: 100,
         currentPeriodRequests: 100,
       });
-      const result = checkRateLimit(limits, HEALTHY_WINDOW, NOW);
+      const result = checkRateLimit(limits, HEALTHY_WINDOW, 1, NOW);
       expect(result.allowed).toBe(false);
       expect(result.reason).toBe("request_limit_exceeded");
     });
@@ -116,7 +116,7 @@ describe("checkRateLimit", () => {
         maxRequestsPerHour: 100,
         currentPeriodRequests: 150,
       });
-      const result = checkRateLimit(limits, HEALTHY_WINDOW, NOW);
+      const result = checkRateLimit(limits, HEALTHY_WINDOW, 1, NOW);
       expect(result.allowed).toBe(false);
       expect(result.reason).toBe("request_limit_exceeded");
     });
@@ -127,7 +127,7 @@ describe("checkRateLimit", () => {
         maxRequestsPerHour: 100,
         currentPeriodRequests: 50,
       });
-      const result = checkRateLimit(limits, DEGRADED_WINDOW, NOW);
+      const result = checkRateLimit(limits, DEGRADED_WINDOW, 1, NOW);
       expect(result.allowed).toBe(false);
       expect(result.reason).toBe("request_limit_exceeded");
       expect(result.effectiveLimit).toBe(50);
@@ -138,7 +138,7 @@ describe("checkRateLimit", () => {
         maxRequestsPerHour: 100,
         currentPeriodRequests: 49,
       });
-      const result = checkRateLimit(limits, DEGRADED_WINDOW, NOW);
+      const result = checkRateLimit(limits, DEGRADED_WINDOW, 1, NOW);
       expect(result.allowed).toBe(true);
       expect(result.effectiveLimit).toBe(50);
     });
@@ -149,7 +149,7 @@ describe("checkRateLimit", () => {
         currentPeriodRequests: 100,
         periodResetAt: new Date(NOW.getTime() + 600_000), // 10 min from now
       });
-      const result = checkRateLimit(limits, HEALTHY_WINDOW, NOW);
+      const result = checkRateLimit(limits, HEALTHY_WINDOW, 1, NOW);
       expect(result.allowed).toBe(false);
       expect(result.retryAfterSeconds).toBe(600);
     });
@@ -159,7 +159,7 @@ describe("checkRateLimit", () => {
         maxRequestsPerHour: null,
         currentPeriodRequests: 999_999,
       });
-      const result = checkRateLimit(limits, HEALTHY_WINDOW, NOW);
+      const result = checkRateLimit(limits, HEALTHY_WINDOW, 1, NOW);
       expect(result.allowed).toBe(true);
     });
   });
@@ -167,29 +167,29 @@ describe("checkRateLimit", () => {
   describe("token limit enforcement", () => {
     it("rejects when token limit is exceeded", () => {
       const limits = makeUserLimits({
-        maxTokensPerDay: 1_000_000,
+        maxTokensPerPeriod: 1_000_000,
         currentPeriodTokens: 1_000_000,
       });
-      const result = checkRateLimit(limits, HEALTHY_WINDOW, NOW);
+      const result = checkRateLimit(limits, HEALTHY_WINDOW, 1, NOW);
       expect(result.allowed).toBe(false);
       expect(result.reason).toBe("token_limit_exceeded");
     });
 
     it("allows when below token limit", () => {
       const limits = makeUserLimits({
-        maxTokensPerDay: 1_000_000,
+        maxTokensPerPeriod: 1_000_000,
         currentPeriodTokens: 999_999,
       });
-      const result = checkRateLimit(limits, HEALTHY_WINDOW, NOW);
+      const result = checkRateLimit(limits, HEALTHY_WINDOW, 1, NOW);
       expect(result.allowed).toBe(true);
     });
 
     it("allows when token limit is null (unlimited)", () => {
       const limits = makeUserLimits({
-        maxTokensPerDay: null,
+        maxTokensPerPeriod: null,
         currentPeriodTokens: 999_999_999,
       });
-      const result = checkRateLimit(limits, HEALTHY_WINDOW, NOW);
+      const result = checkRateLimit(limits, HEALTHY_WINDOW, 1, NOW);
       expect(result.allowed).toBe(true);
     });
   });
@@ -202,18 +202,18 @@ describe("checkRateLimit", () => {
         currentPeriodRequests: 200,
         periodResetAt: pastReset,
       });
-      const result = checkRateLimit(limits, HEALTHY_WINDOW, NOW);
+      const result = checkRateLimit(limits, HEALTHY_WINDOW, 1, NOW);
       expect(result.allowed).toBe(true);
     });
 
     it("treats token counters as 0 when period has expired", () => {
       const pastReset = new Date(NOW.getTime() - 1000);
       const limits = makeUserLimits({
-        maxTokensPerDay: 100,
+        maxTokensPerPeriod: 100,
         currentPeriodTokens: 500,
         periodResetAt: pastReset,
       });
-      const result = checkRateLimit(limits, HEALTHY_WINDOW, NOW);
+      const result = checkRateLimit(limits, HEALTHY_WINDOW, 1, NOW);
       expect(result.allowed).toBe(true);
     });
   });
@@ -225,7 +225,7 @@ describe("checkRateLimit", () => {
         currentPeriodRequests: 0,
       });
       // Critical: factor 0.1 -> effective = max(floor(100*0.1), 1) = 10
-      const result = checkRateLimit(limits, CRITICAL_WINDOW, NOW);
+      const result = checkRateLimit(limits, CRITICAL_WINDOW, 1, NOW);
       expect(result.allowed).toBe(true);
       expect(result.effectiveLimit).toBe(10);
     });
@@ -236,7 +236,7 @@ describe("checkRateLimit", () => {
         currentPeriodRequests: 0,
       });
       // Critical: factor 0.1 -> effective = max(floor(5*0.1), 1) = 1
-      const result = checkRateLimit(limits, CRITICAL_WINDOW, NOW);
+      const result = checkRateLimit(limits, CRITICAL_WINDOW, 1, NOW);
       expect(result.allowed).toBe(true);
       expect(result.effectiveLimit).toBe(1);
     });
@@ -247,7 +247,7 @@ describe("checkRateLimit", () => {
         currentPeriodRequests: 1,
       });
       // Critical: effective = 1, but already used 1
-      const result = checkRateLimit(limits, CRITICAL_WINDOW, NOW);
+      const result = checkRateLimit(limits, CRITICAL_WINDOW, 1, NOW);
       expect(result.allowed).toBe(false);
       expect(result.effectiveLimit).toBe(1);
     });
@@ -259,10 +259,74 @@ describe("checkRateLimit", () => {
         maxRequestsPerHour: 100,
         currentPeriodRequests: 50,
       });
-      const result = checkRateLimit(limits, EMPTY_WINDOW, NOW);
+      const result = checkRateLimit(limits, EMPTY_WINDOW, 1, NOW);
       expect(result.allowed).toBe(true);
       expect(result.health?.reason).toBe("healthy");
       expect(result.effectiveLimit).toBe(100);
+    });
+  });
+
+  describe("bulk submission count", () => {
+    it("rejects when bulk count would exceed the limit", () => {
+      const limits = makeUserLimits({
+        maxRequestsPerHour: 100,
+        currentPeriodRequests: 98,
+      });
+      // 98 + 5 = 103 > 100 — reject
+      const result = checkRateLimit(limits, HEALTHY_WINDOW, 5, NOW);
+      expect(result.allowed).toBe(false);
+      expect(result.reason).toBe("request_limit_exceeded");
+    });
+
+    it("allows when bulk count fits within remaining capacity", () => {
+      const limits = makeUserLimits({
+        maxRequestsPerHour: 100,
+        currentPeriodRequests: 95,
+      });
+      // 95 + 5 = 100, not > 100 — allow
+      const result = checkRateLimit(limits, HEALTHY_WINDOW, 5, NOW);
+      expect(result.allowed).toBe(true);
+    });
+
+    it("rejects single request at exactly the limit", () => {
+      const limits = makeUserLimits({
+        maxRequestsPerHour: 100,
+        currentPeriodRequests: 100,
+      });
+      // 100 + 1 = 101 > 100 — reject
+      const result = checkRateLimit(limits, HEALTHY_WINDOW, 1, NOW);
+      expect(result.allowed).toBe(false);
+    });
+  });
+
+  describe("periodExpired signal", () => {
+    it("returns periodExpired=true when period has passed", () => {
+      const pastReset = new Date(NOW.getTime() - 1000);
+      const limits = makeUserLimits({ periodResetAt: pastReset });
+      const result = checkRateLimit(limits, HEALTHY_WINDOW, 1, NOW);
+      expect(result.periodExpired).toBe(true);
+    });
+
+    it("returns periodExpired=false when period is still active", () => {
+      const futureReset = new Date(NOW.getTime() + 1000);
+      const limits = makeUserLimits({ periodResetAt: futureReset });
+      const result = checkRateLimit(limits, HEALTHY_WINDOW, 1, NOW);
+      expect(result.periodExpired).toBe(false);
+    });
+
+    it("still returns periodExpired when request is rejected by spend limit", () => {
+      const pastReset = new Date(NOW.getTime() - 1000);
+      const limits = makeUserLimits({
+        hardSpendLimitUsd: 10,
+        currentSpendUsd: 10,
+        periodResetAt: pastReset,
+      });
+      // spend limit rejection happens before period check
+      const result = checkRateLimit(limits, HEALTHY_WINDOW, 1, NOW);
+      expect(result.allowed).toBe(false);
+      expect(result.reason).toBe("hard_spend_limit_exceeded");
+      // periodExpired not set for spend limit (period doesn't affect spend)
+      expect(result.periodExpired).toBeUndefined();
     });
   });
 });

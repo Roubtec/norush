@@ -31,18 +31,24 @@ export const DEFAULT_WINDOW_MS = 3_600_000;
 export const DEFAULT_PERIOD_MS = 3_600_000;
 
 /**
- * Check whether a user is allowed to enqueue a new request.
+ * Check whether a user is allowed to enqueue one or more new requests.
  *
  * @param limits - The user's current limits and counters. If null, the user
  *                 has no limits configured and all requests are allowed.
  * @param window - The sliding window of batch outcomes for health computation.
+ * @param count  - Number of requests being submitted (default 1). Used to
+ *                 prevent bulk submissions from bypassing limits.
  * @param now    - Current time (injectable for testing).
  *
  * @returns A RateLimitResult indicating whether the request is allowed.
+ *   When `periodExpired` is true the caller must invoke
+ *   `store.resetPeriod(userId, nextPeriodReset(now))` before incrementing
+ *   counters so the period resets for subsequent requests.
  */
 export function checkRateLimit(
   limits: UserLimits | null,
   window: SlidingWindow,
+  count: number = 1,
   now: Date = new Date(),
 ): RateLimitResult {
   // No limits configured — allow everything.
@@ -67,18 +73,20 @@ export function checkRateLimit(
   }
 
   // Determine if the period has reset. If so, counters are effectively 0.
+  // periodExpired is returned to the caller so it can reset stored counters.
   const periodExpired = now >= limits.periodResetAt;
   const currentRequests = periodExpired ? 0 : limits.currentPeriodRequests;
   const currentTokens = periodExpired ? 0 : limits.currentPeriodTokens;
 
   // Check request limit with health factor applied.
+  // Use currentRequests + count to account for bulk submissions.
   if (limits.maxRequestsPerHour !== null) {
     const effectiveLimit = computeEffectiveLimit(
       limits.maxRequestsPerHour,
       health,
     );
 
-    if (currentRequests >= effectiveLimit) {
+    if (currentRequests + count > effectiveLimit) {
       const retryAfterSeconds = periodExpired
         ? 0
         : Math.ceil(
@@ -91,12 +99,13 @@ export function checkRateLimit(
         retryAfterSeconds: Math.max(retryAfterSeconds, 1),
         health,
         effectiveLimit,
+        periodExpired,
       };
     }
   }
 
   // Check token limit (not health-adjusted — tokens are consumption-based).
-  if (limits.maxTokensPerDay !== null && currentTokens >= limits.maxTokensPerDay) {
+  if (limits.maxTokensPerPeriod !== null && currentTokens >= limits.maxTokensPerPeriod) {
     const retryAfterSeconds = periodExpired
       ? 0
       : Math.ceil(
@@ -108,7 +117,8 @@ export function checkRateLimit(
       reason: "token_limit_exceeded",
       retryAfterSeconds: Math.max(retryAfterSeconds, 1),
       health,
-      effectiveLimit: limits.maxTokensPerDay,
+      effectiveLimit: limits.maxTokensPerPeriod,
+      periodExpired,
     };
   }
 
@@ -117,7 +127,7 @@ export function checkRateLimit(
     ? computeEffectiveLimit(limits.maxRequestsPerHour, health)
     : undefined;
 
-  return { allowed: true, health, effectiveLimit };
+  return { allowed: true, health, effectiveLimit, periodExpired };
 }
 
 /**

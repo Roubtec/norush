@@ -278,8 +278,8 @@ export interface UserLimits {
   userId: string;
   /** Max requests allowed per rolling hour. NULL = unlimited. */
   maxRequestsPerHour: number | null;
-  /** Max tokens allowed per rolling day. NULL = unlimited. */
-  maxTokensPerDay: number | null;
+  /** Max tokens allowed per rolling period. NULL = unlimited. */
+  maxTokensPerPeriod: number | null;
   /** Absolute spend ceiling in USD. NULL = unlimited. */
   hardSpendLimitUsd: number | null;
   /** Requests consumed in the current period. */
@@ -297,7 +297,7 @@ export interface UserLimits {
 /** Fields for creating or updating user limits. */
 export interface UserLimitsInput {
   maxRequestsPerHour?: number | null;
-  maxTokensPerDay?: number | null;
+  maxTokensPerPeriod?: number | null;
   hardSpendLimitUsd?: number | null;
 }
 
@@ -331,4 +331,9 @@ export interface RateLimitResult {
   health?: HealthScore;
   /** Current effective limit. */
   effectiveLimit?: number;
+  /**
+   * True when the user's period has expired and counters need resetting.
+   * The caller should invoke store.resetPeriod() before incrementing counters.
+   */
+  periodExpired?: boolean;
 }

@@ -16,6 +16,7 @@ const mockFlush = vi.fn();
 const mockGetUserLimits = vi.fn().mockResolvedValue(null);
 const mockGetSlidingWindow = vi.fn().mockResolvedValue({ total: 0, succeeded: 0, failed: 0 });
 const mockIncrementPeriodRequests = vi.fn().mockResolvedValue(undefined);
+const mockResetPeriod = vi.fn().mockResolvedValue(undefined);
 
 vi.mock("$lib/server/norush", () => ({
   getSql: () => mockSql,
@@ -24,6 +25,7 @@ vi.mock("$lib/server/norush", () => ({
     getUserLimits: mockGetUserLimits,
     getSlidingWindow: mockGetSlidingWindow,
     incrementPeriodRequests: mockIncrementPeriodRequests,
+    resetPeriod: mockResetPeriod,
   }),
 }));
 
@@ -324,6 +326,123 @@ describe("POST /api/v1/requests", () => {
     expect(response.status).toBe(400);
     const data = await response.json();
     expect(data.error.code).toBe("too_many_requests");
+  });
+
+  it("returns rate limit headers on allowed requests", async () => {
+    mockGetUserLimits.mockResolvedValueOnce({
+      userId: "user_01",
+      maxRequestsPerHour: 100,
+      maxTokensPerPeriod: null,
+      hardSpendLimitUsd: null,
+      currentPeriodRequests: 10,
+      currentPeriodTokens: 0,
+      currentSpendUsd: 0,
+      periodResetAt: new Date(Date.now() + 3_600_000),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    mockGetSlidingWindow.mockResolvedValueOnce({ total: 10, succeeded: 10, failed: 0 });
+
+    const event = makeEvent("POST", {
+      provider: "claude",
+      model: "claude-sonnet-4-20250514",
+      params: { messages: [{ role: "user", content: "Hello" }] },
+    });
+
+    const response = await POST(event as never);
+    expect(response.status).toBe(201);
+    expect(response.headers.get("X-Norush-Health")).toBe("healthy");
+    expect(response.headers.get("X-Norush-Effective-Limit")).toBe("100");
+  });
+
+  it("returns 429 when request limit is exceeded", async () => {
+    mockGetUserLimits.mockResolvedValueOnce({
+      userId: "user_01",
+      maxRequestsPerHour: 10,
+      maxTokensPerPeriod: null,
+      hardSpendLimitUsd: null,
+      currentPeriodRequests: 10,
+      currentPeriodTokens: 0,
+      currentSpendUsd: 0,
+      periodResetAt: new Date(Date.now() + 3_600_000),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    mockGetSlidingWindow.mockResolvedValueOnce({ total: 0, succeeded: 0, failed: 0 });
+
+    const event = makeEvent("POST", {
+      provider: "claude",
+      model: "claude-sonnet-4-20250514",
+      params: { messages: [{ role: "user", content: "Hello" }] },
+    });
+
+    const response = await POST(event as never);
+    expect(response.status).toBe(429);
+
+    const data = await response.json();
+    expect(data.error.code).toBe("rate_limited");
+    expect(response.headers.get("Retry-After")).toBeTruthy();
+    expect(response.headers.get("X-Norush-Health")).toBe("healthy");
+    expect(response.headers.get("X-Norush-Effective-Limit")).toBe("10");
+  });
+
+  it("returns 429 when hard spend limit is exceeded", async () => {
+    mockGetUserLimits.mockResolvedValueOnce({
+      userId: "user_01",
+      maxRequestsPerHour: null,
+      maxTokensPerPeriod: null,
+      hardSpendLimitUsd: 10.0,
+      currentPeriodRequests: 0,
+      currentPeriodTokens: 0,
+      currentSpendUsd: 10.0,
+      periodResetAt: new Date(Date.now() + 3_600_000),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    mockGetSlidingWindow.mockResolvedValueOnce({ total: 0, succeeded: 0, failed: 0 });
+
+    const event = makeEvent("POST", {
+      provider: "claude",
+      model: "claude-sonnet-4-20250514",
+      params: {},
+    });
+
+    const response = await POST(event as never);
+    expect(response.status).toBe(429);
+
+    const data = await response.json();
+    expect(data.error.code).toBe("rate_limited");
+    expect(data.error.message).toContain("Hard spend limit");
+  });
+
+  it("rejects bulk submission that would exceed the rate limit", async () => {
+    mockGetUserLimits.mockResolvedValueOnce({
+      userId: "user_01",
+      maxRequestsPerHour: 10,
+      maxTokensPerPeriod: null,
+      hardSpendLimitUsd: null,
+      currentPeriodRequests: 8,
+      currentPeriodTokens: 0,
+      currentSpendUsd: 0,
+      periodResetAt: new Date(Date.now() + 3_600_000),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    mockGetSlidingWindow.mockResolvedValueOnce({ total: 0, succeeded: 0, failed: 0 });
+
+    // 8 already used + 5 new = 13 > 10
+    const items = Array.from({ length: 5 }, () => ({
+      provider: "claude",
+      model: "claude-sonnet-4-20250514",
+      params: {},
+    }));
+    const event = makeEvent("POST", items);
+
+    const response = await POST(event as never);
+    expect(response.status).toBe(429);
+
+    const data = await response.json();
+    expect(data.error.code).toBe("rate_limited");
   });
 });
 

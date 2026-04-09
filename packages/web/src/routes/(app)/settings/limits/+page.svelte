@@ -83,8 +83,8 @@
           <span class="usage-label">Tokens this period</span>
           <span class="usage-value">
             {data.limits.currentPeriodTokens.toLocaleString()}
-            {#if data.limits.maxTokensPerDay !== null}
-              <span class="usage-cap">/ {data.limits.maxTokensPerDay.toLocaleString()}</span>
+            {#if data.limits.maxTokensPerPeriod !== null}
+              <span class="usage-cap">/ {data.limits.maxTokensPerPeriod.toLocaleString()}</span>
             {:else}
               <span class="usage-cap">/ unlimited</span>
             {/if}
@@ -136,20 +136,20 @@
       </div>
 
       <div class="field">
-        <label for="maxTokensPerDay">Max tokens per day</label>
+        <label for="maxTokensPerPeriod">Max tokens per period</label>
         <input
           type="number"
-          id="maxTokensPerDay"
-          name="maxTokensPerDay"
+          id="maxTokensPerPeriod"
+          name="maxTokensPerPeriod"
           placeholder="Unlimited"
           min="1"
-          value={fieldValue(form?.values?.maxTokensPerDay, data.limits?.maxTokensPerDay)}
+          value={fieldValue(form?.values?.maxTokensPerPeriod, data.limits?.maxTokensPerPeriod)}
         />
         <span class="field-hint">
-          Estimated token budget per rolling day. Counts input and output tokens.
+          Estimated token budget per rolling period. Counts input and output tokens.
         </span>
-        {#if fieldError("maxTokensPerDay")}
-          <span class="field-error">{fieldError("maxTokensPerDay")}</span>
+        {#if fieldError("maxTokensPerPeriod")}
+          <span class="field-error">{fieldError("maxTokensPerPeriod")}</span>
         {/if}
       </div>
 

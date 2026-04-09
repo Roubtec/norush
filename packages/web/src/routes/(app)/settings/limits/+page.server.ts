@@ -32,7 +32,7 @@ async function getUserLimitsFromDb(
   return {
     userId: row.user_id as string,
     maxRequestsPerHour: (row.max_requests_per_hour as number) ?? null,
-    maxTokensPerDay: (row.max_tokens_per_day as number) ?? null,
+    maxTokensPerPeriod: (row.max_tokens_per_period as number) ?? null,
     hardSpendLimitUsd:
       row.hard_spend_limit_usd != null
         ? Number(row.hard_spend_limit_usd)
@@ -68,7 +68,7 @@ export const load: PageServerLoad = async ({ locals }) => {
     limits: limits
       ? {
           maxRequestsPerHour: limits.maxRequestsPerHour,
-          maxTokensPerDay: limits.maxTokensPerDay,
+          maxTokensPerPeriod: limits.maxTokensPerPeriod,
           hardSpendLimitUsd: limits.hardSpendLimitUsd,
           currentPeriodRequests: limits.currentPeriodRequests,
           currentPeriodTokens: limits.currentPeriodTokens,
@@ -93,8 +93,8 @@ function parseOptionalInt(
   value: string | null,
 ): number | null | undefined {
   if (value === null || value === "") return null;
-  const n = parseInt(value, 10);
-  if (isNaN(n)) return undefined; // signals invalid
+  const n = Number(value);
+  if (!Number.isInteger(n) || n !== n) return undefined; // signals invalid; rejects "1.5", "abc"
   return n;
 }
 
@@ -118,13 +118,13 @@ export const actions = {
     const maxRequestsPerHourRaw = data.get(
       "maxRequestsPerHour",
     ) as string | null;
-    const maxTokensPerDayRaw = data.get("maxTokensPerDay") as string | null;
+    const maxTokensPerPeriodRaw = data.get("maxTokensPerPeriod") as string | null;
     const hardSpendLimitUsdRaw = data.get(
       "hardSpendLimitUsd",
     ) as string | null;
 
     const maxRequestsPerHour = parseOptionalInt(maxRequestsPerHourRaw);
-    const maxTokensPerDay = parseOptionalInt(maxTokensPerDayRaw);
+    const maxTokensPerPeriod = parseOptionalInt(maxTokensPerPeriodRaw);
     const hardSpendLimitUsd = parseOptionalFloat(hardSpendLimitUsdRaw);
 
     if (maxRequestsPerHour === undefined) {
@@ -139,14 +139,14 @@ export const actions = {
       });
     }
 
-    if (maxTokensPerDay === undefined) {
+    if (maxTokensPerPeriod === undefined) {
       errors.push({
-        field: "maxTokensPerDay",
+        field: "maxTokensPerPeriod",
         message: "Must be a valid number or empty for unlimited",
       });
-    } else if (maxTokensPerDay !== null && maxTokensPerDay < 1) {
+    } else if (maxTokensPerPeriod !== null && maxTokensPerPeriod < 1) {
       errors.push({
-        field: "maxTokensPerDay",
+        field: "maxTokensPerPeriod",
         message: "Must be at least 1",
       });
     }
@@ -168,7 +168,7 @@ export const actions = {
         errors,
         values: {
           maxRequestsPerHour: maxRequestsPerHourRaw,
-          maxTokensPerDay: maxTokensPerDayRaw,
+          maxTokensPerPeriod: maxTokensPerPeriodRaw,
           hardSpendLimitUsd: hardSpendLimitUsdRaw,
         },
       });
@@ -180,20 +180,20 @@ export const actions = {
         INSERT INTO user_limits (
           user_id,
           max_requests_per_hour,
-          max_tokens_per_day,
+          max_tokens_per_period,
           hard_spend_limit_usd,
           period_reset_at
         )
         VALUES (
           ${userId},
           ${maxRequestsPerHour ?? null},
-          ${maxTokensPerDay ?? null},
+          ${maxTokensPerPeriod ?? null},
           ${hardSpendLimitUsd ?? null},
           now() + interval '1 hour'
         )
         ON CONFLICT (user_id) DO UPDATE SET
           max_requests_per_hour = ${maxRequestsPerHour ?? null},
-          max_tokens_per_day = ${maxTokensPerDay ?? null},
+          max_tokens_per_period = ${maxTokensPerPeriod ?? null},
           hard_spend_limit_usd = ${hardSpendLimitUsd ?? null},
           updated_at = now()
       `;
@@ -208,7 +208,7 @@ export const actions = {
         ],
         values: {
           maxRequestsPerHour: maxRequestsPerHourRaw,
-          maxTokensPerDay: maxTokensPerDayRaw,
+          maxTokensPerPeriod: maxTokensPerPeriodRaw,
           hardSpendLimitUsd: hardSpendLimitUsdRaw,
         },
       });

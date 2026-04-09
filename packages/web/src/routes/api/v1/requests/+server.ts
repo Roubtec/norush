@@ -12,6 +12,7 @@ import { authenticateApiRequest } from "$lib/server/api-auth";
 import {
   checkRateLimit,
   buildRateLimitHeaders,
+  nextPeriodReset,
   DEFAULT_WINDOW_MS,
 } from "@norush/core";
 import type { ProviderName, RequestStatus } from "@norush/core";
@@ -148,7 +149,7 @@ export const POST: RequestHandler = async ({ request }) => {
     store.getSlidingWindow(caller.userId, DEFAULT_WINDOW_MS),
   ]);
 
-  const limitCheck = checkRateLimit(userLimits, slidingWindow);
+  const limitCheck = checkRateLimit(userLimits, slidingWindow, validatedItems.length);
   if (!limitCheck.allowed) {
     const headers = buildRateLimitHeaders(limitCheck);
     return json(
@@ -186,10 +187,18 @@ export const POST: RequestHandler = async ({ request }) => {
     });
   }
 
-  // Increment period request counter for rate limiting
+  // Increment period request counter for rate limiting.
+  // If the period expired, reset counters first so subsequent requests see the
+  // new period rather than the stale periodExpired=true state indefinitely.
   if (userLimits) {
+    const updateCounters = async () => {
+      if (limitCheck.periodExpired) {
+        await store.resetPeriod(caller.userId, nextPeriodReset());
+      }
+      await store.incrementPeriodRequests(caller.userId, validatedItems.length);
+    };
     // Fire-and-forget — don't block the response
-    void store.incrementPeriodRequests(caller.userId, validatedItems.length).catch(() => {
+    void updateCounters().catch(() => {
       // Non-critical: counter update failure shouldn't fail the request
     });
   }

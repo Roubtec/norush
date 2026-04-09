@@ -466,18 +466,27 @@ export class PostgresStore implements Store {
     input: UserLimitsInput,
   ): Promise<UserLimits> {
     const rows = await this.sql`
-      INSERT INTO user_limits (user_id, max_requests_per_hour, max_tokens_per_day, hard_spend_limit_usd, period_reset_at)
+      INSERT INTO user_limits (user_id, max_requests_per_hour, max_tokens_per_period, hard_spend_limit_usd, period_reset_at)
       VALUES (
         ${userId},
         ${input.maxRequestsPerHour ?? null},
-        ${input.maxTokensPerDay ?? null},
+        ${input.maxTokensPerPeriod ?? null},
         ${input.hardSpendLimitUsd ?? null},
         now() + interval '1 hour'
       )
       ON CONFLICT (user_id) DO UPDATE SET
-        max_requests_per_hour = COALESCE(${input.maxRequestsPerHour !== undefined ? input.maxRequestsPerHour ?? null : null}, user_limits.max_requests_per_hour),
-        max_tokens_per_day = COALESCE(${input.maxTokensPerDay !== undefined ? input.maxTokensPerDay ?? null : null}, user_limits.max_tokens_per_day),
-        hard_spend_limit_usd = COALESCE(${input.hardSpendLimitUsd !== undefined ? input.hardSpendLimitUsd ?? null : null}, user_limits.hard_spend_limit_usd),
+        max_requests_per_hour = CASE
+          WHEN ${input.maxRequestsPerHour !== undefined} THEN ${input.maxRequestsPerHour ?? null}
+          ELSE user_limits.max_requests_per_hour
+        END,
+        max_tokens_per_period = CASE
+          WHEN ${input.maxTokensPerPeriod !== undefined} THEN ${input.maxTokensPerPeriod ?? null}
+          ELSE user_limits.max_tokens_per_period
+        END,
+        hard_spend_limit_usd = CASE
+          WHEN ${input.hardSpendLimitUsd !== undefined} THEN ${input.hardSpendLimitUsd ?? null}
+          ELSE user_limits.hard_spend_limit_usd
+        END,
         updated_at = now()
       RETURNING *
     `;
@@ -562,7 +571,7 @@ function toUserLimits(row: Record<string, unknown>): UserLimits {
   return {
     userId: row.user_id as string,
     maxRequestsPerHour: (row.max_requests_per_hour as number) ?? null,
-    maxTokensPerDay: (row.max_tokens_per_day as number) ?? null,
+    maxTokensPerPeriod: (row.max_tokens_per_period as number) ?? null,
     hardSpendLimitUsd: row.hard_spend_limit_usd != null
       ? Number(row.hard_spend_limit_usd)
       : null,
