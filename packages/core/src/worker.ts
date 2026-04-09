@@ -1,0 +1,132 @@
+/**
+ * Standalone worker entry point.
+ *
+ * Reads config from environment variables, creates a norush engine with
+ * PostgresStore, calls start(), and handles SIGTERM/SIGINT for graceful
+ * shutdown.
+ *
+ * Usage:
+ *   node packages/core/dist/worker.js
+ *
+ * Required environment variables:
+ *   DATABASE_URL — PostgreSQL connection string.
+ *
+ * Optional environment variables:
+ *   ANTHROPIC_API_KEY        — Anthropic API key (enables Claude adapter).
+ *   OPENAI_API_KEY           — OpenAI API key (enables OpenAI adapter).
+ *   NORUSH_FLUSH_INTERVAL_MS — Flush interval in ms (default: 300000).
+ *   NORUSH_POLL_INTERVAL_MS  — Poll interval in ms (default: 60000).
+ *   NORUSH_DELIVERY_INTERVAL_MS — Delivery tick interval in ms (default: 5000).
+ *   NORUSH_MAX_REQUESTS      — Max requests per flush (default: 1000).
+ */
+
+import postgres from "postgres";
+import { createNorush, type NorushConfig } from "./norush.js";
+import { PostgresStore } from "./store/postgres.js";
+import { ConsoleTelemetry } from "./telemetry/console.js";
+import type { ProviderName } from "./types.js";
+import type { ProviderKeyConfig } from "./config/types.js";
+
+// ---------------------------------------------------------------------------
+// Environment parsing
+// ---------------------------------------------------------------------------
+
+function requiredEnv(name: string): string {
+  const value = process.env[name];
+  if (!value) {
+    throw new Error(`Required environment variable ${name} is not set`);
+  }
+  return value;
+}
+
+function optionalEnvInt(name: string, fallback: number): number {
+  const value = process.env[name];
+  if (!value) return fallback;
+  const parsed = parseInt(value, 10);
+  if (Number.isNaN(parsed)) {
+    throw new Error(`Environment variable ${name} must be an integer, got: ${value}`);
+  }
+  return parsed;
+}
+
+// ---------------------------------------------------------------------------
+// Main
+// ---------------------------------------------------------------------------
+
+async function main(): Promise<void> {
+  const databaseUrl = requiredEnv("DATABASE_URL");
+
+  // Build provider config from environment.
+  const providers: Partial<Record<ProviderName, ProviderKeyConfig[]>> = {};
+
+  const anthropicKey = process.env.ANTHROPIC_API_KEY;
+  if (anthropicKey) {
+    providers.claude = [{ apiKey: anthropicKey, label: "primary" }];
+  }
+
+  const openaiKey = process.env.OPENAI_API_KEY;
+  if (openaiKey) {
+    providers.openai = [{ apiKey: openaiKey, label: "primary" }];
+  }
+
+  if (!anthropicKey && !openaiKey) {
+    console.warn(
+      "Warning: No provider API keys configured. " +
+      "Set ANTHROPIC_API_KEY and/or OPENAI_API_KEY.",
+    );
+  }
+
+  const sql = postgres(databaseUrl);
+  const store = new PostgresStore(sql);
+  const telemetry = new ConsoleTelemetry();
+
+  const config: NorushConfig = {
+    store,
+    providers,
+    batching: {
+      flushIntervalMs: optionalEnvInt("NORUSH_FLUSH_INTERVAL_MS", 300_000),
+      maxRequests: optionalEnvInt("NORUSH_MAX_REQUESTS", 1000),
+    },
+    polling: {
+      intervalMs: optionalEnvInt("NORUSH_POLL_INTERVAL_MS", 60_000),
+    },
+    delivery: {
+      tickIntervalMs: optionalEnvInt("NORUSH_DELIVERY_INTERVAL_MS", 5_000),
+    },
+    telemetry,
+  };
+
+  const engine = createNorush(config);
+
+  // Graceful shutdown handler.
+  let shuttingDown = false;
+
+  async function shutdown(signal: string): Promise<void> {
+    if (shuttingDown) return;
+    shuttingDown = true;
+
+    console.log(`Received ${signal}, shutting down gracefully...`);
+
+    try {
+      await engine.stop();
+      console.log("Engine stopped. Exiting.");
+    } catch (error) {
+      console.error("Error during shutdown:", error);
+      process.exit(1);
+    }
+
+    process.exit(0);
+  }
+
+  process.on("SIGTERM", () => void shutdown("SIGTERM"));
+  process.on("SIGINT", () => void shutdown("SIGINT"));
+
+  // Start the engine.
+  engine.start();
+  console.log("norush worker started.");
+}
+
+main().catch((error) => {
+  console.error("Fatal error starting norush worker:", error);
+  process.exit(1);
+});
