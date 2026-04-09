@@ -40,6 +40,9 @@ packages/web/src/
 │   └── components/
 │       ├── StatsCard.svelte          # Reusable stat display card
 │       └── UsageChart.svelte         # Simple chart component (bar or line)
+packages/web/test/
+└── dashboard/
+    └── stats.test.ts                 # Stats aggregation, period filtering, empty data, cost calc
 ```
 
 ## Implementation notes
@@ -69,10 +72,12 @@ packages/web/src/
 - Savings indicator shows how much was saved vs real-time pricing.
 - Spend limit utilization is displayed (current usage / limit).
 - Page handles zero-data state gracefully (new user with no activity).
+- Unit tests cover: stats aggregation correctness (request counts, token sums, cost calculation), period filtering (24h, 7d, 30d return correct subsets), empty data returns zeroes, cost breakdown groups by provider and model, savings calculation matches expected formula.
 - `pnpm build` and `pnpm typecheck` pass.
 
 ## Validation
 
+- `pnpm test` passes all dashboard stats tests.
 - Submit several requests across providers/models. Wait for completion. Visit dashboard → verify stats reflect actual activity.
 - Switch time periods → verify stats update accordingly.
 - Test with a new user (no data) → verify empty state renders.
@@ -83,3 +88,4 @@ packages/web/src/
 - Verify cost calculations use correct per-model rates.
 - Check that the page performs well (queries are indexed, no N+1).
 - Confirm the dashboard works after content scrubbing (metadata survives).
+- Review test coverage: aggregation queries, period boundaries, zero-data edge case, cost math.

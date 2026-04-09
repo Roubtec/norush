@@ -42,6 +42,12 @@ packages/web/src/
 ├── lib/
 │   └── server/
 │       └── api-keys.ts       # CRUD operations with encryption/decryption
+packages/core/test/
+└── crypto/
+    └── vault.test.ts         # Encrypt/decrypt round-trip, IV uniqueness, error cases
+packages/web/test/
+└── api-keys/
+    └── api-keys.test.ts      # CRUD operations, validation, masking
 ```
 
 ## Implementation notes
@@ -67,10 +73,12 @@ packages/web/src/
 - Adding a key stores encrypted bytes in `user_api_keys`.
 - Deleting a key removes the record.
 - API keys are never exposed in plaintext in HTTP responses, logs, or client-side code.
+- Unit tests cover: encrypt/decrypt round-trip correctness, each record gets a unique IV, decryption with wrong master key fails gracefully, empty/malformed key input is rejected, masked display reveals only a prefix/suffix hint.
 - `pnpm build` and `pnpm typecheck` pass.
 
 ## Validation
 
+- `pnpm test` passes all vault and API key tests.
 - Add a key via the UI → verify `user_api_keys` row has non-null `api_key_encrypted` that is not the plaintext.
 - Decrypt the stored key programmatically → verify it matches the original.
 - Delete a key via the UI → verify row is removed.
@@ -82,3 +90,4 @@ packages/web/src/
 - Verify master key is read from env var, not hardcoded.
 - Verify plaintext keys are never logged or returned after storage.
 - Check that the crypto module is in `@norush/core` (not web-only) so the worker can decrypt.
+- Review test coverage: round-trip, IV uniqueness across multiple encryptions, wrong-key failure.

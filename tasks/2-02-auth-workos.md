@@ -46,6 +46,11 @@ packages/web/src/
 │   │   └── +page.svelte     # Login page (redirect to WorkOS hosted UI)
 │   └── (app)/
 │       └── +layout.server.ts # Protected layout: require auth, load user
+packages/web/test/
+└── auth/
+    ├── session.test.ts       # Session validation and expiry
+    ├── user-provision.test.ts # User creation idempotency
+    └── protected-routes.test.ts # Redirect logic for unauthenticated access
 ```
 
 ## Implementation notes
@@ -70,10 +75,12 @@ packages/web/src/
 - Unauthenticated requests to `(app)` routes redirect to `/login`.
 - First login creates a `users` record and `user_settings` record with defaults.
 - Logout clears the session and redirects to `/login`.
+- Unit tests cover: session validation (valid, expired, missing), user provisioning idempotency (second login doesn't create duplicate), redirect logic for unauthenticated access to protected routes.
 - `pnpm build` and `pnpm typecheck` pass.
 
 ## Validation
 
+- `pnpm test` passes all auth tests.
 - Manual test: visit a protected route → redirected to login → log in → redirected back → user visible.
 - Manual test: log out → session cleared → protected routes redirect again.
 - Verify `users` table has a new row after first login.
@@ -85,3 +92,4 @@ packages/web/src/
 - Verify user provisioning is idempotent (login again doesn't create duplicates).
 - Check that WorkOS SDK is initialized with env vars, not hardcoded values.
 - Confirm `locals` type is properly declared in `app.d.ts`.
+- Review test coverage for session edge cases (expired token, tampered cookie).

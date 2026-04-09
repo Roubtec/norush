@@ -50,6 +50,11 @@ packages/web/src/
 │   │   └── CostIndicator.svelte    # Savings display
 │   └── server/
 │       └── messages.ts              # Server-side message/result queries
+packages/web/test/
+└── chat/
+    ├── messages-api.test.ts         # POST/GET /api/messages: validation, user scoping
+    ├── results-api.test.ts          # GET /api/results: since-filter, user scoping
+    └── cost-indicator.test.ts       # Savings calculation logic
 ```
 
 ## Implementation notes
@@ -96,10 +101,12 @@ packages/web/src/
 - HTTP polling fetches new results without page reload.
 - Cost savings indicator shows estimated savings for completed messages.
 - Failed requests show an error state.
+- Unit tests cover: message submission (valid input, empty input, missing API key), message listing (user scoping, ordering), result polling (`since` filter, empty response), cost savings calculation.
 - `pnpm build` and `pnpm typecheck` pass.
 
 ## Validation
 
+- `pnpm test` passes all chat API and cost calculation tests.
 - Submit a message → verify it appears as queued.
 - Wait for batch processing → verify response appears (may need to manually trigger flush/tick in dev).
 - Verify polling works: open two tabs, submit in one, result appears in both after poll interval.
@@ -112,3 +119,4 @@ packages/web/src/
 - Verify API key decryption happens server-side only.
 - Check that Svelte 5 runes are used (no Svelte 4 stores or `$:` syntax).
 - Confirm the UI handles the empty state (no messages yet) gracefully.
+- Review test coverage for API routes: auth enforcement, input validation, cross-user isolation.

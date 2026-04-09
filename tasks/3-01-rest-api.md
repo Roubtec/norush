@@ -51,6 +51,12 @@ packages/web/src/
 ├── lib/
 │   └── server/
 │       └── api-auth.ts               # API token validation middleware
+packages/web/test/
+└── api/v1/
+    ├── requests.test.ts              # CRUD, pagination, filtering, validation
+    ├── batches.test.ts               # List and detail endpoints
+    ├── flush.test.ts                 # Manual flush trigger
+    └── api-auth.test.ts              # Token validation, rejection, scoping
 ```
 
 ## Implementation notes
@@ -78,10 +84,12 @@ packages/web/src/
 - Status filtering works on request list endpoint.
 - Input validation rejects malformed requests with clear error messages.
 - Error responses follow a consistent format.
+- Unit tests cover: all endpoints (happy path + error cases), bearer token validation (valid, missing, invalid), pagination (cursor navigation, limit), status filtering, input validation (missing fields, wrong types), user scoping (no cross-user access).
 - `pnpm build` and `pnpm typecheck` pass.
 
 ## Validation
 
+- `pnpm test` passes all REST API tests.
 - `curl -H "Authorization: Bearer TOKEN" POST /api/v1/requests` creates a request.
 - `curl GET /api/v1/requests/:id` returns the request with its current status.
 - Pagination: request with `limit=2` returns 2 items and a cursor for the next page.
@@ -93,3 +101,4 @@ packages/web/src/
 - Verify input validation covers required fields and type constraints.
 - Verify pagination uses cursor-based approach (not offset-based).
 - Check error response consistency across all endpoints.
+- Review test coverage: auth rejection, pagination edge cases (empty page, last page), invalid input shapes.
