@@ -1,13 +1,13 @@
 -- 001_initial_schema.sql
 -- Full norush database schema from PLAN.md Section 4.1.
 
-CREATE TABLE users (
+CREATE TABLE IF NOT EXISTS users (
   id                    TEXT PRIMARY KEY,     -- ULID
   created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE user_api_keys (
+CREATE TABLE IF NOT EXISTS user_api_keys (
   id                    TEXT PRIMARY KEY,     -- ULID
   user_id               TEXT NOT NULL REFERENCES users(id),
   provider              TEXT NOT NULL,        -- 'claude' | 'openai'
@@ -22,7 +22,7 @@ CREATE TABLE user_api_keys (
   updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE user_limits (
+CREATE TABLE IF NOT EXISTS user_limits (
   user_id               TEXT PRIMARY KEY REFERENCES users(id),
   max_requests_per_hour INTEGER,              -- NULL = unlimited
   max_tokens_per_day    INTEGER,              -- NULL = unlimited
@@ -33,7 +33,7 @@ CREATE TABLE user_limits (
   updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE user_settings (
+CREATE TABLE IF NOT EXISTS user_settings (
   user_id               TEXT PRIMARY KEY REFERENCES users(id),
   retention_policy      TEXT NOT NULL DEFAULT '7d',
                         -- 'on_ack' | '1d' | '7d' | '30d' | custom e.g. '14d'
@@ -42,7 +42,7 @@ CREATE TABLE user_settings (
   updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE requests (
+CREATE TABLE IF NOT EXISTS requests (
   id                    TEXT PRIMARY KEY,     -- norush_id (ULID)
   external_id           TEXT,                 -- custom_id sent to provider
   provider              TEXT NOT NULL,        -- 'claude' | 'openai'
@@ -62,7 +62,7 @@ CREATE TABLE requests (
   updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE batches (
+CREATE TABLE IF NOT EXISTS batches (
   id                    TEXT PRIMARY KEY,     -- internal batch ID (ULID)
   provider              TEXT NOT NULL,
   provider_batch_id     TEXT,                 -- ID from provider (NULL until confirmed)
@@ -85,7 +85,7 @@ CREATE TABLE batches (
   updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE results (
+CREATE TABLE IF NOT EXISTS results (
   id                    TEXT PRIMARY KEY,     -- ULID
   request_id            TEXT NOT NULL UNIQUE REFERENCES requests(id),
   batch_id              TEXT NOT NULL REFERENCES batches(id),
@@ -104,7 +104,7 @@ CREATE TABLE results (
   created_at            TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE event_log (
+CREATE TABLE IF NOT EXISTS event_log (
   id                    TEXT PRIMARY KEY,     -- ULID
   entity_type           TEXT NOT NULL,        -- 'batch' | 'request' | 'result'
   entity_id             TEXT NOT NULL,
@@ -115,16 +115,16 @@ CREATE TABLE event_log (
 );
 
 -- Indexes for common query patterns
-CREATE INDEX idx_requests_status ON requests(status);
-CREATE INDEX idx_requests_user_id ON requests(user_id);
-CREATE INDEX idx_requests_batch_id ON requests(batch_id);
-CREATE INDEX idx_batches_status ON batches(status);
-CREATE INDEX idx_batches_updated_at ON batches(updated_at);
-CREATE INDEX idx_results_delivery_status ON results(delivery_status)
+CREATE INDEX IF NOT EXISTS idx_requests_status ON requests(status);
+CREATE INDEX IF NOT EXISTS idx_requests_user_id ON requests(user_id);
+CREATE INDEX IF NOT EXISTS idx_requests_batch_id ON requests(batch_id);
+CREATE INDEX IF NOT EXISTS idx_batches_status ON batches(status);
+CREATE INDEX IF NOT EXISTS idx_batches_updated_at ON batches(updated_at);
+CREATE INDEX IF NOT EXISTS idx_results_delivery_status ON results(delivery_status)
   WHERE delivery_status IN ('pending', 'failed');
-CREATE INDEX idx_results_content_scrub ON results(content_scrubbed_at)
+CREATE INDEX IF NOT EXISTS idx_results_content_scrub ON results(content_scrubbed_at)
   WHERE content_scrubbed_at IS NULL;
-CREATE INDEX idx_event_log_entity ON event_log(entity_type, entity_id);
+CREATE INDEX IF NOT EXISTS idx_event_log_entity ON event_log(entity_type, entity_id);
 
 -- Deferred FK: requests.batch_id → batches(id). Declared after both tables
 -- exist because requests is defined before batches in this file.
