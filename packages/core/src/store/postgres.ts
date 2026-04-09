@@ -189,6 +189,18 @@ export class PostgresStore implements Store {
     `;
   }
 
+  // -- API key lookup -------------------------------------------------------
+
+  async findApiKeyId(userId: string, provider: string): Promise<string | null> {
+    const rows = await this.sql`
+      SELECT id FROM user_api_keys
+      WHERE user_id = ${userId} AND provider = ${provider}
+      ORDER BY priority ASC, created_at ASC
+      LIMIT 1
+    `;
+    return rows.length > 0 ? (rows[0].id as string) : null;
+  }
+
   // -- Batch lifecycle ------------------------------------------------------
 
   async createBatch(batch: NewBatch): Promise<Batch> {

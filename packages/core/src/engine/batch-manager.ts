@@ -234,10 +234,14 @@ export class BatchManager {
       return;
     }
 
+    // Look up the real user_api_keys.id so batches.api_key_id satisfies the FK.
+    // Falls back to userId for environments (e.g. tests) where no key row exists.
+    const apiKeyId = (await this.store.findApiKeyId(userId, provider)) ?? userId;
+
     // Step 1: Write batch record (write-before-submit).
     const batch = await this.store.createBatch({
       provider,
-      apiKeyId: userId,
+      apiKeyId,
       requestCount: requests.length,
     });
 

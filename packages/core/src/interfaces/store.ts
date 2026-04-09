@@ -60,6 +60,15 @@ export interface Store {
     status: "batched",
   ): Promise<void>;
 
+  // -- API key lookup -------------------------------------------------------
+
+  /**
+   * Resolve the highest-priority API key ID for a user + provider pair.
+   * Used by BatchManager to store the correct `user_api_keys.id` on a batch.
+   * Returns null if no key is configured.
+   */
+  findApiKeyId(userId: string, provider: string): Promise<string | null>;
+
   // -- Batch lifecycle ------------------------------------------------------
 
   /** Persist a new batch and return the full record with generated ID. */

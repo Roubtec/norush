@@ -90,6 +90,14 @@ export class MemoryStore implements Store {
     );
   }
 
+  // -- API key lookup -------------------------------------------------------
+
+  // MemoryStore does not persist API keys, so this always returns null.
+  // BatchManager falls back to userId in that case.
+  async findApiKeyId(_userId: string, _provider: string): Promise<string | null> {
+    return null;
+  }
+
   // -- Batch lifecycle ------------------------------------------------------
 
   async createBatch(batch: NewBatch): Promise<Batch> {
