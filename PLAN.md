@@ -184,7 +184,9 @@ internal `setInterval` (for long-running processes) or an external cron calling
 interface Provider {
   submitBatch(requests: NorushRequest[]): Promise<ProviderBatchRef>
   checkStatus(ref: ProviderBatchRef): Promise<BatchStatus>
-  fetchResults(ref: ProviderBatchRef): Promise<NorushResult[]>
+  // AsyncIterable allows Claude to yield results as individual requests complete (early streaming),
+  // while OpenAI yields all results at once after the batch finishes — same interface, different timing.
+  fetchResults(ref: ProviderBatchRef): AsyncIterable<NorushResult>
   cancelBatch(ref: ProviderBatchRef): Promise<void>
 }
 
