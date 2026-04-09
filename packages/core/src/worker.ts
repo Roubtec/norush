@@ -79,9 +79,12 @@ async function main(): Promise<void> {
 
   const sql = postgres(databaseUrl);
 
-  // Run migrations before starting the engine — idempotent, so it's safe to
-  // call on every startup even if the web server already applied them.
-  await migrate(sql);
+  // Run database migrations before anything else to ensure the schema is
+  // up-to-date, even if the worker starts before the first web request.
+  const applied = await migrate(sql);
+  if (applied.length > 0) {
+    console.log(`Applied ${applied.length} migration(s): ${applied.join(", ")}`);
+  }
 
   const store = new PostgresStore(sql);
   const telemetry = new ConsoleTelemetry();

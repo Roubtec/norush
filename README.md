@@ -156,6 +156,17 @@ pnpm build
 pnpm test
 ```
 
+## Deployment
+
+norush deploys to Azure Container Apps via GitHub Actions.
+On merge to `main`, the deploy workflow builds the Docker image, pushes it to Azure Container Registry, and updates both the web and worker containers.
+
+See [infra/README.md](./infra/README.md) for full Azure setup instructions, including:
+- Resource provisioning (Container Apps, PostgreSQL, ACR)
+- GitHub repository secrets configuration
+- Custom domain setup
+- Rollback procedures
+
 ## Project Status
 
 **Early development.** See [PLAN.md](./PLAN.md) for the full design document
