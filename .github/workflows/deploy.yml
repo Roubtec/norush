@@ -1,6 +1,6 @@
 # Deploy norush to Azure Container Apps
 #
-# Triggers on push to main (after CI passes).
+# Triggers after the CI workflow completes successfully on main.
 # Builds the Docker image, pushes to Azure Container Registry (ACR),
 # and deploys both the web and worker containers.
 #
@@ -16,7 +16,9 @@
 name: Deploy
 
 on:
-  push:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
     branches: [main]
   workflow_dispatch: # Allow manual triggers for rollback / redeploy
 
@@ -29,6 +31,11 @@ jobs:
   # 1. Build and push Docker image to ACR
   # -----------------------------------------------------------------------
   build-and-push:
+    # Only deploy when CI succeeded (workflow_run fires on both success and failure).
+    # The condition is skipped for manual workflow_dispatch triggers.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     outputs:
       image-tag: ${{ steps.meta.outputs.tag }}

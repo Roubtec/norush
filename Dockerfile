@@ -44,6 +44,7 @@ FROM base AS build
 # Copy source code (respects .dockerignore).
 COPY tsconfig.json ./
 COPY packages/core/src packages/core/src
+COPY packages/core/migrations packages/core/migrations
 COPY packages/core/tsconfig.json packages/core/tsconfig.json
 COPY packages/web/src packages/web/src
 COPY packages/web/tsconfig.json packages/web/tsconfig.json
@@ -79,6 +80,7 @@ COPY --from=build /app/packages/web/node_modules ./packages/web/node_modules
 
 # Copy built artefacts.
 COPY --from=build /app/packages/core/dist ./packages/core/dist
+COPY --from=build /app/packages/core/migrations ./packages/core/migrations
 COPY --from=build /app/packages/core/package.json ./packages/core/package.json
 COPY --from=build /app/packages/web/dist ./packages/web/dist
 COPY --from=build /app/packages/web/package.json ./packages/web/package.json
