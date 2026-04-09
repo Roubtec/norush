@@ -7,7 +7,7 @@
 
 import { fail, redirect } from "@sveltejs/kit";
 import type { Actions, PageServerLoad } from "./$types";
-import { getSql } from "$lib/server/norush";
+import { getEngine, getStore } from "$lib/server/norush";
 import type { UserLimits } from "@norush/core";
 
 /** Extract authenticated user ID, redirecting to login if absent. */
@@ -16,48 +16,15 @@ function requireUser(locals: App.Locals): string {
   return locals.user.id;
 }
 
-/**
- * Fetch user limits directly from the database.
- * We use raw SQL here since the Store instance requires the engine to be initialized.
- */
-async function getUserLimitsFromDb(
-  sql: ReturnType<typeof getSql>,
-  userId: string,
-): Promise<UserLimits | null> {
-  const rows = await sql`
-    SELECT * FROM user_limits WHERE user_id = ${userId}
-  `;
-  if (rows.length === 0) return null;
-  const row = rows[0] as Record<string, unknown>;
-  return {
-    userId: row.user_id as string,
-    maxRequestsPerHour: (row.max_requests_per_hour as number) ?? null,
-    maxTokensPerPeriod: (row.max_tokens_per_period as number) ?? null,
-    hardSpendLimitUsd:
-      row.hard_spend_limit_usd != null
-        ? Number(row.hard_spend_limit_usd)
-        : null,
-    currentPeriodRequests: (row.current_period_requests as number) ?? 0,
-    currentPeriodTokens: (row.current_period_tokens as number) ?? 0,
-    currentSpendUsd:
-      row.current_spend_usd != null ? Number(row.current_spend_usd) : 0,
-    periodResetAt: new Date(row.period_reset_at as string),
-    createdAt: new Date(
-      (row.created_at as string) ?? (row.updated_at as string),
-    ),
-    updatedAt: new Date(row.updated_at as string),
-  };
-}
-
 export const load: PageServerLoad = async ({ locals }) => {
   const userId = requireUser(locals);
-  const sql = getSql();
 
   let limits: UserLimits | null = null;
   let loadError: string | null = null;
 
   try {
-    limits = await getUserLimitsFromDb(sql, userId);
+    await getEngine();
+    limits = await getStore().getUserLimits(userId);
   } catch (err) {
     console.error("[settings/limits] Failed to load user limits:", err);
     loadError =
@@ -110,7 +77,6 @@ function parseOptionalFloat(
 export const actions = {
   update: async ({ request, locals }) => {
     const userId = requireUser(locals);
-    const sql = getSql();
     const data = await request.formData();
 
     const errors: ValidationError[] = [];
@@ -175,28 +141,12 @@ export const actions = {
     }
 
     try {
-      // Upsert user limits
-      await sql`
-        INSERT INTO user_limits (
-          user_id,
-          max_requests_per_hour,
-          max_tokens_per_period,
-          hard_spend_limit_usd,
-          period_reset_at
-        )
-        VALUES (
-          ${userId},
-          ${maxRequestsPerHour ?? null},
-          ${maxTokensPerPeriod ?? null},
-          ${hardSpendLimitUsd ?? null},
-          now() + interval '1 hour'
-        )
-        ON CONFLICT (user_id) DO UPDATE SET
-          max_requests_per_hour = ${maxRequestsPerHour ?? null},
-          max_tokens_per_period = ${maxTokensPerPeriod ?? null},
-          hard_spend_limit_usd = ${hardSpendLimitUsd ?? null},
-          updated_at = now()
-      `;
+      await getEngine();
+      await getStore().upsertUserLimits(userId, {
+        maxRequestsPerHour: maxRequestsPerHour ?? null,
+        maxTokensPerPeriod: maxTokensPerPeriod ?? null,
+        hardSpendLimitUsd: hardSpendLimitUsd ?? null,
+      });
     } catch (err) {
       console.error("[settings/limits] Failed to update limits:", err);
       return fail(500, {

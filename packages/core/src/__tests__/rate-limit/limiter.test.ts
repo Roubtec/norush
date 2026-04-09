@@ -175,6 +175,16 @@ describe("checkRateLimit", () => {
       expect(result.reason).toBe("token_limit_exceeded");
     });
 
+    it("sets tokenLimit (not effectiveLimit) on token_limit_exceeded", () => {
+      const limits = makeUserLimits({
+        maxTokensPerPeriod: 1_000_000,
+        currentPeriodTokens: 1_000_000,
+      });
+      const result = checkRateLimit(limits, HEALTHY_WINDOW, 1, NOW);
+      expect(result.tokenLimit).toBe(1_000_000);
+      expect(result.effectiveLimit).toBeUndefined();
+    });
+
     it("allows when below token limit", () => {
       const limits = makeUserLimits({
         maxTokensPerPeriod: 1_000_000,
@@ -336,7 +346,7 @@ describe("checkRateLimit", () => {
 // ---------------------------------------------------------------------------
 
 describe("buildRateLimitHeaders", () => {
-  it("includes all three headers when rate limited", () => {
+  it("includes request limit headers when rate limited on requests", () => {
     const headers = buildRateLimitHeaders({
       allowed: false,
       reason: "request_limit_exceeded",
@@ -347,6 +357,32 @@ describe("buildRateLimitHeaders", () => {
     expect(headers["Retry-After"]).toBe("600");
     expect(headers["X-Norush-Health"]).toBe("partial_failures");
     expect(headers["X-Norush-Effective-Limit"]).toBe("50");
+    expect(headers["X-Norush-Token-Limit"]).toBeUndefined();
+  });
+
+  it("includes X-Norush-Token-Limit when token limit exceeded", () => {
+    const headers = buildRateLimitHeaders({
+      allowed: false,
+      reason: "token_limit_exceeded",
+      retryAfterSeconds: 300,
+      health: { factor: 1.0, reason: "healthy" },
+      tokenLimit: 1_000_000,
+    });
+    expect(headers["Retry-After"]).toBe("300");
+    expect(headers["X-Norush-Health"]).toBe("healthy");
+    expect(headers["X-Norush-Token-Limit"]).toBe("1000000");
+    expect(headers["X-Norush-Effective-Limit"]).toBeUndefined();
+  });
+
+  it("omits Retry-After for hard_spend_limit_exceeded (no reset time)", () => {
+    const headers = buildRateLimitHeaders({
+      allowed: false,
+      reason: "hard_spend_limit_exceeded",
+      health: { factor: 1.0, reason: "healthy" },
+      effectiveLimit: 0,
+    });
+    expect(headers["Retry-After"]).toBeUndefined();
+    expect(headers["X-Norush-Health"]).toBe("healthy");
   });
 
   it("omits Retry-After when not present", () => {

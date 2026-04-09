@@ -117,7 +117,9 @@ export function checkRateLimit(
       reason: "token_limit_exceeded",
       retryAfterSeconds: Math.max(retryAfterSeconds, 1),
       health,
-      effectiveLimit: limits.maxTokensPerPeriod,
+      // tokenLimit (not effectiveLimit) so clients know the unit is tokens,
+      // not requests. effectiveLimit is always requests per period.
+      tokenLimit: limits.maxTokensPerPeriod,
       periodExpired,
     };
   }
@@ -131,10 +133,18 @@ export function checkRateLimit(
 }
 
 /**
- * Build 429 response headers from a rate limit result.
+ * Build rate limit response headers from a rate limit result.
  *
- * Returns an object suitable for setting on an HTTP response:
- *   Retry-After, X-Norush-Health, X-Norush-Effective-Limit
+ * Returns an object suitable for setting on an HTTP response.
+ *
+ * Headers emitted:
+ *   Retry-After              — seconds until period resets (omitted for
+ *                              hard_spend_limit_exceeded, which is cumulative
+ *                              and never resets automatically)
+ *   X-Norush-Health          — current health tier reason
+ *   X-Norush-Effective-Limit — health-adjusted request limit (requests/period)
+ *   X-Norush-Token-Limit     — token limit in effect (tokens/period); only
+ *                              present on token_limit_exceeded rejections
  */
 export function buildRateLimitHeaders(
   result: RateLimitResult,
@@ -151,6 +161,10 @@ export function buildRateLimitHeaders(
 
   if (result.effectiveLimit !== undefined) {
     headers["X-Norush-Effective-Limit"] = String(result.effectiveLimit);
+  }
+
+  if (result.tokenLimit !== undefined) {
+    headers["X-Norush-Token-Limit"] = String(result.tokenLimit);
   }
 
   return headers;

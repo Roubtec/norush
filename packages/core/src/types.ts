@@ -325,12 +325,26 @@ export interface RateLimitResult {
   allowed: boolean;
   /** If rejected, the reason. */
   reason?: string;
-  /** Seconds until the period resets (for Retry-After header). */
+  /**
+   * Seconds until the period resets (for Retry-After header).
+   * Not set for `hard_spend_limit_exceeded` — that limit is cumulative and
+   * never resets automatically, so there is no meaningful retry time.
+   */
   retryAfterSeconds?: number;
   /** Current health score. */
   health?: HealthScore;
-  /** Current effective limit. */
+  /**
+   * Health-adjusted request limit (requests per period).
+   * Only set when a request limit is configured. Not set for token or spend
+   * limit rejections — use `tokenLimit` for the token case.
+   */
   effectiveLimit?: number;
+  /**
+   * Maximum tokens allowed per period.
+   * Set on `token_limit_exceeded` rejections so clients can distinguish the
+   * unit from `effectiveLimit` (which is always requests, not tokens).
+   */
+  tokenLimit?: number;
   /**
    * True when the user's period has expired and counters need resetting.
    * The caller should invoke store.resetPeriod() before incrementing counters.
