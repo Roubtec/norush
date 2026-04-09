@@ -54,6 +54,12 @@ export const actions = {
 
     // Server-side validation
     const errors = validateApiKeyInput({ provider, label, apiKey });
+
+    // Priority range validation (clients can bypass HTML min/max)
+    if (isNaN(priority) || priority < 0 || priority > 99 || !Number.isInteger(priority)) {
+      errors.push({ field: "priority", message: "Priority must be an integer between 0 and 99" });
+    }
+
     if (errors.length > 0) {
       return fail(400, {
         action: "add" as const,

@@ -47,9 +47,9 @@
     </div>
   {/if}
 
-  <!-- General form error -->
-  {#if form?.errors && form.action === "add"}
-    {#each form.errors.filter((e) => e.field === "general") as err}
+  <!-- General form error (shown for both add and delete actions) -->
+  {#if form?.errors}
+    {#each form.errors.filter((e) => e.field === "general" || e.field === "keyId") as err}
       <div class="alert alert-error">{err.message}</div>
     {/each}
   {/if}
@@ -161,6 +161,9 @@
           min="0"
           max="99"
         />
+        {#if fieldError("priority")}
+          <span class="field-error">{fieldError("priority")}</span>
+        {/if}
         <span class="field-hint">Lower number = tried first</span>
       </div>
 

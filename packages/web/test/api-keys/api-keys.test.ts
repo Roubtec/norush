@@ -338,7 +338,7 @@ describe("decryptApiKey", () => {
       { api_key_encrypted: Buffer.from("encrypted-data") },
     ]);
 
-    const plaintext = await decryptApiKey(sql, "key_01ABC");
+    const plaintext = await decryptApiKey(sql, "user_01ABC", "key_01ABC");
     expect(plaintext).toBe("sk-ant-api03-decrypted");
     expect(mockDecrypt).toHaveBeenCalled();
   });
@@ -347,7 +347,7 @@ describe("decryptApiKey", () => {
     const { decryptApiKey } = await getModule();
     const sql = createMockSql([]);
 
-    await expect(decryptApiKey(sql, "nonexistent")).rejects.toThrow(
+    await expect(decryptApiKey(sql, "user_01ABC", "nonexistent")).rejects.toThrow(
       "API key not found",
     );
   });

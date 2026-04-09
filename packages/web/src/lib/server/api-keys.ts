@@ -105,21 +105,23 @@ export function validateApiKeyInput(input: {
     });
   }
 
-  // Label
-  if (!input.label || input.label.trim().length === 0) {
+  // Label — validate the trimmed value (consistent with what is stored)
+  const label = input.label?.trim() ?? "";
+  if (label.length === 0) {
     errors.push({ field: "label", message: "Label is required" });
-  } else if (input.label.length > 100) {
+  } else if (label.length > 100) {
     errors.push({ field: "label", message: "Label must be 100 characters or fewer" });
   }
 
-  // API key
-  if (!input.apiKey || input.apiKey.trim().length === 0) {
+  // API key — normalize before all checks (consistent with what is stored)
+  const apiKey = input.apiKey?.trim() ?? "";
+  if (apiKey.length === 0) {
     errors.push({ field: "apiKey", message: "API key is required" });
-  } else if (input.apiKey.length < 10) {
+  } else if (apiKey.length < 10) {
     errors.push({ field: "apiKey", message: "API key appears too short" });
   } else if (input.provider && KEY_PREFIXES[input.provider]) {
     const prefixes = KEY_PREFIXES[input.provider];
-    const hasValidPrefix = prefixes.some((p) => input.apiKey.startsWith(p));
+    const hasValidPrefix = prefixes.some((p) => apiKey.startsWith(p));
     if (!hasValidPrefix) {
       errors.push({
         field: "apiKey",
@@ -237,12 +239,13 @@ export async function deleteApiKey(
  */
 export async function decryptApiKey(
   sql: postgres.Sql,
+  userId: string,
   keyId: string,
 ): Promise<string> {
   const masterKey = await getMasterKey();
 
   const rows = await sql`
-    SELECT api_key_encrypted FROM user_api_keys WHERE id = ${keyId}
+    SELECT api_key_encrypted FROM user_api_keys WHERE id = ${keyId} AND user_id = ${userId}
   `;
 
   if (rows.length === 0) {
