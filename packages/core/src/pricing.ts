@@ -7,8 +7,6 @@
  * per-model over time.
  */
 
-import type { ProviderName } from "./types.js";
-
 /** Per-token rate in USD. */
 export interface TokenRates {
   input: number;

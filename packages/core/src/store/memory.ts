@@ -389,6 +389,7 @@ export class MemoryStore implements Store {
             requestCount: 0,
           });
         }
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- key was just set above
         const g = groups.get(key)!;
         g.requestCount++;
 

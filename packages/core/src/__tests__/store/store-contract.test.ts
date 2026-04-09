@@ -510,20 +510,20 @@ export function runStoreContractTests(
         const claudeEntry = stats.costBreakdown.find(
           (e) => e.provider === "claude",
         );
-        expect(claudeEntry).toBeDefined();
-        expect(claudeEntry!.inputTokens).toBe(1000);
-        expect(claudeEntry!.outputTokens).toBe(500);
-        expect(claudeEntry!.requestCount).toBe(1);
-        expect(claudeEntry!.batchCostUsd).toBeGreaterThan(0);
-        expect(claudeEntry!.standardCostUsd).toBeGreaterThan(
-          claudeEntry!.batchCostUsd,
+        if (!claudeEntry) throw new Error("expected claude entry in cost breakdown");
+        expect(claudeEntry.inputTokens).toBe(1000);
+        expect(claudeEntry.outputTokens).toBe(500);
+        expect(claudeEntry.requestCount).toBe(1);
+        expect(claudeEntry.batchCostUsd).toBeGreaterThan(0);
+        expect(claudeEntry.standardCostUsd).toBeGreaterThan(
+          claudeEntry.batchCostUsd,
         );
 
         const openaiEntry = stats.costBreakdown.find(
           (e) => e.provider === "openai",
         );
-        expect(openaiEntry).toBeDefined();
-        expect(openaiEntry!.model).toBe("gpt-4o");
+        if (!openaiEntry) throw new Error("expected openai entry in cost breakdown");
+        expect(openaiEntry.model).toBe("gpt-4o");
 
         expect(stats.totalSavingsUsd).toBeGreaterThan(0);
         expect(stats.totalStandardCostUsd).toBeCloseTo(
@@ -576,10 +576,10 @@ export function runStoreContractTests(
         const to = new Date(Date.now() + 3600_000);
         const stats = await store.getDetailedStats("test-user", { from, to });
 
-        expect(stats.avgTurnaroundMs).not.toBeNull();
+        if (stats.avgTurnaroundMs == null) throw new Error("expected avgTurnaroundMs to be set");
         // Turnaround should be roughly 60000ms (allow some tolerance for clock drift).
-        expect(stats.avgTurnaroundMs!).toBeGreaterThan(50_000);
-        expect(stats.avgTurnaroundMs!).toBeLessThan(70_000);
+        expect(stats.avgTurnaroundMs).toBeGreaterThan(50_000);
+        expect(stats.avgTurnaroundMs).toBeLessThan(70_000);
       });
     });
   });
