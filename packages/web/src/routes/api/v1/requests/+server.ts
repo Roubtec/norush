@@ -7,8 +7,14 @@
 
 import { json } from "@sveltejs/kit";
 import type { RequestHandler } from "./$types";
-import { getSql, getEngine } from "$lib/server/norush";
+import { getSql, getEngine, getStore } from "$lib/server/norush";
 import { authenticateApiRequest } from "$lib/server/api-auth";
+import {
+  checkRateLimit,
+  buildRateLimitHeaders,
+  nextPeriodReset,
+  DEFAULT_WINDOW_MS,
+} from "@norush/core";
 import type { ProviderName, RequestStatus } from "@norush/core";
 
 // ---------------------------------------------------------------------------
@@ -134,8 +140,32 @@ export const POST: RequestHandler = async ({ request }) => {
     validatedItems.push(data);
   }
 
-  // Enqueue all requests
+  // Check rate limits before enqueuing
   const engine = await getEngine();
+  const store = getStore();
+
+  const [userLimits, slidingWindow] = await Promise.all([
+    store.getUserLimits(caller.userId),
+    store.getSlidingWindow(caller.userId, DEFAULT_WINDOW_MS),
+  ]);
+
+  const limitCheck = checkRateLimit(userLimits, slidingWindow, validatedItems.length);
+  if (!limitCheck.allowed) {
+    const headers = buildRateLimitHeaders(limitCheck);
+    return json(
+      {
+        error: {
+          code: "rate_limited",
+          message: limitCheck.reason === "hard_spend_limit_exceeded"
+            ? "Hard spend limit exceeded. No new requests accepted."
+            : `Rate limit exceeded: ${limitCheck.reason ?? "unknown"}`,
+        },
+      },
+      { status: 429, headers },
+    );
+  }
+
+  // Enqueue all requests
   const created = [];
 
   for (const item of validatedItems) {
@@ -157,8 +187,33 @@ export const POST: RequestHandler = async ({ request }) => {
     });
   }
 
+  // Increment period request counter for rate limiting.
+  // If the period expired, reset counters first so subsequent requests see the
+  // new period rather than the stale periodExpired=true state indefinitely.
+  if (userLimits) {
+    const updateCounters = async () => {
+      if (limitCheck.periodExpired) {
+        await store.resetPeriod(caller.userId, nextPeriodReset());
+      }
+      await store.incrementPeriodRequests(caller.userId, validatedItems.length);
+    };
+    // Fire-and-forget — don't block the response
+    void updateCounters().catch(() => {
+      // Non-critical: counter update failure shouldn't fail the request
+    });
+  }
+
+  // Include rate limit headers on successful responses too
+  const successHeaders: Record<string, string> = {};
+  if (limitCheck.health) {
+    successHeaders["X-Norush-Health"] = limitCheck.health.reason;
+  }
+  if (limitCheck.effectiveLimit !== undefined) {
+    successHeaders["X-Norush-Effective-Limit"] = String(limitCheck.effectiveLimit);
+  }
+
   const responseBody = isBulk ? { requests: created } : { request: created[0] };
-  return json(responseBody, { status: 201 });
+  return json(responseBody, { status: 201, headers: successHeaders });
 };
 
 // ---------------------------------------------------------------------------

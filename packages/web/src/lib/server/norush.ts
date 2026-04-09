@@ -8,6 +8,7 @@
 import postgres from "postgres";
 import { PostgresStore, migrate, createNorush, type NorushEngine } from "@norush/core";
 
+let store: PostgresStore | undefined;
 let sql: postgres.Sql | undefined;
 
 /**
@@ -39,7 +40,7 @@ export async function getEngine(): Promise<NorushEngine> {
     engineInit = (async () => {
       const db = getSql();
       await migrate(db);
-      const store = new PostgresStore(db);
+      store = new PostgresStore(db);
       return createNorush({
         store,
         providers: {},
@@ -47,4 +48,15 @@ export async function getEngine(): Promise<NorushEngine> {
     })();
   }
   return engineInit;
+}
+
+/**
+ * Return the shared PostgresStore instance.
+ * Must be called after getEngine() has been called at least once.
+ */
+export function getStore(): PostgresStore {
+  if (!store) {
+    throw new Error("Store not initialized. Call getEngine() first.");
+  }
+  return store;
 }

@@ -268,3 +268,86 @@ export interface HealthScore {
   /** What's driving the score. */
   reason: "healthy" | "partial_failures" | "mostly_failing" | "critical";
 }
+
+// ---------------------------------------------------------------------------
+// User limits (rate limiting / spend controls)
+// ---------------------------------------------------------------------------
+
+/** Per-user spend and rate limit configuration. */
+export interface UserLimits {
+  userId: string;
+  /** Max requests allowed per rolling hour. NULL = unlimited. */
+  maxRequestsPerHour: number | null;
+  /** Max tokens allowed per rolling period. NULL = unlimited. */
+  maxTokensPerPeriod: number | null;
+  /** Absolute spend ceiling in USD. NULL = unlimited. */
+  hardSpendLimitUsd: number | null;
+  /** Requests consumed in the current period. */
+  currentPeriodRequests: number;
+  /** Tokens consumed in the current period. */
+  currentPeriodTokens: number;
+  /** Cumulative spend in USD. */
+  currentSpendUsd: number;
+  /** When the current period expires and counters reset. */
+  periodResetAt: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/** Fields for creating or updating user limits. */
+export interface UserLimitsInput {
+  maxRequestsPerHour?: number | null;
+  maxTokensPerPeriod?: number | null;
+  hardSpendLimitUsd?: number | null;
+}
+
+// ---------------------------------------------------------------------------
+// Sliding window (for health score computation)
+// ---------------------------------------------------------------------------
+
+/** Aggregated batch outcomes over a sliding time window. */
+export interface SlidingWindow {
+  /** Total batches completed in the window. */
+  total: number;
+  /** Batches that fully succeeded. */
+  succeeded: number;
+  /** Batches that partially or fully failed. */
+  failed: number;
+}
+
+// ---------------------------------------------------------------------------
+// Rate limit check result
+// ---------------------------------------------------------------------------
+
+/** Result of a rate limit check. */
+export interface RateLimitResult {
+  /** Whether the request is allowed. */
+  allowed: boolean;
+  /** If rejected, the reason. */
+  reason?: string;
+  /**
+   * Seconds until the period resets (for Retry-After header).
+   * Not set for `hard_spend_limit_exceeded` — that limit is cumulative and
+   * never resets automatically, so there is no meaningful retry time.
+   */
+  retryAfterSeconds?: number;
+  /** Current health score. */
+  health?: HealthScore;
+  /**
+   * Health-adjusted request limit (requests per period).
+   * Only set when a request limit is configured. Not set for token or spend
+   * limit rejections — use `tokenLimit` for the token case.
+   */
+  effectiveLimit?: number;
+  /**
+   * Maximum tokens allowed per period.
+   * Set on `token_limit_exceeded` rejections so clients can distinguish the
+   * unit from `effectiveLimit` (which is always requests, not tokens).
+   */
+  tokenLimit?: number;
+  /**
+   * True when the user's period has expired and counters need resetting.
+   * The caller should invoke store.resetPeriod() before incrementing counters.
+   */
+  periodExpired?: boolean;
+}
