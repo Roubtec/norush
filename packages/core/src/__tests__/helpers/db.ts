@@ -46,12 +46,16 @@ export async function setupTestDatabase(): Promise<{
   const url = getTestDatabaseUrl();
   const schemaName = `test_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
-  // Connect to the default database to create the test schema.
-  const sql = postgres(url, { max: 5 });
+  // Use a single-connection client so that the SET search_path applied during
+  // schema creation persists for all subsequent queries (SET is session-scoped;
+  // in a pool the setting only applies to the connection that ran it).
+  const sql = postgres(url, {
+    max: 1,
+    connection: { search_path: schemaName },
+  });
 
   // Create an isolated schema for this test run.
   await sql.unsafe(`CREATE SCHEMA ${schemaName}`);
-  await sql.unsafe(`SET search_path TO ${schemaName}`);
 
   // Run migrations within this schema.
   await migrate(sql);
