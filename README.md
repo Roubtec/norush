@@ -81,6 +81,43 @@ Underneath, norush maps to each provider's native batch API:
 | Typical completion | <1 hour | <24 hours |
 | Format | JSON body | JSONL file upload |
 
+## Development
+
+### Prerequisites
+
+- **Node.js** ≥ 24
+- **pnpm** 10.x (`npm install -g pnpm`)
+- **Docker** (for the local PostgreSQL database)
+
+### Install
+
+```sh
+pnpm install
+```
+
+### Workspace packages
+
+| Package | Description |
+|---|---|
+| `@norush/core` | Core batch-processing library |
+| `@norush/web` | Deferred chat web application |
+
+### Scripts
+
+| Command | Description |
+|---|---|
+| `pnpm build` | Compile all packages |
+| `pnpm test` | Run all tests (Vitest) |
+| `pnpm lint` | Lint all packages (ESLint) |
+| `pnpm typecheck` | Type-check all packages (TypeScript strict) |
+| `pnpm db:up` | Start local PostgreSQL 17 via Docker Compose |
+| `pnpm db:down` | Stop local PostgreSQL |
+
+### Local database
+
+Start PostgreSQL with `pnpm db:up`.
+The database is available at `localhost:5432` with database `norush` and password `dev`.
+
 ## Project Status
 
 **Early development.** See [PLAN.md](./PLAN.md) for the full design document
