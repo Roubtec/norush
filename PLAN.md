@@ -287,8 +287,8 @@ The natural question: why wouldn't someone just call the batch API directly?
    result routing. The "boring but necessary" plumbing.
 3. **Persistence by design** — Every request/response pair is tracked and
    recoverable. Crash-safe: the process can restart and pick up where it left.
-4. **Composability** — Chain batch results into subsequent batches. Build
-   multi-step pipelines of deferred work.
+4. **Broker model** — Delivers results to webhooks, enabling clients to
+   chain further work through norush's API on their own terms.
 5. **Multi-tenant key management** — The broker model lets many users submit
    through one server, each with their own API keys.
 6. **Scheduling** — Integration with cron or timer-based execution for
@@ -327,10 +327,10 @@ The natural question: why wouldn't someone just call the batch API directly?
 
 ### Phase 4: Polish & Ecosystem
 - [ ] OpenAI Flex adapter as fallback mode
-- [ ] Pipeline/chaining API for multi-step workflows
 - [ ] npm publish `@norush/core`
 - [ ] Documentation site
 - [ ] GitHub Actions / cron integration examples
+- [ ] Data retention cleanup job and configurable TTL policies
 
 ---
 
@@ -351,9 +351,9 @@ The natural question: why wouldn't someone just call the batch API directly?
 
 ## 8. Data Model
 
-See **Section 11** for the full, updated data model reflecting all resolved
-design decisions (multi-key support, retry counters, delivery tracking, spend
-limits, audit log).
+See **Section 11** for the full data model (multi-key support, retry counters,
+delivery tracking, spend limits, audit log) and **Section 13.4** for the
+retention policy additions (`user_settings`, scrub timestamps).
 
 ---
 
@@ -764,19 +764,163 @@ CREATE TABLE event_log (
 
 ---
 
-## 12. Remaining Open Questions
+## 12. Additional Resolved Decisions
 
-- **Encryption at rest for API keys:** What encryption scheme for
-  `user_api_keys.api_key_encrypted`? AES-256-GCM with a server-side master
-  key is the straightforward choice. Key rotation strategy TBD.
-- **Batch result streaming vs. polling for OpenAI:** OpenAI's batch API
-  requires downloading an output file (not streaming individual results).
-  We'll need to download the file and then iterate line-by-line to simulate
-  streaming. This is a provider adapter concern, not a core architecture
-  issue.
-- **Webhook delivery guarantees:** At-least-once with exponential backoff is
-  the pragmatic choice. We should document that consumers must be idempotent
-  (include `norush_id` in every payload so they can deduplicate).
-- **Multi-step pipelines:** How should chained batches be defined? A simple
-  approach: the result callback for step N queues requests for step N+1.
-  A richer approach: a pipeline definition DSL. Start simple, evolve if needed.
+### 12.1 Encryption at Rest for API Keys
+
+**Decision:** AES-256-GCM symmetric encryption with an externally provided
+master key.
+
+- The master key is **not generated or stored by norush**. It is supplied via
+  environment variable (`NORUSH_MASTER_KEY`) or secret manager reference at
+  startup.
+- This means the key is a **knowable, deployable secret** — compatible with
+  IaC (Terraform, Pulumi), container orchestration (K8s Secrets, ECS task
+  definitions), and horizontal scaling (all instances share the same key).
+- Each API key is encrypted with a unique IV (initialization vector) derived
+  per record, stored alongside the ciphertext.
+- **Key rotation:** Manual for now. The user can rotate their master key by
+  running a migration command that re-encrypts all stored API keys with the
+  new key. The UI may display a "key age" notice (e.g., "Master key has been
+  in use for 90+ days") as a non-blocking reminder, not a hard requirement.
+- This is not critical-path for the core library MVP — the `MemoryStore` and
+  early `SQLiteStore` can store keys in plaintext during development. Encryption
+  is required before any multi-user deployment.
+
+### 12.2 OpenAI Output File Handling
+
+**Decision:** The OpenAI adapter downloads the completed output file and
+iterates line-by-line, feeding each result into the same ingestion pipeline
+used by the Claude streaming path.
+
+- This means Claude batches may deliver individual results **sooner** (as they
+  complete within the batch), while OpenAI batches deliver all results at once
+  (after the full batch completes and the output file is downloaded).
+- From the consumer's perspective, this is invisible — results arrive via the
+  same delivery mechanism regardless of provider. The timing difference is a
+  provider characteristic, not a norush design choice.
+- For very large OpenAI output files, the adapter streams the file download
+  (not buffering the entire file in memory) and parses JSONL line-by-line.
+  This keeps memory usage bounded regardless of batch size.
+
+### 12.3 Webhook Delivery Guarantees
+
+**Decision:** At-least-once delivery with exponential backoff and idempotency
+support.
+
+- Every webhook payload includes `norush_id` (the request's unique ID) so
+  that consumers can **deduplicate** on their end. norush guarantees
+  at-least-once delivery, not exactly-once.
+- Retry schedule: exponential backoff starting at 10s, doubling up to a cap
+  of 10 minutes, for up to `max_delivery_attempts` (default 5) tries.
+- After exhausting retries, the result's `delivery_status` transitions to
+  `failed`. The result remains in the store (subject to retention policy) and
+  can be re-delivered via user action or API call.
+- Webhook payloads include a delivery attempt counter (`X-Norush-Attempt: 3`)
+  so the consumer knows if this is a retry.
+- **Separate retry domain from provider interactions:** Webhook delivery
+  retries are independent of batch submission retries and polling. A webhook
+  endpoint being down does not affect norush's ability to ingest new results
+  or submit new batches.
+
+### 12.4 Scope Boundary: No Built-In Pipeline Orchestration
+
+**Decision:** norush does **not** own prompt chaining, transformation, or
+multi-step workflow logic. It is a broker, not a workflow engine.
+
+**Rationale:** norush's value is in the batch lifecycle — accept requests,
+submit them cheaply, track progress, deliver results. Business logic about
+what to do with results belongs to the consumer:
+
+- **Chat users** interact with results manually. No automation needed.
+- **API consumers** receive results via webhook. If they want to chain further
+  work, their webhook handler submits new requests through the norush API.
+  norush processes those lazily, delivers results, and the cycle repeats.
+
+This keeps norush focused and avoids becoming a workflow orchestration platform
+(a different product category — Temporal, Step Functions, etc.). The webhook →
+re-submit loop is the chaining mechanism, and it lives entirely in user code.
+
+If a pattern emerges where many consumers build the same chaining logic, we
+can revisit with a lightweight convenience layer. But the starting position is:
+norush is transport and lifecycle management, not business logic.
+
+---
+
+## 13. Data Retention Policy
+
+### 13.1 The Problem
+
+norush stores prompt/response pairs that may contain sensitive user data. We
+must avoid becoming an unbounded custodian of this data. Storage bloat is a
+practical concern; liability for sensitive content is a legal one.
+
+### 13.2 Configurable Retention
+
+Each user can configure a retention policy that controls how long request
+params and response bodies are kept. The policy applies **after successful
+delivery** (or after the request reaches a terminal state if no webhook is
+configured).
+
+| Policy | Behavior |
+|--------|----------|
+| `on_ack` | Scrub `params` and `response` JSON immediately after the webhook receives a 2xx ACK. Metadata (IDs, timestamps, token counts, status) is retained. |
+| `1d` | Scrub content 1 day after delivery / terminal state. |
+| `7d` | Scrub content after 7 days. |
+| `30d` | Scrub content after 30 days. **(Default)** |
+| `custom` | User-specified duration in days. |
+
+"Scrub" means replacing the `params` and `response` JSON fields with a
+tombstone value (e.g., `{"scrubbed": true, "scrubbed_at": "..."}`) rather
+than deleting the row. This preserves the metadata for billing, analytics,
+and debugging (we can still see "request X was submitted at time Y, used
+N tokens, was delivered successfully") without retaining the actual content.
+
+### 13.3 Implementation
+
+- A **retention worker** runs periodically (e.g., every hour) and scans for
+  records past their retention window.
+- The worker respects the user's configured policy from `user_settings`.
+- Scrubbing is idempotent — running it twice on the same record is harmless.
+- The `event_log` entries for scrubbed records are also cleaned (any `details`
+  JSON that may contain prompt/response fragments).
+- **Hard upper limit:** Even if a user sets a longer retention, norush enforces
+  a system-wide maximum (e.g., 90 days) to bound storage growth. Configurable
+  by the operator.
+
+### 13.4 Data Model Addition
+
+```sql
+CREATE TABLE user_settings (
+  user_id               TEXT PRIMARY KEY,     -- FK to users.id
+  retention_policy      TEXT NOT NULL DEFAULT '30d',
+                        -- 'on_ack' | '1d' | '7d' | '30d' | custom like '14d'
+  created_at            TEXT NOT NULL,
+  updated_at            TEXT NOT NULL
+);
+```
+
+Add to `requests`:
+```sql
+  content_scrubbed_at   TEXT,  -- NULL until scrubbed
+```
+
+Add to `results`:
+```sql
+  content_scrubbed_at   TEXT,  -- NULL until scrubbed
+```
+
+---
+
+## 14. Remaining Open Questions
+
+- **Auth system for norush.chat:** OAuth providers (GitHub, Google) vs.
+  email/password vs. magic link? Affects the user model and onboarding UX.
+  Not a core library concern.
+- **Operator vs. user configuration:** Some settings (system-wide retention
+  cap, circuit breaker thresholds, master encryption key) are operator-level.
+  Others (retention policy, API keys, webhook URLs) are user-level. Need a
+  clear config hierarchy: environment → operator config → user settings.
+- **Observability:** What metrics should norush expose? Prometheus-style
+  counters (batches_submitted, results_delivered, delivery_failures) seem
+  natural. Not critical for MVP but worth designing hooks for early.
