@@ -175,7 +175,8 @@ export const GET: RequestHandler = async ({ request, url }) => {
   // Parse pagination
   const cursor = url.searchParams.get("cursor");
   const limitParam = url.searchParams.get("limit");
-  const limit = Math.min(Math.max(parseInt(limitParam ?? "50", 10) || 50, 1), 100);
+  const parsedLimit = parseInt(limitParam ?? "50", 10);
+  const limit = Math.min(Math.max(Number.isNaN(parsedLimit) ? 50 : parsedLimit, 1), 100);
 
   // Parse filters
   const statusFilter = url.searchParams.get("status");

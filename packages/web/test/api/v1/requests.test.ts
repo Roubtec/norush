@@ -402,6 +402,22 @@ describe("GET /api/v1/requests", () => {
     expect(data.pagination.limit).toBe(100);
   });
 
+  it("clamps limit=0 to minimum of 1", async () => {
+    mockSqlResult = [];
+    const event = makeEvent("GET", undefined, "Bearer valid_token", new URLSearchParams({ limit: "0" }));
+    const response = await GET(event as never);
+    const data = await response.json();
+    expect(data.pagination.limit).toBe(1);
+  });
+
+  it("defaults limit to 50 for non-numeric input", async () => {
+    mockSqlResult = [];
+    const event = makeEvent("GET", undefined, "Bearer valid_token", new URLSearchParams({ limit: "abc" }));
+    const response = await GET(event as never);
+    const data = await response.json();
+    expect(data.pagination.limit).toBe(50);
+  });
+
   it("defaults limit to 50", async () => {
     mockSqlResult = [];
     const event = makeEvent("GET");

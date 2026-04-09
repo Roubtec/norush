@@ -179,6 +179,22 @@ describe("GET /api/v1/batches", () => {
     expect(data.pagination.limit).toBe(100);
   });
 
+  it("clamps limit=0 to minimum of 1", async () => {
+    mockSqlResult = [];
+    const event = makeListEvent("Bearer valid_token", new URLSearchParams({ limit: "0" }));
+    const response = await listBatches(event as never);
+    const data = await response.json();
+    expect(data.pagination.limit).toBe(1);
+  });
+
+  it("defaults limit to 50 for non-numeric input", async () => {
+    mockSqlResult = [];
+    const event = makeListEvent("Bearer valid_token", new URLSearchParams({ limit: "abc" }));
+    const response = await listBatches(event as never);
+    const data = await response.json();
+    expect(data.pagination.limit).toBe(50);
+  });
+
   it("handles batches without submitted_at or ended_at", async () => {
     const now = new Date("2025-06-15T10:00:00Z");
     mockSqlResult = [
@@ -258,13 +274,11 @@ describe("GET /api/v1/batches/:id", () => {
         apply: () => {
           callCount++;
           if (callCount === 1) {
-            // First call: authenticateApiRequest (from mock, handled separately)
-            // Actually in our mock, authenticateApiRequest doesn't use the sql proxy
-            // First real call: batch query
+            // First proxied SQL call: batch query
             const rows = [batchRow];
             return Promise.resolve(Object.assign(rows, { count: rows.length }));
           }
-          // Second call: summary query
+          // Second proxied SQL call: summary query
           const rows = [...summaryRows];
           return Promise.resolve(Object.assign(rows, { count: rows.length }));
         },

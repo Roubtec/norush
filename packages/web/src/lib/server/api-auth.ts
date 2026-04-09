@@ -5,8 +5,9 @@
  * Only a SHA-256 hash is stored; the plaintext is shown once at creation.
  *
  * Usage in route handlers:
- *   const user = await authenticateRequest(request);
- *   // user is { userId, tokenId } on success, or a Response on failure.
+ *   const authHeader = request.headers.get("authorization");
+ *   const caller = await authenticateApiRequest(sql, authHeader);
+ *   // caller is { userId, tokenId } on success, or null on failure.
  */
 
 import { createHash, randomBytes } from "node:crypto";

@@ -6,7 +6,7 @@ CREATE TABLE api_tokens (
   user_id         TEXT NOT NULL REFERENCES users(id),
   label           TEXT NOT NULL DEFAULT 'default',
   token_hash      TEXT NOT NULL,        -- SHA-256 hex digest of the raw token
-  token_prefix    TEXT NOT NULL,        -- First 8 chars for identification (e.g. "nrsh_abc1")
+  token_prefix    TEXT NOT NULL,        -- Token display prefix for identification: prefix + first 8 chars (e.g. "nrsh_abcdefgh")
   last_used_at    TIMESTAMPTZ,
   expires_at      TIMESTAMPTZ,          -- NULL = never expires
   revoked_at      TIMESTAMPTZ,          -- NULL = active; set on revocation
