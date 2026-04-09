@@ -298,12 +298,12 @@ The natural question: why wouldn't someone just call the batch API directly?
 
 ## 6. Implementation Phases
 
-### Phase 1: Core Library + SQLite Store (MVP)
+### Phase 1: Core Library + PostgreSQL Store (MVP)
 - [ ] Project scaffolding (TypeScript, build tooling, tests)
 - [ ] Define core interfaces: `Provider`, `Store`, `NorushRequest`, `NorushResult`
 - [ ] Implement `ClaudeAdapter` (Anthropic Message Batches API)
 - [ ] Implement `OpenAIBatchAdapter` (OpenAI Batch API)
-- [ ] Implement `MemoryStore` and `SQLiteStore`
+- [ ] Implement `MemoryStore` and `PostgresStore`
 - [ ] Implement Request Queue + Batch Manager
 - [ ] Implement Status Tracker (poll loop)
 - [ ] Implement Result Router (callback + event emitter)
@@ -340,8 +340,8 @@ The natural question: why wouldn't someone just call the batch API directly?
 |----------|--------|-----------|
 | Language | TypeScript | Runs on server and edge; largest LLM-tooling ecosystem; both provider SDKs available |
 | Runtime | Node.js (>=24) | Active LTS (Krypton); good for long-running poll loops and web servers |
-| Default store | SQLite via `better-sqlite3` | Zero-config, single-file, perfect for CLI and single-server. Adapter pattern allows promotion to PostgreSQL for cloud (see Section 12.5) |
-| Production store | PostgreSQL | Required for horizontal scaling; Azure Database for PostgreSQL Flexible Server or equivalent |
+| Database | PostgreSQL everywhere | Full parity between local dev and cloud. PostgreSQL is lightweight locally (Docker or native) and scales to managed cloud instances. `MemoryStore` available for tests. |
+| Cloud hosting | Azure Container Apps | Managed containers, supports web + background worker, consumption plan scales to zero, standard Dockerfile deploys |
 | Web framework | SvelteKit | SSR + API routes + lighter bundles than Next.js; Svelte 5 reactivity is a natural fit for chat UIs |
 | Auth | WorkOS AuthKit | 1M MAUs free; social login, passkeys, MFA, enterprise SSO (SAML, Entra) out of the box; TS SDK |
 | Package manager | pnpm | Fast, disk-efficient, good monorepo support |
@@ -353,9 +353,9 @@ The natural question: why wouldn't someone just call the batch API directly?
 
 ## 8. Data Model
 
-See **Section 11** for the full data model (multi-key support, retry counters,
-delivery tracking, spend limits, audit log) and **Section 13.4** for the
-retention policy additions (`user_settings`, scrub timestamps).
+See **Section 11** for the full PostgreSQL schema (all tables consolidated:
+users, API keys, limits, settings, requests, batches, results, event log,
+plus indexes).
 
 ---
 
@@ -641,34 +641,45 @@ Independent of provider-side limits, norush enforces its own per-user limits
 ## 11. Updated Data Model
 
 ```sql
+-- PostgreSQL schema (primary target for both local dev and cloud)
+
 -- Per-user configuration and limits
 CREATE TABLE users (
-  id                    TEXT PRIMARY KEY,
-  created_at            TEXT NOT NULL,
-  updated_at            TEXT NOT NULL
+  id                    TEXT PRIMARY KEY,     -- ULID
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE TABLE user_api_keys (
-  id                    TEXT PRIMARY KEY,
-  user_id               TEXT NOT NULL,       -- FK to users.id
+  id                    TEXT PRIMARY KEY,     -- ULID
+  user_id               TEXT NOT NULL REFERENCES users(id),
   provider              TEXT NOT NULL,        -- 'claude' | 'openai'
   label                 TEXT NOT NULL,        -- 'primary', 'backup', etc.
-  api_key_encrypted     BLOB NOT NULL,        -- encrypted at rest
+  api_key_encrypted     BYTEA NOT NULL,       -- AES-256-GCM encrypted
   priority              INTEGER NOT NULL DEFAULT 0,  -- lower = tried first
-  failover_enabled      INTEGER NOT NULL DEFAULT 1,
-  created_at            TEXT NOT NULL,
-  updated_at            TEXT NOT NULL
+  failover_enabled      BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE TABLE user_limits (
-  user_id               TEXT PRIMARY KEY,     -- FK to users.id
+  user_id               TEXT PRIMARY KEY REFERENCES users(id),
   max_requests_per_hour INTEGER,              -- NULL = unlimited
   max_tokens_per_day    INTEGER,              -- NULL = unlimited
-  hard_spend_limit_usd  REAL,                 -- NULL = unlimited
+  hard_spend_limit_usd  NUMERIC(10,2),        -- NULL = unlimited
   current_period_requests INTEGER NOT NULL DEFAULT 0,
   current_period_tokens   INTEGER NOT NULL DEFAULT 0,
-  period_reset_at       TEXT NOT NULL,
-  updated_at            TEXT NOT NULL
+  period_reset_at       TIMESTAMPTZ NOT NULL,
+  updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE user_settings (
+  user_id               TEXT PRIMARY KEY REFERENCES users(id),
+  retention_policy      TEXT NOT NULL DEFAULT '7d',
+                        -- 'on_ack' | '1d' | '7d' | '30d' | custom e.g. '14d'
+                        -- Default set by consuming app (7d for library, 30d for chat)
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- A single prompt/request submitted by a consumer
@@ -677,50 +688,51 @@ CREATE TABLE requests (
   external_id           TEXT,                 -- custom_id sent to provider
   provider              TEXT NOT NULL,        -- 'claude' | 'openai'
   model                 TEXT NOT NULL,        -- e.g. 'claude-sonnet-4-6'
-  params                JSON NOT NULL,        -- full request params
+  params                JSONB NOT NULL,       -- full request params
   status                TEXT NOT NULL DEFAULT 'queued',
                         -- queued | batched | processing | succeeded
                         -- | failed | expired | failed_final | canceled
   batch_id              TEXT,                 -- FK to batches.id (current batch)
-  user_id               TEXT NOT NULL,        -- FK to users.id
+  user_id               TEXT NOT NULL REFERENCES users(id),
   callback_url          TEXT,                 -- optional webhook for this request
   webhook_secret        TEXT,                 -- optional HMAC signing secret
-  retry_count           INTEGER NOT NULL DEFAULT 0, -- times repackaged into a new batch
+  retry_count           INTEGER NOT NULL DEFAULT 0, -- times repackaged into new batch
   max_retries           INTEGER NOT NULL DEFAULT 5, -- per-request retry budget
-  created_at            TEXT NOT NULL,
-  updated_at            TEXT NOT NULL
+  content_scrubbed_at   TIMESTAMPTZ,          -- NULL until scrubbed by retention worker
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- A batch submitted to a provider
 CREATE TABLE batches (
   id                    TEXT PRIMARY KEY,     -- internal batch ID (ULID)
   provider              TEXT NOT NULL,
-  provider_batch_id     TEXT,                 -- ID returned by provider (NULL until confirmed)
-  api_key_id            TEXT NOT NULL,        -- FK to user_api_keys.id (which key was used)
-  api_key_label         TEXT,                 -- denormalized for easy auditing
+  provider_batch_id     TEXT,                 -- ID from provider (NULL until confirmed)
+  api_key_id            TEXT NOT NULL REFERENCES user_api_keys(id),
+  api_key_label         TEXT,                 -- denormalized for auditing
   status                TEXT NOT NULL DEFAULT 'pending',
                         -- pending | submitted | processing | ended
                         -- | expired | cancelled | failed
   request_count         INTEGER NOT NULL DEFAULT 0,
   succeeded_count       INTEGER NOT NULL DEFAULT 0,
   failed_count          INTEGER NOT NULL DEFAULT 0,
-  submission_attempts   INTEGER NOT NULL DEFAULT 0,  -- times we tried to submit (orphan recovery)
+  submission_attempts   INTEGER NOT NULL DEFAULT 0,  -- orphan recovery counter
   max_submission_attempts INTEGER NOT NULL DEFAULT 3,
-  provider_retries      INTEGER NOT NULL DEFAULT 0,  -- times provider failed and we re-queued
+  provider_retries      INTEGER NOT NULL DEFAULT 0,  -- provider-failure retries (free)
   max_provider_retries  INTEGER NOT NULL DEFAULT 5,
-  polling_strategy      TEXT,                 -- override strategy name, NULL = use global default
-  submitted_at          TEXT,
-  ended_at              TEXT,
-  created_at            TEXT NOT NULL,
-  updated_at            TEXT NOT NULL
+  polling_strategy      TEXT,                 -- override, NULL = global default
+  submitted_at          TIMESTAMPTZ,
+  ended_at              TIMESTAMPTZ,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- Responses received from providers
 CREATE TABLE results (
   id                    TEXT PRIMARY KEY,     -- ULID
-  request_id            TEXT NOT NULL UNIQUE, -- FK to requests.id (1:1)
-  batch_id              TEXT NOT NULL,        -- FK to batches.id
-  response              JSON NOT NULL,        -- full provider response
+  request_id            TEXT NOT NULL UNIQUE REFERENCES requests(id),
+  batch_id              TEXT NOT NULL REFERENCES batches(id),
+  response              JSONB NOT NULL,       -- full provider response
   stop_reason           TEXT,                 -- end_turn, max_tokens, etc.
   input_tokens          INTEGER,
   output_tokens         INTEGER,
@@ -729,40 +741,60 @@ CREATE TABLE results (
                         -- pending | delivered | failed | no_target
   delivery_attempts     INTEGER NOT NULL DEFAULT 0,
   max_delivery_attempts INTEGER NOT NULL DEFAULT 5,
-  last_delivery_error   TEXT,                 -- last failure reason
-  next_delivery_at      TEXT,                 -- for retry scheduling (backoff)
-  delivered_at          TEXT,
-  created_at            TEXT NOT NULL
+  last_delivery_error   TEXT,
+  next_delivery_at      TIMESTAMPTZ,          -- retry scheduling (backoff)
+  delivered_at          TIMESTAMPTZ,
+  content_scrubbed_at   TIMESTAMPTZ,          -- NULL until scrubbed
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Audit log for significant events (optional but recommended)
+-- Audit log for significant events
 CREATE TABLE event_log (
-  id                    TEXT PRIMARY KEY,
+  id                    TEXT PRIMARY KEY,     -- ULID
   entity_type           TEXT NOT NULL,        -- 'batch' | 'request' | 'result'
   entity_id             TEXT NOT NULL,
   event                 TEXT NOT NULL,        -- 'submitted', 'orphan_recovered',
                                               -- 'circuit_breaker_tripped', etc.
-  details               JSON,
-  created_at            TEXT NOT NULL
+  details               JSONB,               -- scrubbed alongside parent record
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Indexes for common query patterns
+CREATE INDEX idx_requests_status ON requests(status);
+CREATE INDEX idx_requests_user_id ON requests(user_id);
+CREATE INDEX idx_requests_batch_id ON requests(batch_id);
+CREATE INDEX idx_batches_status ON batches(status);
+CREATE INDEX idx_batches_updated_at ON batches(updated_at);
+CREATE INDEX idx_results_delivery_status ON results(delivery_status)
+  WHERE delivery_status IN ('pending', 'failed');
+CREATE INDEX idx_results_content_scrub ON results(content_scrubbed_at)
+  WHERE content_scrubbed_at IS NULL;
+CREATE INDEX idx_event_log_entity ON event_log(entity_type, entity_id);
 ```
 
-### Key differences from the original draft:
+### PostgreSQL-first rationale
 
-- **`user_api_keys`** — Supports multiple keys per provider with priority
-  ordering and failover toggle.
-- **`user_limits`** — Per-user spend caps with rolling counters.
-- **`requests.retry_count` / `max_retries`** — Per-request retry budget
-  tracking for repackaging.
-- **`batches.submission_attempts` / `max_submission_attempts`** — Orphan
-  recovery counter.
-- **`batches.provider_retries` / `max_provider_retries`** — Provider-failure
-  retry counter (separate from orphan retries since these are free).
-- **`batches.api_key_id` / `api_key_label`** — Track which key was used.
-- **`batches.polling_strategy`** — Per-batch polling override.
-- **`results.delivery_*` fields** — Full delivery lifecycle tracking for
-  the two-phase pipeline.
-- **`event_log`** — Audit trail for debugging and observability.
+Using PostgreSQL for both local development and cloud deployment gives us:
+- **Full parity** — no dialect surprises when deploying.
+- **JSONB** — binary JSON with indexing, better than plain JSON for queries.
+- **TIMESTAMPTZ** — proper timezone-aware timestamps.
+- **BOOLEAN** — native booleans instead of integer flags.
+- **NUMERIC** — precise decimal for monetary values.
+- **REFERENCES** — enforced foreign keys.
+- **Partial indexes** — e.g., only index undelivered results for the delivery
+  worker query.
+
+PostgreSQL runs lightweight locally via Docker (`docker run -d postgres:17`)
+or native install. The `MemoryStore` adapter remains available for unit tests
+that don't need a database.
+
+### Schema notes
+
+- **`user_settings`** is included directly (consolidated from Section 13.4).
+- **`content_scrubbed_at`** on `requests` and `results` supports the retention
+  worker.
+- **Indexes** target the hot query paths: finding queued requests, pending
+  batches, undelivered results, and records needing scrubbing.
 
 ---
 
@@ -785,9 +817,8 @@ master key.
   running a migration command that re-encrypts all stored API keys with the
   new key. The UI may display a "key age" notice (e.g., "Master key has been
   in use for 90+ days") as a non-blocking reminder, not a hard requirement.
-- This is not critical-path for the core library MVP — the `MemoryStore` and
-  early `SQLiteStore` can store keys in plaintext during development. Encryption
-  is required before any multi-user deployment.
+- Encryption is required before any multi-user deployment. During early solo
+  development, plaintext keys in the `MemoryStore` (tests only) are acceptable.
 
 ### 12.2 OpenAI Output File Handling
 
@@ -894,28 +925,11 @@ N tokens, was delivered successfully") without retaining the actual content.
   a system-wide maximum (e.g., 90 days) to bound storage growth. Configurable
   by the operator.
 
-### 13.4 Data Model Addition
+### 13.4 Data Model
 
-```sql
-CREATE TABLE user_settings (
-  user_id               TEXT PRIMARY KEY,     -- FK to users.id
-  retention_policy      TEXT NOT NULL DEFAULT '7d',
-                        -- 'on_ack' | '1d' | '7d' | '30d' | custom like '14d'
-                        -- Default set by consuming app (7d for library, 30d for chat)
-  created_at            TEXT NOT NULL,
-  updated_at            TEXT NOT NULL
-);
-```
-
-Add to `requests`:
-```sql
-  content_scrubbed_at   TEXT,  -- NULL until scrubbed
-```
-
-Add to `results`:
-```sql
-  content_scrubbed_at   TEXT,  -- NULL until scrubbed
-```
+The `user_settings`, `requests.content_scrubbed_at`, and
+`results.content_scrubbed_at` fields are included in the consolidated schema
+in **Section 11**.
 
 ---
 
@@ -1028,10 +1042,10 @@ later.
   survives content scrubbing). This gives us the data to analyze usage
   patterns and inform pricing without retaining prompt/response content.
 
-### 14.4 Database Adapter & Cloud Promotion
+### 14.4 Database: PostgreSQL Everywhere
 
-**Decision:** Abstract the storage layer behind an adapter interface so the
-database engine can be swapped via connection string.
+**Decision:** PostgreSQL for all environments — local dev, CI, and cloud.
+No SQLite adapter needed. Store interface retained for `MemoryStore` (tests).
 
 ```ts
 interface Store {
@@ -1065,40 +1079,169 @@ interface Store {
 
 | Adapter | Use case | Notes |
 |---------|----------|-------|
-| `MemoryStore` | Tests, ephemeral scripts | No persistence; fastest |
-| `SQLiteStore` | Local dev, CLI, single-server | Uses `better-sqlite3`; single-file DB |
-| `PostgresStore` | Cloud deployment, multi-instance | Uses `pg` or `postgres.js`; connection string config |
+| `MemoryStore` | Unit tests | No persistence; fastest; no external deps |
+| `PostgresStore` | Dev, CI, staging, production | Uses `postgres.js`; connection string via `DATABASE_URL` |
 
-**Cloud promotion path:**
-1. Develop with `SQLiteStore` locally.
-2. When deploying to cloud (Azure, AWS, etc.), provision a managed PostgreSQL
-   instance (e.g., Azure Database for PostgreSQL Flexible Server).
-3. Set `DATABASE_URL` to the PostgreSQL connection string.
-4. Run the migration tool to create the schema.
-5. The application detects the connection string protocol and instantiates
-   `PostgresStore` automatically.
+**Local dev setup:**
+```bash
+# Docker (simplest)
+docker run -d --name norush-db -p 5432:5432 \
+  -e POSTGRES_DB=norush -e POSTGRES_PASSWORD=dev \
+  postgres:17
 
-**Why not SQLite on Azure:** SQLite requires a local filesystem with durable
-write access. Azure App Service has a persistent `/home` mount that technically
-works for a single instance, but it cannot support horizontal scaling (multiple
-instances writing to the same SQLite file = corruption). Container services
-(Container Apps, Functions) have ephemeral filesystems. For any cloud
-deployment that needs reliability or scaling, PostgreSQL is the answer.
+# Or native install (brew install postgresql@17, apt install postgresql-17)
+```
 
-**Schema compatibility:** The SQL schema is written in standard SQL that works
-on both SQLite and PostgreSQL. The few dialect differences (e.g., `TEXT` vs.
-`VARCHAR`, `INTEGER` for booleans in SQLite vs. `BOOLEAN` in Postgres) are
-handled by the adapter layer. Migrations are versioned and adapter-aware.
+**Cloud deployment:**
+- Azure Database for PostgreSQL Flexible Server (or equivalent on other
+  clouds).
+- Same `DATABASE_URL` connection string, same schema, same queries.
+- Full parity — no dialect surprises between dev and prod.
 
 ---
 
-## 15. Remaining Open Questions
+## 15. Additional Resolved Decisions (Round 4)
 
-- **Deployment target for norush.chat:** Azure App Service? Azure Container
-  Apps? Vercel (supports SvelteKit)? Affects the background worker strategy
-  (cron vs. long-running process vs. external scheduler).
-- **WebSocket for live chat updates:** Should the chat UI use WebSocket / SSE
-  to push result arrival notifications in real-time, or just poll? SvelteKit
-  supports both patterns.
-- **Rate limiting implementation:** Token bucket? Sliding window? Per-IP or
-  per-user? This matters for the broker API but not for Phase 1.
+### 15.1 Deployment: Azure Container Apps
+
+**Decision:** Deploy norush.chat on Azure Container Apps.
+
+- **Why Container Apps:** Runs standard Docker containers — deploy exactly what
+  we develop. Supports multiple containers in one environment (web server +
+  background poll worker). Consumption plan scales to zero when idle.
+  Managed HTTPS, custom domains, env vars, and secrets integration (Azure
+  Key Vault).
+- **Why not Static Web Apps:** norush needs a persistent/scheduled background
+  process for batch polling and delivery. Static Web Apps are for static
+  frontends with serverless functions — no long-running workers.
+- **Why not Azure Functions (alone):** Could handle timer-triggered polling,
+  but fragments the architecture into separate deployment units. The web
+  server, poll worker, and delivery worker share code and config — better
+  as containers in one environment.
+- **Why not App Service:** Also viable, but Container Apps is the more modern
+  path with better scaling semantics (scale-to-zero, KEDA-based autoscaling).
+- **Database:** Azure Database for PostgreSQL Flexible Server alongside the
+  container environment. Same `DATABASE_URL` as local dev.
+- **Portability:** The Dockerfile runs anywhere — migration to AWS ECS, GCP
+  Cloud Run, or self-hosted Docker is straightforward.
+
+### 15.2 Chat UI Updates: Polling, Not WebSocket
+
+**Decision:** The chat UI uses simple HTTP polling (30–60s interval) to check
+for new results. No WebSocket or SSE.
+
+**Rationale:** norush is a deferred-processing service by design. Users
+submit thoughts and come back later. The data flows are:
+- "Has my batch completed?" (infrequent, batch-level)
+- "Are there new results?" (infrequent, periodic check)
+
+Neither requires sub-second latency. WebSocket adds connection management
+complexity (reconnection, load balancer affinity, heartbeats) for no user
+benefit. A simple `GET /api/results?since={timestamp}` endpoint on a 30s
+timer is simpler to build, debug, deploy, and scale.
+
+If we later discover a pattern that warrants push (e.g., real-time
+collaborative features), SSE is the lighter upgrade path over WebSocket —
+one-directional, simpler protocol, no connection upgrade negotiation.
+
+### 15.3 Adaptive Rate Limiting with Health Scores
+
+**Decision:** Per-user rate limiting with a dynamic health score that tightens
+limits when a user's batches are failing.
+
+#### Core Concept
+
+Each user has a **base rate limit** (requests per period) set by operator
+config or their own settings. Their **effective limit** is:
+
+```
+effective_limit = base_limit × health_factor
+```
+
+Where `health_factor` is a value between `0.1` and `1.0`, computed from
+recent batch outcomes in a sliding window.
+
+#### Health Factor Computation
+
+```ts
+interface HealthScore {
+  /** Value between 0.1 and 1.0 */
+  factor: number;
+  /** What's driving the score */
+  reason: 'healthy' | 'partial_failures' | 'mostly_failing' | 'critical';
+}
+
+function computeHealth(window: SlidingWindow): HealthScore {
+  const { succeeded, failed, total } = window;
+  if (total === 0) return { factor: 1.0, reason: 'healthy' };
+
+  const successRate = succeeded / total;
+
+  if (successRate >= 0.9) return { factor: 1.0, reason: 'healthy' };
+  if (successRate >= 0.5) return { factor: 0.5, reason: 'partial_failures' };
+  if (successRate > 0)    return { factor: 0.25, reason: 'mostly_failing' };
+  return                           { factor: 0.1, reason: 'critical' };
+}
+```
+
+#### Sliding Window
+
+- Window size: configurable, default **1 hour**.
+- Tracks: batches submitted, succeeded (all requests resolved), partially
+  failed, fully failed.
+- Updated on each batch completion event.
+
+#### Behavior by Health Level
+
+| Health | Factor | Behavior |
+|--------|--------|----------|
+| `healthy` | 1.0 | Full rate limit. Normal operation. |
+| `partial_failures` | 0.5 | Half rate limit. User likely hitting provider quota — allow enough throughput to prove recovery. |
+| `mostly_failing` | 0.25 | Quarter rate limit. Likely exhausted API budget. Minimal throughput to detect recovery. |
+| `critical` | 0.1 | Near-minimum. All recent batches failed. Allow a trickle so the user can prove they've topped up. |
+
+#### Recovery
+
+- The health factor is computed on every request admission, using the current
+  sliding window.
+- As failed batches age out of the window and new successful batches enter,
+  the factor naturally recovers.
+- **Minimum throughput guarantee:** Even at `critical`, at least 1 request per
+  period is allowed. This is the "avenue to prove recovery" — the user tops up
+  their API budget, submits one request, it succeeds, and the health factor
+  starts climbing back.
+- Recovery is automatic and immediate. There is no manual "lift restriction"
+  step needed.
+
+#### Implementation
+
+- Health scores are computed from existing data (batch outcomes in the
+  `batches` table) — no additional state needed.
+- The rate limiter checks `effective_limit` at request admission time.
+- Rejected requests receive a `429` response with:
+  - `Retry-After` header (seconds until window slides)
+  - `X-Norush-Health: partial_failures` (reason, for debugging)
+  - `X-Norush-Effective-Limit: 50` (current effective limit)
+  - Body explaining the situation and suggesting the user check their
+    provider API key balance.
+
+#### Why This Over Simple Rate Limiting
+
+Simple rate limiting protects norush from volume abuse. Adaptive rate limiting
+additionally protects **users from wasting money** — if their API key is
+exhausted, flooding norush with more requests just generates more failures
+(some of which may incur orphan-recovery costs). Throttling down during
+failures is a service to the user, not just a defense for us.
+
+---
+
+## 16. Remaining Open Questions
+
+- **PostgreSQL client library:** `postgres.js` (Porsager) vs. `pg` (node-postgres)?
+  `postgres.js` is newer, has tagged template queries, and is ESM-native.
+  `pg` is battle-tested with a larger ecosystem. Leaning toward `postgres.js`.
+- **Migration tooling:** Raw SQL files with a simple runner? Or a library like
+  `node-pg-migrate` / `dbmate`? Needs to be lightweight and not hide the SQL.
+- **Dockerfile structure:** Multi-stage build for the monorepo. Web container
+  and worker container from the same image with different entrypoints, or
+  separate images?
