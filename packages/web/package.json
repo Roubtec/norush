@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@norush/core": "workspace:*",
+    "@workos-inc/node": "^8.12.1",
     "postgres": "^3.4.5"
   },
   "devDependencies": {
