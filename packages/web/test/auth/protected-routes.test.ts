@@ -60,18 +60,18 @@ function simulateProtectedLayoutLoad(locals: App.Locals) {
 
 /**
  * Simulates the hooks.server.ts session validation and locals population.
+ *
+ * The hook validates the session cookie on every request so `locals.user`
+ * is available on all routes, including /login (for the already-authenticated
+ * redirect) and /auth/logout (for WorkOS session revocation).
  */
 async function simulateHook(
-  pathname: string,
+  _pathname: string,
   sessionCookie: string | undefined,
 ): Promise<App.Locals> {
   const locals: App.Locals = {};
 
-  // Public routes skip auth
-  const publicPrefixes = ["/login", "/auth/", "/api/health"];
-  const isPublic = publicPrefixes.some((p) => pathname.startsWith(p));
-
-  if (!isPublic && sessionCookie) {
+  if (sessionCookie) {
     const { validateSession, resetWorkOS } = await import("$lib/server/auth");
     resetWorkOS();
 
@@ -85,6 +85,7 @@ async function simulateHook(
         sessionId: session.sessionId,
       };
     }
+    // Note: in the real hook, invalid/expired sessions also delete the cookie.
   }
 
   return locals;
@@ -153,21 +154,58 @@ describe("protected route redirect logic", () => {
     expect(locals.user).toBeUndefined();
   });
 
-  it("hooks skip auth for public routes", async () => {
+  it("hooks do not call WorkOS when no session cookie is present on /login", async () => {
     const locals = await simulateHook("/login", undefined);
 
     expect(locals.user).toBeUndefined();
     expect(mockAuthenticateWithSessionCookie).not.toHaveBeenCalled();
   });
 
-  it("hooks skip auth for /auth/ routes", async () => {
+  it("hooks populate locals.user on /login when a valid session cookie is present", async () => {
+    mockAuthenticateWithSessionCookie.mockResolvedValueOnce({
+      authenticated: true,
+      sessionId: "sess_login",
+      user: {
+        id: "user_01LOGIN",
+        email: "login@example.com",
+        firstName: "Login",
+        lastName: "Test",
+      },
+    });
+
+    const locals = await simulateHook("/login", "valid_sealed_session");
+
+    expect(locals.user).toBeDefined();
+    expect(locals.user?.id).toBe("user_01LOGIN");
+    expect(locals.user?.sessionId).toBe("sess_login");
+  });
+
+  it("hooks populate locals.user on /auth/logout when a valid session cookie is present", async () => {
+    mockAuthenticateWithSessionCookie.mockResolvedValueOnce({
+      authenticated: true,
+      sessionId: "sess_logout",
+      user: {
+        id: "user_01LOGOUT",
+        email: "logout@example.com",
+        firstName: "Logout",
+        lastName: "Test",
+      },
+    });
+
+    const locals = await simulateHook("/auth/logout", "valid_sealed_session");
+
+    expect(locals.user).toBeDefined();
+    expect(locals.user?.sessionId).toBe("sess_logout");
+  });
+
+  it("hooks do not call WorkOS when no session cookie is present on /auth/callback", async () => {
     const locals = await simulateHook("/auth/callback?code=abc", undefined);
 
     expect(locals.user).toBeUndefined();
     expect(mockAuthenticateWithSessionCookie).not.toHaveBeenCalled();
   });
 
-  it("hooks skip auth for /api/health", async () => {
+  it("hooks do not call WorkOS when no session cookie is present on /api/health", async () => {
     const locals = await simulateHook("/api/health", undefined);
 
     expect(locals.user).toBeUndefined();

@@ -34,29 +34,30 @@ export const handle: Handle = async ({ event, resolve }) => {
   }
 
   // -- Session validation --------------------------------------------------
-  // Skip auth for public routes to avoid unnecessary WorkOS calls.
-  const publicPrefixes = ["/login", "/auth/", "/api/health"];
-  const isPublic = publicPrefixes.some((p) => event.url.pathname.startsWith(p));
-
-  if (!isPublic) {
-    const sessionData = event.cookies.get(SESSION_COOKIE);
-    if (sessionData) {
-      try {
-        const session = await validateSession(sessionData);
-        if (session.authenticated) {
-          event.locals.user = {
-            id: session.user.workosId,
-            email: session.user.email,
-            firstName: session.user.firstName,
-            lastName: session.user.lastName,
-            sessionId: session.sessionId,
-          };
-        }
-      } catch {
-        // Invalid session cookie — treat as unauthenticated.
-        // Clear the stale cookie so the user isn't stuck in a loop.
+  // Validate the session cookie on every request so `locals.user` is
+  // available on all routes, including /login (for the "already authenticated"
+  // redirect) and /auth/logout (for WorkOS session revocation).
+  // Access control (redirect to /login) is enforced in the (app) layout, not here.
+  const sessionData = event.cookies.get(SESSION_COOKIE);
+  if (sessionData) {
+    try {
+      const session = await validateSession(sessionData);
+      if (session.authenticated) {
+        event.locals.user = {
+          id: session.user.workosId,
+          email: session.user.email,
+          firstName: session.user.firstName,
+          lastName: session.user.lastName,
+          sessionId: session.sessionId,
+        };
+      } else {
+        // Invalid or expired session — clear the stale cookie to avoid
+        // repeated WorkOS calls on every subsequent request.
         event.cookies.delete(SESSION_COOKIE, { path: "/" });
       }
+    } catch {
+      // Malformed cookie — clear it so the user isn't stuck in a loop.
+      event.cookies.delete(SESSION_COOKIE, { path: "/" });
     }
   }
 
