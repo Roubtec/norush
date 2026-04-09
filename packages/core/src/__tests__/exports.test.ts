@@ -26,6 +26,12 @@ import {
   nextPeriodReset,
   DEFAULT_WINDOW_MS,
   DEFAULT_PERIOD_MS,
+  STANDARD_RATES,
+  BATCH_DISCOUNT,
+  getRates,
+  standardCost,
+  batchCost,
+  pricingSavings,
 } from "../index.js";
 
 // Type-only imports to verify they are exported
@@ -49,6 +55,8 @@ import type {
   PollContext,
   DateRange,
   UsageStats,
+  CostBreakdownEntry,
+  DetailedUsageStats,
   HealthScore,
   Provider,
   Store as _Store,
@@ -80,6 +88,7 @@ import type {
   UserLimitsInput,
   SlidingWindow,
   RateLimitResult,
+  TokenRates,
 } from "../index.js";
 
 describe("@norush/core exports", () => {
@@ -167,6 +176,15 @@ describe("@norush/core exports", () => {
     expect(DEFAULT_PERIOD_MS).toBe(3_600_000);
   });
 
+  it("exports pricing functions and constants", () => {
+    expect(typeof getRates).toBe("function");
+    expect(typeof standardCost).toBe("function");
+    expect(typeof batchCost).toBe("function");
+    expect(typeof pricingSavings).toBe("function");
+    expect(STANDARD_RATES).toBeDefined();
+    expect(BATCH_DISCOUNT).toBe(0.5);
+  });
+
   // Type-level assertions — these verify that all type exports compile.
   // They don't execute meaningful runtime checks; the test passing means
   // the types resolved correctly during compilation.
@@ -203,6 +221,27 @@ describe("@norush/core exports", () => {
       totalOutputTokens: 0,
       totalBatches: 0,
     };
+    const _costEntry: CostBreakdownEntry = {
+      provider: "claude",
+      model: "claude-sonnet-4-6",
+      inputTokens: 0,
+      outputTokens: 0,
+      batchCostUsd: 0,
+      standardCostUsd: 0,
+      requestCount: 0,
+    };
+    const _detailedStats: DetailedUsageStats = {
+      ..._stats,
+      costBreakdown: [_costEntry],
+      avgTurnaroundMs: null,
+      totalBatchCostUsd: 0,
+      totalStandardCostUsd: 0,
+      totalSavingsUsd: 0,
+    };
+    const _tokenRates: TokenRates = { input: 0.003, output: 0.015 };
+    expect(_costEntry).toBeDefined();
+    expect(_detailedStats).toBeDefined();
+    expect(_tokenRates).toBeDefined();
 
     // Verify config types are usable
     const _batchCfg: BatchingConfig = {

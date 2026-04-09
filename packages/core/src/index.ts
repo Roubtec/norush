@@ -31,6 +31,8 @@ export type {
   PollContext,
   DateRange,
   UsageStats,
+  CostBreakdownEntry,
+  DetailedUsageStats,
   EventEntityType,
   NewEvent,
   EventLogEntry,
@@ -203,6 +205,20 @@ export {
   DEFAULT_WINDOW_MS,
   DEFAULT_PERIOD_MS,
 } from "./rate-limit/index.js";
+
+// ---------------------------------------------------------------------------
+// Pricing helpers
+// ---------------------------------------------------------------------------
+
+export {
+  STANDARD_RATES,
+  BATCH_DISCOUNT,
+  getRates,
+  standardCost,
+  batchCost,
+  savings as pricingSavings,
+  type TokenRates,
+} from "./pricing.js";
 
 // ---------------------------------------------------------------------------
 // Telemetry implementations

@@ -467,6 +467,120 @@ export function runStoreContractTests(
         expect(stats.totalOutputTokens).toBe(0);
         expect(stats.totalBatches).toBe(0);
       });
+
+      test("getDetailedStats returns cost breakdown grouped by provider and model", async () => {
+        store = await factory();
+        const reqClaude = await store.createRequest(
+          newRequest({ provider: "claude", model: "claude-sonnet-4-6" }),
+        );
+        const reqOpenai = await store.createRequest(
+          newRequest({ provider: "openai", model: "gpt-4o" }),
+        );
+        const batch = await store.createBatch(newBatch());
+
+        await store.updateRequest(reqClaude.id, {
+          status: "succeeded",
+          batchId: batch.id,
+        });
+        await store.updateRequest(reqOpenai.id, {
+          status: "succeeded",
+          batchId: batch.id,
+        });
+
+        await store.createResult(
+          newResult(reqClaude.id, batch.id, {
+            inputTokens: 1000,
+            outputTokens: 500,
+          }),
+        );
+        await store.createResult(
+          newResult(reqOpenai.id, batch.id, {
+            inputTokens: 2000,
+            outputTokens: 1000,
+          }),
+        );
+
+        const from = new Date(Date.now() - 3600_000);
+        const to = new Date(Date.now() + 3600_000);
+        const stats = await store.getDetailedStats("test-user", { from, to });
+
+        expect(stats.totalRequests).toBe(2);
+        expect(stats.costBreakdown.length).toBe(2);
+
+        const claudeEntry = stats.costBreakdown.find(
+          (e) => e.provider === "claude",
+        );
+        expect(claudeEntry).toBeDefined();
+        expect(claudeEntry!.inputTokens).toBe(1000);
+        expect(claudeEntry!.outputTokens).toBe(500);
+        expect(claudeEntry!.requestCount).toBe(1);
+        expect(claudeEntry!.batchCostUsd).toBeGreaterThan(0);
+        expect(claudeEntry!.standardCostUsd).toBeGreaterThan(
+          claudeEntry!.batchCostUsd,
+        );
+
+        const openaiEntry = stats.costBreakdown.find(
+          (e) => e.provider === "openai",
+        );
+        expect(openaiEntry).toBeDefined();
+        expect(openaiEntry!.model).toBe("gpt-4o");
+
+        expect(stats.totalSavingsUsd).toBeGreaterThan(0);
+        expect(stats.totalStandardCostUsd).toBeCloseTo(
+          stats.totalBatchCostUsd + stats.totalSavingsUsd,
+          10,
+        );
+      });
+
+      test("getDetailedStats returns zeros for empty data", async () => {
+        store = await factory();
+        const from = new Date(Date.now() - 3600_000);
+        const to = new Date(Date.now() + 3600_000);
+        const stats = await store.getDetailedStats("unknown-user", {
+          from,
+          to,
+        });
+
+        expect(stats.totalRequests).toBe(0);
+        expect(stats.costBreakdown.length).toBe(0);
+        expect(stats.avgTurnaroundMs).toBeNull();
+        expect(stats.totalBatchCostUsd).toBe(0);
+        expect(stats.totalStandardCostUsd).toBe(0);
+        expect(stats.totalSavingsUsd).toBe(0);
+      });
+
+      test("getDetailedStats computes avg turnaround from completed batches", async () => {
+        store = await factory();
+        const req = await store.createRequest(newRequest());
+        const batch = await store.createBatch(newBatch());
+
+        const submitted = new Date(Date.now() - 60_000); // 60s ago
+        const ended = new Date(); // now
+        await store.updateRequest(req.id, {
+          status: "succeeded",
+          batchId: batch.id,
+        });
+        await store.updateBatch(batch.id, {
+          status: "ended",
+          submittedAt: submitted,
+          endedAt: ended,
+        });
+        await store.createResult(
+          newResult(req.id, batch.id, {
+            inputTokens: 50,
+            outputTokens: 100,
+          }),
+        );
+
+        const from = new Date(Date.now() - 3600_000);
+        const to = new Date(Date.now() + 3600_000);
+        const stats = await store.getDetailedStats("test-user", { from, to });
+
+        expect(stats.avgTurnaroundMs).not.toBeNull();
+        // Turnaround should be roughly 60000ms (allow some tolerance for clock drift).
+        expect(stats.avgTurnaroundMs!).toBeGreaterThan(50_000);
+        expect(stats.avgTurnaroundMs!).toBeLessThan(70_000);
+      });
     });
   });
 }

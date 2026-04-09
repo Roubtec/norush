@@ -2,6 +2,7 @@ import type {
   Batch,
   BatchId,
   DateRange,
+  DetailedUsageStats,
   EventLogEntry,
   NewBatch,
   NewEvent,
@@ -122,6 +123,9 @@ export interface Store {
 
   /** Aggregate usage statistics for a user within a date range. */
   getStats(userId: string, period: DateRange): Promise<UsageStats>;
+
+  /** Aggregate detailed usage stats including cost breakdown and turnaround times. */
+  getDetailedStats(userId: string, period: DateRange): Promise<DetailedUsageStats>;
 
   // -- User limits (rate limiting / spend controls) --------------------------
 

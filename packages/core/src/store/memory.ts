@@ -10,7 +10,9 @@ import { ulid } from "ulidx";
 import type { Store, ResultDeliveryUpdate } from "../interfaces/store.js";
 import type {
   Batch,
+  CostBreakdownEntry,
   DateRange,
+  DetailedUsageStats,
   EventLogEntry,
   NewBatch,
   NewEvent,
@@ -23,6 +25,7 @@ import type {
   UserLimits,
   UserLimitsInput,
 } from "../types.js";
+import { standardCost, batchCost } from "../pricing.js";
 import { nextPeriodReset } from "../rate-limit/limiter.js";
 
 export class MemoryStore implements Store {
@@ -347,6 +350,110 @@ export class MemoryStore implements Store {
       totalInputTokens,
       totalOutputTokens,
       totalBatches: batchIds.size,
+    };
+  }
+
+  async getDetailedStats(
+    userId: string,
+    period: DateRange,
+  ): Promise<DetailedUsageStats> {
+    const basic = await this.getStats(userId, period);
+
+    // Group by provider + model for cost breakdown.
+    const groupKey = (provider: string, model: string) =>
+      `${provider}::${model}`;
+    const groups = new Map<
+      string,
+      {
+        provider: string;
+        model: string;
+        inputTokens: number;
+        outputTokens: number;
+        requestCount: number;
+      }
+    >();
+
+    for (const r of this.requests.values()) {
+      if (
+        r.userId === userId &&
+        r.createdAt >= period.from &&
+        r.createdAt <= period.to
+      ) {
+        const key = groupKey(r.provider, r.model);
+        if (!groups.has(key)) {
+          groups.set(key, {
+            provider: r.provider,
+            model: r.model,
+            inputTokens: 0,
+            outputTokens: 0,
+            requestCount: 0,
+          });
+        }
+        const g = groups.get(key)!;
+        g.requestCount++;
+
+        // Sum tokens from the matching result.
+        for (const res of this.results.values()) {
+          if (res.requestId === r.id) {
+            if (res.inputTokens) g.inputTokens += res.inputTokens;
+            if (res.outputTokens) g.outputTokens += res.outputTokens;
+          }
+        }
+      }
+    }
+
+    const costBreakdown: CostBreakdownEntry[] = [...groups.values()].map(
+      (g) => ({
+        provider: g.provider as CostBreakdownEntry["provider"],
+        model: g.model,
+        inputTokens: g.inputTokens,
+        outputTokens: g.outputTokens,
+        batchCostUsd: batchCost(g.provider, g.inputTokens, g.outputTokens),
+        standardCostUsd: standardCost(
+          g.provider,
+          g.inputTokens,
+          g.outputTokens,
+        ),
+        requestCount: g.requestCount,
+      }),
+    );
+
+    // Calculate batch turnaround times.
+    const turnarounds: number[] = [];
+    for (const b of this.batches.values()) {
+      if (!b.submittedAt || !b.endedAt) continue;
+      // Only count batches that belong to this user's requests in the period.
+      const userRequests = [...this.requests.values()].filter(
+        (r) =>
+          r.batchId === b.id &&
+          r.userId === userId &&
+          r.createdAt >= period.from &&
+          r.createdAt <= period.to,
+      );
+      if (userRequests.length === 0) continue;
+      turnarounds.push(b.endedAt.getTime() - b.submittedAt.getTime());
+    }
+    const avgTurnaroundMs =
+      turnarounds.length > 0
+        ? turnarounds.reduce((a, b) => a + b, 0) / turnarounds.length
+        : null;
+
+    const totalStandardCostUsd = costBreakdown.reduce(
+      (s, e) => s + e.standardCostUsd,
+      0,
+    );
+    const totalBatchCostUsd = costBreakdown.reduce(
+      (s, e) => s + e.batchCostUsd,
+      0,
+    );
+
+    return {
+      ...basic,
+      costBreakdown,
+      avgTurnaroundMs,
+      totalBatchCostUsd,
+      totalStandardCostUsd,
+      totalSavingsUsd: totalStandardCostUsd - totalBatchCostUsd,
     };
   }
 
