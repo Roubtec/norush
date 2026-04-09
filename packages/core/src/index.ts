@@ -35,6 +35,10 @@ export type {
   NewEvent,
   EventLogEntry,
   HealthScore,
+  UserLimits,
+  UserLimitsInput,
+  SlidingWindow,
+  RateLimitResult,
 } from "./types.js";
 
 // ---------------------------------------------------------------------------
@@ -185,6 +189,20 @@ export {
   type DeliverWebhookOptions,
   type DeliveryResult,
 } from "./webhooks/deliver.js";
+
+// ---------------------------------------------------------------------------
+// Rate limiting
+// ---------------------------------------------------------------------------
+
+export {
+  computeHealth,
+  computeEffectiveLimit,
+  checkRateLimit,
+  buildRateLimitHeaders,
+  nextPeriodReset,
+  DEFAULT_WINDOW_MS,
+  DEFAULT_PERIOD_MS,
+} from "./rate-limit/index.js";
 
 // ---------------------------------------------------------------------------
 // Telemetry implementations

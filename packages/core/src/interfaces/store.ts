@@ -11,7 +11,10 @@ import type {
   Request,
   Result,
   ResultId,
+  SlidingWindow,
   UsageStats,
+  UserLimits,
+  UserLimitsInput,
 } from "../types.js";
 
 /**
@@ -119,4 +122,30 @@ export interface Store {
 
   /** Aggregate usage statistics for a user within a date range. */
   getStats(userId: string, period: DateRange): Promise<UsageStats>;
+
+  // -- User limits (rate limiting / spend controls) --------------------------
+
+  /** Retrieve a user's rate limits, or null if none configured. */
+  getUserLimits(userId: string): Promise<UserLimits | null>;
+
+  /** Create or update a user's rate limits. Returns the full record. */
+  upsertUserLimits(userId: string, input: UserLimitsInput): Promise<UserLimits>;
+
+  /** Increment the user's period request counter by `count` (default 1). */
+  incrementPeriodRequests(userId: string, count?: number): Promise<void>;
+
+  /** Increment the user's period token counter by `count`. */
+  incrementPeriodTokens(userId: string, count: number): Promise<void>;
+
+  /** Increment the user's cumulative spend by `amountUsd`. */
+  incrementSpend(userId: string, amountUsd: number): Promise<void>;
+
+  /** Reset period counters for the user and advance the reset timestamp. */
+  resetPeriod(userId: string, nextResetAt: Date): Promise<void>;
+
+  /**
+   * Compute a sliding window of batch outcomes for a user.
+   * Returns counts of succeeded and failed batches within the window.
+   */
+  getSlidingWindow(userId: string, windowMs: number): Promise<SlidingWindow>;
 }

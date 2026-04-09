@@ -19,7 +19,10 @@ import type {
   NewResult,
   Request,
   Result,
+  SlidingWindow,
   UsageStats,
+  UserLimits,
+  UserLimitsInput,
 } from "../types.js";
 
 // ---------------------------------------------------------------------------
@@ -447,4 +450,129 @@ export class PostgresStore implements Store {
       totalBatches: (row.total_batches as number) ?? 0,
     };
   }
+
+  // -- User limits (rate limiting / spend controls) --------------------------
+
+  async getUserLimits(userId: string): Promise<UserLimits | null> {
+    const rows = await this.sql`
+      SELECT * FROM user_limits WHERE user_id = ${userId}
+    `;
+    if (rows.length === 0) return null;
+    return toUserLimits(rows[0] as Record<string, unknown>);
+  }
+
+  async upsertUserLimits(
+    userId: string,
+    input: UserLimitsInput,
+  ): Promise<UserLimits> {
+    const rows = await this.sql`
+      INSERT INTO user_limits (user_id, max_requests_per_hour, max_tokens_per_day, hard_spend_limit_usd, period_reset_at)
+      VALUES (
+        ${userId},
+        ${input.maxRequestsPerHour ?? null},
+        ${input.maxTokensPerDay ?? null},
+        ${input.hardSpendLimitUsd ?? null},
+        now() + interval '1 hour'
+      )
+      ON CONFLICT (user_id) DO UPDATE SET
+        max_requests_per_hour = COALESCE(${input.maxRequestsPerHour !== undefined ? input.maxRequestsPerHour ?? null : null}, user_limits.max_requests_per_hour),
+        max_tokens_per_day = COALESCE(${input.maxTokensPerDay !== undefined ? input.maxTokensPerDay ?? null : null}, user_limits.max_tokens_per_day),
+        hard_spend_limit_usd = COALESCE(${input.hardSpendLimitUsd !== undefined ? input.hardSpendLimitUsd ?? null : null}, user_limits.hard_spend_limit_usd),
+        updated_at = now()
+      RETURNING *
+    `;
+    return toUserLimits(rows[0] as Record<string, unknown>);
+  }
+
+  async incrementPeriodRequests(
+    userId: string,
+    count: number = 1,
+  ): Promise<void> {
+    await this.sql`
+      UPDATE user_limits
+      SET current_period_requests = current_period_requests + ${count},
+          updated_at = now()
+      WHERE user_id = ${userId}
+    `;
+  }
+
+  async incrementPeriodTokens(
+    userId: string,
+    count: number,
+  ): Promise<void> {
+    await this.sql`
+      UPDATE user_limits
+      SET current_period_tokens = current_period_tokens + ${count},
+          updated_at = now()
+      WHERE user_id = ${userId}
+    `;
+  }
+
+  async incrementSpend(userId: string, amountUsd: number): Promise<void> {
+    await this.sql`
+      UPDATE user_limits
+      SET current_spend_usd = current_spend_usd + ${amountUsd},
+          updated_at = now()
+      WHERE user_id = ${userId}
+    `;
+  }
+
+  async resetPeriod(userId: string, nextResetAt: Date): Promise<void> {
+    await this.sql`
+      UPDATE user_limits
+      SET current_period_requests = 0,
+          current_period_tokens = 0,
+          period_reset_at = ${nextResetAt},
+          updated_at = now()
+      WHERE user_id = ${userId}
+    `;
+  }
+
+  async getSlidingWindow(
+    userId: string,
+    windowMs: number,
+  ): Promise<SlidingWindow> {
+    const windowStart = new Date(Date.now() - windowMs);
+
+    const rows = await this.sql`
+      SELECT
+        COUNT(*) FILTER (WHERE b.status = 'ended' AND b.failed_count = 0)::int AS succeeded,
+        COUNT(*) FILTER (WHERE b.status IN ('ended', 'failed', 'expired') AND (b.failed_count > 0 OR b.status IN ('failed', 'expired')))::int AS failed
+      FROM batches b
+      WHERE b.ended_at >= ${windowStart}
+        AND EXISTS (
+          SELECT 1 FROM requests r
+          WHERE r.batch_id = b.id AND r.user_id = ${userId}
+        )
+    `;
+
+    const row = rows[0] as Record<string, unknown>;
+    const succeeded = (row.succeeded as number) ?? 0;
+    const failed = (row.failed as number) ?? 0;
+
+    return { total: succeeded + failed, succeeded, failed };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// UserLimits mapper
+// ---------------------------------------------------------------------------
+
+function toUserLimits(row: Record<string, unknown>): UserLimits {
+  return {
+    userId: row.user_id as string,
+    maxRequestsPerHour: (row.max_requests_per_hour as number) ?? null,
+    maxTokensPerDay: (row.max_tokens_per_day as number) ?? null,
+    hardSpendLimitUsd: row.hard_spend_limit_usd != null
+      ? Number(row.hard_spend_limit_usd)
+      : null,
+    currentPeriodRequests: (row.current_period_requests as number) ?? 0,
+    currentPeriodTokens: (row.current_period_tokens as number) ?? 0,
+    currentSpendUsd: row.current_spend_usd != null
+      ? Number(row.current_spend_usd)
+      : 0,
+    periodResetAt: new Date(row.period_reset_at as string),
+    createdAt: new Date(row.created_at as string),
+    updatedAt: new Date(row.updated_at as string),
+  };
 }

@@ -18,14 +18,19 @@ import type {
   NewResult,
   Request,
   Result,
+  SlidingWindow,
   UsageStats,
+  UserLimits,
+  UserLimitsInput,
 } from "../types.js";
+import { nextPeriodReset } from "../rate-limit/limiter.js";
 
 export class MemoryStore implements Store {
   private requests = new Map<string, Request>();
   private batches = new Map<string, Batch>();
   private results = new Map<string, Result>();
   private events: EventLogEntry[] = [];
+  private userLimits = new Map<string, UserLimits>();
 
   // -- Request lifecycle ----------------------------------------------------
 
@@ -343,5 +348,125 @@ export class MemoryStore implements Store {
       totalOutputTokens,
       totalBatches: batchIds.size,
     };
+  }
+
+  // -- User limits (rate limiting / spend controls) --------------------------
+
+  async getUserLimits(userId: string): Promise<UserLimits | null> {
+    const limits = this.userLimits.get(userId);
+    return limits ? structuredClone(limits) : null;
+  }
+
+  async upsertUserLimits(
+    userId: string,
+    input: UserLimitsInput,
+  ): Promise<UserLimits> {
+    const now = new Date();
+    const existing = this.userLimits.get(userId);
+
+    if (existing) {
+      const updated: UserLimits = {
+        ...existing,
+        maxRequestsPerHour:
+          input.maxRequestsPerHour !== undefined
+            ? input.maxRequestsPerHour
+            : existing.maxRequestsPerHour,
+        maxTokensPerDay:
+          input.maxTokensPerDay !== undefined
+            ? input.maxTokensPerDay
+            : existing.maxTokensPerDay,
+        hardSpendLimitUsd:
+          input.hardSpendLimitUsd !== undefined
+            ? input.hardSpendLimitUsd
+            : existing.hardSpendLimitUsd,
+        updatedAt: now,
+      };
+      this.userLimits.set(userId, updated);
+      return structuredClone(updated);
+    }
+
+    const record: UserLimits = {
+      userId,
+      maxRequestsPerHour: input.maxRequestsPerHour ?? null,
+      maxTokensPerDay: input.maxTokensPerDay ?? null,
+      hardSpendLimitUsd: input.hardSpendLimitUsd ?? null,
+      currentPeriodRequests: 0,
+      currentPeriodTokens: 0,
+      currentSpendUsd: 0,
+      periodResetAt: nextPeriodReset(now),
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.userLimits.set(userId, record);
+    return structuredClone(record);
+  }
+
+  async incrementPeriodRequests(
+    userId: string,
+    count: number = 1,
+  ): Promise<void> {
+    const limits = this.userLimits.get(userId);
+    if (!limits) return;
+    limits.currentPeriodRequests += count;
+    limits.updatedAt = new Date();
+  }
+
+  async incrementPeriodTokens(
+    userId: string,
+    count: number,
+  ): Promise<void> {
+    const limits = this.userLimits.get(userId);
+    if (!limits) return;
+    limits.currentPeriodTokens += count;
+    limits.updatedAt = new Date();
+  }
+
+  async incrementSpend(userId: string, amountUsd: number): Promise<void> {
+    const limits = this.userLimits.get(userId);
+    if (!limits) return;
+    limits.currentSpendUsd += amountUsd;
+    limits.updatedAt = new Date();
+  }
+
+  async resetPeriod(userId: string, nextResetAt: Date): Promise<void> {
+    const limits = this.userLimits.get(userId);
+    if (!limits) return;
+    limits.currentPeriodRequests = 0;
+    limits.currentPeriodTokens = 0;
+    limits.periodResetAt = nextResetAt;
+    limits.updatedAt = new Date();
+  }
+
+  async getSlidingWindow(
+    userId: string,
+    windowMs: number,
+  ): Promise<SlidingWindow> {
+    const windowStart = new Date(Date.now() - windowMs);
+    let succeeded = 0;
+    let failed = 0;
+
+    for (const batch of this.batches.values()) {
+      // Only count batches for this user's requests.
+      // In memory store, we check by looking at requests in the batch.
+      const requests = [...this.requests.values()].filter(
+        (r) => r.batchId === batch.id && r.userId === userId,
+      );
+      if (requests.length === 0) continue;
+
+      // Only count batches that ended within the window.
+      if (!batch.endedAt || batch.endedAt < windowStart) continue;
+
+      if (batch.status === "ended" && batch.failedCount === 0) {
+        succeeded++;
+      } else if (
+        batch.status === "ended" ||
+        batch.status === "failed" ||
+        batch.status === "expired"
+      ) {
+        failed++;
+      }
+    }
+
+    return { total: succeeded + failed, succeeded, failed };
   }
 }

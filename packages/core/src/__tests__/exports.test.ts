@@ -19,6 +19,13 @@ import {
   maskApiKey,
   selectKeys,
   isFailoverEligibleError,
+  computeHealth,
+  computeEffectiveLimit,
+  checkRateLimit,
+  buildRateLimitHeaders,
+  nextPeriodReset,
+  DEFAULT_WINDOW_MS,
+  DEFAULT_PERIOD_MS,
 } from "../index.js";
 
 // Type-only imports to verify they are exported
@@ -69,6 +76,10 @@ import type {
   KeyResolver,
   ApiKeyInfo,
   KeyCandidate,
+  UserLimits,
+  UserLimitsInput,
+  SlidingWindow,
+  RateLimitResult,
 } from "../index.js";
 
 describe("@norush/core exports", () => {
@@ -144,6 +155,16 @@ describe("@norush/core exports", () => {
   it("exports key selector functions", () => {
     expect(typeof selectKeys).toBe("function");
     expect(typeof isFailoverEligibleError).toBe("function");
+  });
+
+  it("exports rate limiting functions and constants", () => {
+    expect(typeof computeHealth).toBe("function");
+    expect(typeof computeEffectiveLimit).toBe("function");
+    expect(typeof checkRateLimit).toBe("function");
+    expect(typeof buildRateLimitHeaders).toBe("function");
+    expect(typeof nextPeriodReset).toBe("function");
+    expect(DEFAULT_WINDOW_MS).toBe(3_600_000);
+    expect(DEFAULT_PERIOD_MS).toBe(3_600_000);
   });
 
   // Type-level assertions — these verify that all type exports compile.
@@ -251,6 +272,28 @@ describe("@norush/core exports", () => {
     expect(_keyInfo).toBeDefined();
     expect(_keyCandidate).toBeDefined();
     expect(_keyResolver).toBeDefined();
+
+    // Rate limiting types
+    const _userLimits: UserLimits = {
+      userId: "u1",
+      maxRequestsPerHour: 100,
+      maxTokensPerDay: null,
+      hardSpendLimitUsd: null,
+      currentPeriodRequests: 0,
+      currentPeriodTokens: 0,
+      currentSpendUsd: 0,
+      periodResetAt: new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    const _userLimitsInput: UserLimitsInput = { maxRequestsPerHour: 50 };
+    const _slidingWindow: SlidingWindow = { total: 10, succeeded: 9, failed: 1 };
+    const _rateLimitResult: RateLimitResult = { allowed: true };
+    expect(_userLimits).toBeDefined();
+    expect(_userLimitsInput).toBeDefined();
+    expect(_slidingWindow).toBeDefined();
+    expect(_rateLimitResult).toBeDefined();
+
     expect(_id).toBeDefined();
     expect(_batchId).toBeDefined();
     expect(_resultId).toBeDefined();

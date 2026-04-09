@@ -268,3 +268,67 @@ export interface HealthScore {
   /** What's driving the score. */
   reason: "healthy" | "partial_failures" | "mostly_failing" | "critical";
 }
+
+// ---------------------------------------------------------------------------
+// User limits (rate limiting / spend controls)
+// ---------------------------------------------------------------------------
+
+/** Per-user spend and rate limit configuration. */
+export interface UserLimits {
+  userId: string;
+  /** Max requests allowed per rolling hour. NULL = unlimited. */
+  maxRequestsPerHour: number | null;
+  /** Max tokens allowed per rolling day. NULL = unlimited. */
+  maxTokensPerDay: number | null;
+  /** Absolute spend ceiling in USD. NULL = unlimited. */
+  hardSpendLimitUsd: number | null;
+  /** Requests consumed in the current period. */
+  currentPeriodRequests: number;
+  /** Tokens consumed in the current period. */
+  currentPeriodTokens: number;
+  /** Cumulative spend in USD. */
+  currentSpendUsd: number;
+  /** When the current period expires and counters reset. */
+  periodResetAt: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/** Fields for creating or updating user limits. */
+export interface UserLimitsInput {
+  maxRequestsPerHour?: number | null;
+  maxTokensPerDay?: number | null;
+  hardSpendLimitUsd?: number | null;
+}
+
+// ---------------------------------------------------------------------------
+// Sliding window (for health score computation)
+// ---------------------------------------------------------------------------
+
+/** Aggregated batch outcomes over a sliding time window. */
+export interface SlidingWindow {
+  /** Total batches completed in the window. */
+  total: number;
+  /** Batches that fully succeeded. */
+  succeeded: number;
+  /** Batches that partially or fully failed. */
+  failed: number;
+}
+
+// ---------------------------------------------------------------------------
+// Rate limit check result
+// ---------------------------------------------------------------------------
+
+/** Result of a rate limit check. */
+export interface RateLimitResult {
+  /** Whether the request is allowed. */
+  allowed: boolean;
+  /** If rejected, the reason. */
+  reason?: string;
+  /** Seconds until the period resets (for Retry-After header). */
+  retryAfterSeconds?: number;
+  /** Current health score. */
+  health?: HealthScore;
+  /** Current effective limit. */
+  effectiveLimit?: number;
+}
