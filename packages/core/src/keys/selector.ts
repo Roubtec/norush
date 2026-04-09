@@ -56,13 +56,17 @@ export function isFailoverEligibleError(error: unknown): boolean {
     return true;
   }
 
-  // Credit / quota / billing exhaustion
+  // Credit / quota / billing exhaustion.
+  // "exceeded" alone is intentionally omitted — it is too broad and would
+  // match errors like "context length exceeded" or "max tokens exceeded"
+  // which cannot be fixed by switching to a different API key.
+  // These patterns reflect Anthropic and OpenAI billing/quota error messages.
+  // If providers add new phrasing, extend this list and link to their docs.
   if (
     message.includes("insufficient") ||
     message.includes("quota") ||
     message.includes("credit") ||
-    message.includes("billing") ||
-    message.includes("exceeded")
+    message.includes("billing")
   ) {
     return true;
   }

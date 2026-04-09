@@ -372,8 +372,12 @@ export class BatchManager {
    * Failover-aware submission: try keys in priority order, falling back
    * on rate-limit / credit errors.
    *
-   * Unlike the legacy path, this does NOT create a batch record until a key
-   * succeeds. This avoids orphan batches when multiple keys are tried.
+   * Each submission attempt follows the normal write-before-submit protocol,
+   * so a batch record is created before each provider call. During failover,
+   * multiple batch records may be created. Batches from failover-eligible
+   * failures (rate-limit / credit) are marked failed and requests reset to
+   * queued for the next attempt. Batches from non-failover errors are left
+   * in pending (NULL provider_batch_id) for orphan recovery (task 1-07).
    */
   private async submitWithFailover(
     requests: Request[],
@@ -527,19 +531,23 @@ export class BatchManager {
         ...(apiKeyLabel ? { apiKeyLabel } : {}),
       });
     } catch (error) {
-      // Failover path: reset requests back to queued so the next key
-      // attempt can re-batch them.
-      for (const req of requests) {
-        await this.store.updateRequest(req.id, {
-          batchId: null,
-          status: "queued",
+      if (isFailoverEligibleError(error)) {
+        // Rate-limit / credit error: reset requests to queued so the next
+        // key attempt can re-batch them, and mark this batch as failed.
+        for (const req of requests) {
+          await this.store.updateRequest(req.id, {
+            batchId: null,
+            status: "queued",
+          });
+        }
+        await this.store.updateBatch(batch.id, {
+          status: "failed",
         });
       }
-
-      // Mark the batch as failed (not orphan-recoverable).
-      await this.store.updateBatch(batch.id, {
-        status: "failed",
-      });
+      // Non-failover error (network, 500, etc.): leave batch in 'pending' with
+      // NULL provider_batch_id for orphan recovery (task 1-07). Requests remain
+      // 'batched' to avoid duplicate submissions — the provider may have accepted
+      // the batch even though an error was thrown on our end.
 
       this.telemetry.counter("batches_submitted", 1, {
         provider,

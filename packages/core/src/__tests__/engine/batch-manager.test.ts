@@ -794,7 +794,7 @@ describe("BatchManager", () => {
     });
 
     it("does NOT failover on non-rate-limit errors (e.g., network)", async () => {
-      await store.createRequest(makeNewRequest({ userId: "user_01" }));
+      const reqRecord = await store.createRequest(makeNewRequest({ userId: "user_01" }));
 
       const primaryProvider = mockProvider({
         submitBatch: vi.fn().mockRejectedValue(new Error("ECONNREFUSED")),
@@ -824,6 +824,17 @@ describe("BatchManager", () => {
 
       expect(primaryProvider.submitBatch).toHaveBeenCalledOnce();
       expect(backupProvider.submitBatch).not.toHaveBeenCalled();
+
+      // For non-failover errors, requests should remain 'batched' (not reset to
+      // queued) so that orphan recovery can reconcile without risking a duplicate
+      // submission (the provider may have accepted the batch before the error).
+      const stored = await store.getRequest(reqRecord.id);
+      expect(stored?.status).toBe("batched");
+      expect(stored?.batchId).not.toBeNull();
+
+      // The batch should remain 'pending' for orphan recovery, not 'failed'.
+      const pendingBatches = await store.getPendingBatches();
+      expect(pendingBatches).toHaveLength(1);
     });
 
     it("records the key used on the batch record", async () => {

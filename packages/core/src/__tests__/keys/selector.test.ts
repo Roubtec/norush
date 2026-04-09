@@ -145,6 +145,11 @@ describe("isFailoverEligibleError", () => {
     expect(isFailoverEligibleError(error)).toBe(true);
   });
 
+  it("returns false for context length exceeded (different key won't help)", () => {
+    expect(isFailoverEligibleError(new Error("context length exceeded"))).toBe(false);
+    expect(isFailoverEligibleError(new Error("max tokens exceeded"))).toBe(false);
+  });
+
   it("returns false for network errors", () => {
     expect(isFailoverEligibleError(new Error("ECONNREFUSED"))).toBe(false);
   });

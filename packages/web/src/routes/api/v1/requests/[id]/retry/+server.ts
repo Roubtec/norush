@@ -69,8 +69,10 @@ export const POST: RequestHandler = async ({ params, request }) => {
     );
   }
 
-  // Reset the request to queued state.
-  await sql`
+  // Reset the request to queued state. The WHERE clause re-checks user_id and
+  // status atomically to guard against races (e.g. a concurrent status update
+  // between the SELECT above and this UPDATE).
+  const updated = await sql`
     UPDATE requests
     SET
       status = 'queued',
@@ -78,7 +80,18 @@ export const POST: RequestHandler = async ({ params, request }) => {
       batch_id = NULL,
       updated_at = now()
     WHERE id = ${id}
+      AND user_id = ${caller.userId}
+      AND status = ANY(ARRAY['failed_final', 'canceled'])
+    RETURNING id
   `;
+
+  if (updated.length === 0) {
+    return apiError(
+      "conflict",
+      "Request status changed before the update could be applied. Please check the current status and try again.",
+      409,
+    );
+  }
 
   return json({
     message: "Request re-queued for processing",
