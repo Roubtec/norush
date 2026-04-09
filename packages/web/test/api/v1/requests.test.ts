@@ -51,6 +51,7 @@ const mockSql = new Proxy(
 // ---------------------------------------------------------------------------
 
 import { POST, GET } from "../../../src/routes/api/v1/requests/+server";
+import { GET as getRequestById } from "../../../src/routes/api/v1/requests/[id]/+server";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -103,6 +104,29 @@ function makeEvent(
     isSubRequest: false,
     platform: undefined,
     route: { id: "/api/v1/requests" },
+    fetch: globalThis.fetch,
+    setHeaders: vi.fn(),
+  };
+}
+
+// SvelteKit RequestEvent adapter for single-request endpoint
+function makeSingleEvent(id: string, authHeader = "Bearer valid_token") {
+  const url = new URL(`http://localhost/api/v1/requests/${id}`);
+
+  return {
+    request: new Request(url.toString(), {
+      method: "GET",
+      headers: authHeader ? { authorization: authHeader } : {},
+    }),
+    url,
+    locals: {},
+    params: { id },
+    cookies: {} as never,
+    getClientAddress: () => "127.0.0.1",
+    isDataRequest: false,
+    isSubRequest: false,
+    platform: undefined,
+    route: { id: "/api/v1/requests/[id]" },
     fetch: globalThis.fetch,
     setHeaders: vi.fn(),
   };
@@ -384,5 +408,148 @@ describe("GET /api/v1/requests", () => {
     const response = await GET(event as never);
     const data = await response.json();
     expect(data.pagination.limit).toBe(50);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/v1/requests/:id (single request detail)
+// ---------------------------------------------------------------------------
+
+describe("GET /api/v1/requests/:id", () => {
+  it("rejects unauthenticated requests (no token)", async () => {
+    const event = makeSingleEvent("req_01", "");
+    const response = await getRequestById(event as never);
+    expect(response.status).toBe(401);
+    const data = await response.json();
+    expect(data.error.code).toBe("unauthorized");
+  });
+
+  it("rejects requests with invalid Bearer token", async () => {
+    const event = makeSingleEvent("req_01", "Bearer invalid_token");
+    const response = await getRequestById(event as never);
+    expect(response.status).toBe(401);
+    const data = await response.json();
+    expect(data.error.code).toBe("unauthorized");
+  });
+
+  it("returns 404 for non-existent request", async () => {
+    mockSqlResult = [];
+    const event = makeSingleEvent("req_nonexistent");
+    const response = await getRequestById(event as never);
+    expect(response.status).toBe(404);
+    const data = await response.json();
+    expect(data.error.code).toBe("not_found");
+  });
+
+  it("returns 404 when request belongs to another user (empty result)", async () => {
+    // The SQL query filters by user_id, so a request owned by another user
+    // yields zero rows, indistinguishable from non-existent.
+    mockSqlResult = [];
+    const event = makeSingleEvent("req_other_user");
+    const response = await getRequestById(event as never);
+    expect(response.status).toBe(404);
+    const data = await response.json();
+    expect(data.error.code).toBe("not_found");
+  });
+
+  it("returns request with result when result exists", async () => {
+    const reqCreated = new Date("2025-06-15T10:00:00Z");
+    const reqUpdated = new Date("2025-06-15T10:05:00Z");
+    const resCreated = new Date("2025-06-15T10:04:00Z");
+
+    mockSqlResult = [
+      {
+        id: "req_01",
+        provider: "claude",
+        model: "claude-sonnet-4-20250514",
+        params: { messages: [{ role: "user", content: "Hello" }] },
+        status: "succeeded",
+        batch_id: "batch_01",
+        callback_url: "https://example.com/hook",
+        retry_count: 0,
+        max_retries: 5,
+        request_created_at: reqCreated,
+        request_updated_at: reqUpdated,
+        result_id: "res_01",
+        response: { content: [{ type: "text", text: "Hi there!" }] },
+        stop_reason: "end_turn",
+        input_tokens: 10,
+        output_tokens: 5,
+        delivery_status: "delivered",
+        result_created_at: resCreated,
+      },
+    ];
+
+    const event = makeSingleEvent("req_01");
+    const response = await getRequestById(event as never);
+    expect(response.status).toBe(200);
+
+    const data = await response.json();
+    expect(data.request).toBeDefined();
+    expect(data.request.id).toBe("req_01");
+    expect(data.request.provider).toBe("claude");
+    expect(data.request.model).toBe("claude-sonnet-4-20250514");
+    expect(data.request.params).toEqual({ messages: [{ role: "user", content: "Hello" }] });
+    expect(data.request.status).toBe("succeeded");
+    expect(data.request.batchId).toBe("batch_01");
+    expect(data.request.callbackUrl).toBe("https://example.com/hook");
+    expect(data.request.retryCount).toBe(0);
+    expect(data.request.maxRetries).toBe(5);
+    expect(data.request.createdAt).toBe(reqCreated.toISOString());
+    expect(data.request.updatedAt).toBe(reqUpdated.toISOString());
+
+    // Verify joined result data
+    expect(data.request.result).not.toBeNull();
+    expect(data.request.result.id).toBe("res_01");
+    expect(data.request.result.response).toEqual({ content: [{ type: "text", text: "Hi there!" }] });
+    expect(data.request.result.stopReason).toBe("end_turn");
+    expect(data.request.result.inputTokens).toBe(10);
+    expect(data.request.result.outputTokens).toBe(5);
+    expect(data.request.result.deliveryStatus).toBe("delivered");
+    expect(data.request.result.createdAt).toBe(resCreated.toISOString());
+  });
+
+  it("returns request with null result when no result exists", async () => {
+    const reqCreated = new Date("2025-06-15T10:00:00Z");
+    const reqUpdated = new Date("2025-06-15T10:01:00Z");
+
+    mockSqlResult = [
+      {
+        id: "req_02",
+        provider: "openai",
+        model: "gpt-4o",
+        params: { messages: [] },
+        status: "queued",
+        batch_id: null,
+        callback_url: null,
+        retry_count: 0,
+        max_retries: 5,
+        request_created_at: reqCreated,
+        request_updated_at: reqUpdated,
+        result_id: null,
+        response: null,
+        stop_reason: null,
+        input_tokens: null,
+        output_tokens: null,
+        delivery_status: null,
+        result_created_at: null,
+      },
+    ];
+
+    const event = makeSingleEvent("req_02");
+    const response = await getRequestById(event as never);
+    expect(response.status).toBe(200);
+
+    const data = await response.json();
+    expect(data.request).toBeDefined();
+    expect(data.request.id).toBe("req_02");
+    expect(data.request.provider).toBe("openai");
+    expect(data.request.model).toBe("gpt-4o");
+    expect(data.request.status).toBe("queued");
+    expect(data.request.batchId).toBeNull();
+    expect(data.request.callbackUrl).toBeNull();
+
+    // Result should be null when no result exists
+    expect(data.request.result).toBeNull();
   });
 });
