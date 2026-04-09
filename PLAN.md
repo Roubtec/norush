@@ -256,8 +256,14 @@ interface HealthScore {
 ```ts
 const norush = createNorush({
   providers: {
-    claude: { apiKey: process.env.ANTHROPIC_API_KEY },
-    openai: { apiKey: process.env.OPENAI_API_KEY },
+    claude: [
+      { apiKey: process.env.ANTHROPIC_API_KEY },
+      { apiKey: process.env.ANTHROPIC_API_KEY_FALLBACK },
+    ],
+    openai: [
+      { apiKey: process.env.OPENAI_API_KEY },
+      { apiKey: process.env.OPENAI_API_KEY_FALLBACK },
+    ],
   },
   store: new PostgresStore(process.env.DATABASE_URL),
   batching: {
@@ -549,12 +555,12 @@ Each request within a batch has its own status:
 | `canceled` (batch canceled) | Mark `canceled`, eligible for user re-trigger |
 
 **Automatic repackaging:** Failed/expired requests where
-`retry_count < max_provider_retries` are collected into a new batch. Their
-`retry_count` is incremented. Requests exceeding the retry budget transition
-to `status: 'failed_final'`.
+`retry_count < max_request_retries` are collected into a new batch. Their
+`retry_count` is incremented. Requests exceeding the request-level retry
+budget transition to `status: 'failed_final'`.
 
 **User-triggered re-submission:** Users can explicitly re-trigger any request
-in a terminal state (`failed_final`, `canceled`, `expired_final`). This resets
+in a terminal state (`failed_final`, `canceled`, `expired`). This resets
 `retry_count` to 0 and sets `status` back to `queued`. Not constrained by
 retry budget (still constrained by spend limits).
 
@@ -745,11 +751,18 @@ down during failures is a service, not just a defense.
 
 #### HMAC-SHA256 Signing
 
-Optional, activated when the user provides a signing secret. norush includes an
-`X-Norush-Signature` header computed as `HMAC-SHA256(secret, request_body)`.
-Without a secret, webhooks are sent unsigned. Users can rotate secrets at any
-time; norush uses whatever is current at delivery time.
+Optional, activated when the user provides a signing secret. norush includes:
+- `X-Norush-Timestamp` — Unix timestamp (seconds) for when the webhook was
+  signed.
+- `X-Norush-Signature` — computed as
+  `HMAC-SHA256(secret, timestamp + "." + method + "." + path + "." + request_body)`.
 
+This binds the signature to both request metadata and payload, and allows
+consumers to reject replayed requests. Consumers must verify the signature and
+reject webhooks whose `X-Norush-Timestamp` falls outside a maximum allowed
+clock-skew window (recommended: 5 minutes). Without a secret, webhooks are sent
+unsigned. Users can rotate secrets at any time; norush uses whatever is current
+at delivery time.
 #### Delivery Guarantees
 
 At-least-once delivery with exponential backoff:
