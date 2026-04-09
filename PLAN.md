@@ -245,15 +245,15 @@ chat interface designed around **non-urgent conversations**.
 
 **Architecture:**
 ```
-Browser (React/Next.js)
+Browser (SvelteKit)
     │
     ▼
-API Server (Node.js)
+API Server (SvelteKit server routes / Node.js)
     │
-    ├── Auth (OAuth / email+password)
-    ├── Key vault (encrypted API key storage)
+    ├── Auth (WorkOS AuthKit — social, passkeys, enterprise SSO)
+    ├── Key vault (AES-256-GCM encrypted API key storage)
     ├── @norush/core (batch engine)
-    ├── PostgresStore (persistence)
+    ├── Store adapter (SQLite local / PostgreSQL cloud)
     └── Cron worker (tick the status tracker)
 ```
 
@@ -311,13 +311,13 @@ The natural question: why wouldn't someone just call the batch API directly?
 - [ ] CLI tool for manual batch submission and status checking
 
 ### Phase 2: Deferred Chat Web App
-- [ ] Next.js app scaffolding
-- [ ] Auth system (NextAuth or similar)
+- [ ] SvelteKit app scaffolding
+- [ ] WorkOS AuthKit integration (social login, enterprise SSO)
 - [ ] Encrypted API key storage
 - [ ] Chat UI (message list with sent/pending/received states)
 - [ ] Background worker for status polling
 - [ ] Notification system (in-app + optional email)
-- [ ] Deploy (Vercel + managed Postgres, or self-hosted)
+- [ ] Deploy (cloud host + managed PostgreSQL)
 
 ### Phase 3: Broker Mode + API
 - [ ] REST API for programmatic prompt submission
@@ -339,9 +339,11 @@ The natural question: why wouldn't someone just call the batch API directly?
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
 | Language | TypeScript | Runs on server and edge; largest LLM-tooling ecosystem; both provider SDKs available |
-| Runtime | Node.js (>=20) | Stable LTS, good for long-running poll loops and web servers |
-| Default store | SQLite via `better-sqlite3` | Zero-config, single-file, perfect for CLI and single-server use |
-| Web framework | Next.js (App Router) | SSR + API routes + React in one; easy deployment |
+| Runtime | Node.js (>=24) | Active LTS (Krypton); good for long-running poll loops and web servers |
+| Default store | SQLite via `better-sqlite3` | Zero-config, single-file, perfect for CLI and single-server. Adapter pattern allows promotion to PostgreSQL for cloud (see Section 12.5) |
+| Production store | PostgreSQL | Required for horizontal scaling; Azure Database for PostgreSQL Flexible Server or equivalent |
+| Web framework | SvelteKit | SSR + API routes + lighter bundles than Next.js; Svelte 5 reactivity is a natural fit for chat UIs |
+| Auth | WorkOS AuthKit | 1M MAUs free; social login, passkeys, MFA, enterprise SSO (SAML, Entra) out of the box; TS SDK |
 | Package manager | pnpm | Fast, disk-efficient, good monorepo support |
 | Monorepo | pnpm workspaces | Keep `@norush/core` and `@norush/web` in one repo |
 | Provider SDKs | `@anthropic-ai/sdk`, `openai` | Official SDKs; handle auth, retries, types |
@@ -864,11 +866,15 @@ configured).
 
 | Policy | Behavior |
 |--------|----------|
-| `on_ack` | Scrub `params` and `response` JSON immediately after the webhook receives a 2xx ACK. Metadata (IDs, timestamps, token counts, status) is retained. |
+| `on_ack` | Scrub `params` and `response` JSON immediately after the webhook receives a 2xx ACK. Metadata (IDs, timestamps, token counts, status) is retained. **Strongly encouraged for API/broker consumers.** |
 | `1d` | Scrub content 1 day after delivery / terminal state. |
-| `7d` | Scrub content after 7 days. |
-| `30d` | Scrub content after 30 days. **(Default)** |
+| `7d` | Scrub content after 7 days. **(Default for `@norush/core` library)** |
+| `30d` | Scrub content after 30 days. **(Default for norush.chat)** — chat users need history visible in the UI. |
 | `custom` | User-specified duration in days. |
+
+The default is set by the **consumer of the library**, not by the end user.
+norush.chat sets `30d` because chat history is the product. API/broker
+consumers default to `7d` and should consider `on_ack` for sensitive workloads.
 
 "Scrub" means replacing the `params` and `response` JSON fields with a
 tombstone value (e.g., `{"scrubbed": true, "scrubbed_at": "..."}`) rather
@@ -893,8 +899,9 @@ N tokens, was delivered successfully") without retaining the actual content.
 ```sql
 CREATE TABLE user_settings (
   user_id               TEXT PRIMARY KEY,     -- FK to users.id
-  retention_policy      TEXT NOT NULL DEFAULT '30d',
+  retention_policy      TEXT NOT NULL DEFAULT '7d',
                         -- 'on_ack' | '1d' | '7d' | '30d' | custom like '14d'
+                        -- Default set by consuming app (7d for library, 30d for chat)
   created_at            TEXT NOT NULL,
   updated_at            TEXT NOT NULL
 );
@@ -912,15 +919,186 @@ Add to `results`:
 
 ---
 
-## 14. Remaining Open Questions
+## 14. Additional Resolved Decisions (Round 3)
 
-- **Auth system for norush.chat:** OAuth providers (GitHub, Google) vs.
-  email/password vs. magic link? Affects the user model and onboarding UX.
-  Not a core library concern.
-- **Operator vs. user configuration:** Some settings (system-wide retention
-  cap, circuit breaker thresholds, master encryption key) are operator-level.
-  Others (retention policy, API keys, webhook URLs) are user-level. Need a
-  clear config hierarchy: environment → operator config → user settings.
-- **Observability:** What metrics should norush expose? Prometheus-style
-  counters (batches_submitted, results_delivered, delivery_failures) seem
-  natural. Not critical for MVP but worth designing hooks for early.
+### 14.1 Auth: WorkOS AuthKit
+
+**Decision:** Use WorkOS AuthKit for norush.chat authentication.
+
+- **Free tier:** 1M MAUs at no cost. More than sufficient for the foreseeable
+  future.
+- **Features included:** Email/password, social login (Google, GitHub), magic
+  link, passkeys, MFA, and enterprise SSO (SAML, Entra/Azure AD, Okta) — all
+  without additional code per provider.
+- **Integration:** Official TypeScript SDK. Drop-in hosted UI or embedded
+  components. Minimal auth code on our side.
+- **Why not vanilla OAuth:** Building and maintaining OAuth flows for multiple
+  providers is undifferentiated work. WorkOS gives us enterprise-grade auth
+  with less code than a single OAuth integration. If we ever need to support
+  a corporate customer's identity provider, it's a WorkOS config change, not
+  a code change.
+- **Lock-in risk:** Moderate. Auth is an integration surface, not a data
+  store. If WorkOS becomes untenable, migrating to another auth provider
+  (Auth0, Clerk, or self-hosted) is scoped to the auth layer. User data
+  and norush state are in our own database.
+
+### 14.2 Configuration Hierarchy
+
+**Decision:** Three-tier configuration with clear precedence.
+
+```
+┌─────────────────────────────────────────────────┐
+│  Tier 1: Environment (env vars)                  │
+│  Set by: infrastructure / deployment pipeline    │
+│  Examples:                                       │
+│    NORUSH_MASTER_KEY     (encryption key)        │
+│    DATABASE_URL          (connection string)      │
+│    WORKOS_API_KEY        (auth provider)          │
+│    WORKOS_CLIENT_ID                               │
+│    NODE_ENV              (production/development) │
+└──────────────────────┬──────────────────────────┘
+                       │ overrides defaults
+┌──────────────────────▼──────────────────────────┐
+│  Tier 2: Operator config (file or env)           │
+│  Set by: whoever deploys norush                  │
+│  Examples:                                       │
+│    System-wide retention cap (e.g., 90 days)     │
+│    Default retention policy (7d or 30d)          │
+│    Circuit breaker thresholds                    │
+│    Polling strategy defaults                     │
+│    Max batch sizes                               │
+│    Global rate limits                            │
+│    Feature flags (e.g., enable/disable failover) │
+└──────────────────────┬──────────────────────────┘
+                       │ overrides operator defaults
+┌──────────────────────▼──────────────────────────┐
+│  Tier 3: User settings (database)                │
+│  Set by: end users via UI or API                 │
+│  Examples:                                       │
+│    Personal retention policy (within operator    │
+│      cap)                                        │
+│    API keys (encrypted)                          │
+│    Webhook URLs + signing secrets                │
+│    Spend limits                                  │
+│    Preferred polling strategy                    │
+└─────────────────────────────────────────────────┘
+```
+
+**Precedence rules:**
+- User settings cannot exceed operator caps (e.g., user requests 120d
+  retention but operator cap is 90d → clamped to 90d).
+- Operator config cannot override environment settings.
+- Defaults cascade: if a user hasn't set a retention policy, the operator
+  default applies. If the operator hasn't set one, the library default (7d)
+  applies.
+
+Implementation: a `resolveConfig(env, operator, user)` function that merges
+all three tiers with clamping. Tested with unit tests for edge cases.
+
+### 14.3 Observability & Telemetry
+
+**Decision:** Define hooks and metric interfaces now. Wire up implementations
+later.
+
+**Metric categories:**
+
+| Category | Metrics | Purpose |
+|----------|---------|---------|
+| Volume | `requests_queued`, `batches_submitted`, `results_ingested`, `deliveries_attempted` | Throughput understanding |
+| Latency | `batch_turnaround_ms` (submit → results), `delivery_latency_ms` (result → ack) | Performance tracking |
+| Errors | `submission_failures`, `delivery_failures`, `circuit_breaker_trips`, `orphan_recoveries` | Reliability monitoring |
+| Cost | `input_tokens_total`, `output_tokens_total`, per-model and per-user breakdowns | Billing analytics, plan pricing research |
+| Size | `batch_request_count` (histogram), `request_param_bytes`, `response_bytes` | Capacity planning |
+
+**Implementation approach:**
+- Define a `TelemetryHook` interface in `@norush/core`:
+  ```ts
+  interface TelemetryHook {
+    counter(name: string, value: number, tags?: Record<string, string>): void;
+    histogram(name: string, value: number, tags?: Record<string, string>): void;
+    event(name: string, data?: Record<string, unknown>): void;
+  }
+  ```
+- Ship a `NoopTelemetry` (default) and a `ConsoleTelemetry` (for debugging).
+- Instrument all key paths in the core library from day one.
+- Actual Prometheus / Datadog / OpenTelemetry adapters are Phase 4 work, but
+  the hooks are in place so adding them requires zero rework.
+- **Anonymized stats for product analytics:** Token counts, batch sizes, and
+  timing data are kept in the `event_log` and `results` metadata (which
+  survives content scrubbing). This gives us the data to analyze usage
+  patterns and inform pricing without retaining prompt/response content.
+
+### 14.4 Database Adapter & Cloud Promotion
+
+**Decision:** Abstract the storage layer behind an adapter interface so the
+database engine can be swapped via connection string.
+
+```ts
+interface Store {
+  // Request lifecycle
+  createRequest(req: NewRequest): Promise<Request>;
+  getRequest(id: string): Promise<Request | null>;
+  updateRequest(id: string, updates: Partial<Request>): Promise<void>;
+  getQueuedRequests(limit: number): Promise<Request[]>;
+
+  // Batch lifecycle
+  createBatch(batch: NewBatch): Promise<Batch>;
+  getBatch(id: string): Promise<Batch | null>;
+  updateBatch(id: string, updates: Partial<Batch>): Promise<void>;
+  getPendingBatches(): Promise<Batch[]>;
+  getInFlightBatches(): Promise<Batch[]>;
+
+  // Result lifecycle
+  createResult(result: NewResult): Promise<Result>;
+  getUndeliveredResults(limit: number): Promise<Result[]>;
+  markDelivered(id: string): Promise<void>;
+
+  // Retention
+  scrubExpiredContent(before: Date): Promise<number>;
+
+  // Telemetry / analytics
+  getStats(userId: string, period: DateRange): Promise<UsageStats>;
+}
+```
+
+**Built-in adapters:**
+
+| Adapter | Use case | Notes |
+|---------|----------|-------|
+| `MemoryStore` | Tests, ephemeral scripts | No persistence; fastest |
+| `SQLiteStore` | Local dev, CLI, single-server | Uses `better-sqlite3`; single-file DB |
+| `PostgresStore` | Cloud deployment, multi-instance | Uses `pg` or `postgres.js`; connection string config |
+
+**Cloud promotion path:**
+1. Develop with `SQLiteStore` locally.
+2. When deploying to cloud (Azure, AWS, etc.), provision a managed PostgreSQL
+   instance (e.g., Azure Database for PostgreSQL Flexible Server).
+3. Set `DATABASE_URL` to the PostgreSQL connection string.
+4. Run the migration tool to create the schema.
+5. The application detects the connection string protocol and instantiates
+   `PostgresStore` automatically.
+
+**Why not SQLite on Azure:** SQLite requires a local filesystem with durable
+write access. Azure App Service has a persistent `/home` mount that technically
+works for a single instance, but it cannot support horizontal scaling (multiple
+instances writing to the same SQLite file = corruption). Container services
+(Container Apps, Functions) have ephemeral filesystems. For any cloud
+deployment that needs reliability or scaling, PostgreSQL is the answer.
+
+**Schema compatibility:** The SQL schema is written in standard SQL that works
+on both SQLite and PostgreSQL. The few dialect differences (e.g., `TEXT` vs.
+`VARCHAR`, `INTEGER` for booleans in SQLite vs. `BOOLEAN` in Postgres) are
+handled by the adapter layer. Migrations are versioned and adapter-aware.
+
+---
+
+## 15. Remaining Open Questions
+
+- **Deployment target for norush.chat:** Azure App Service? Azure Container
+  Apps? Vercel (supports SvelteKit)? Affects the background worker strategy
+  (cron vs. long-running process vs. external scheduler).
+- **WebSocket for live chat updates:** Should the chat UI use WebSocket / SSE
+  to push result arrival notifications in real-time, or just poll? SvelteKit
+  supports both patterns.
+- **Rate limiting implementation:** Token bucket? Sliding window? Per-IP or
+  per-user? This matters for the broker API but not for Phase 1.
