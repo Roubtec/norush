@@ -118,6 +118,44 @@ pnpm install
 Start PostgreSQL with `pnpm db:up`.
 The database is available at `localhost:5432` with database `norush` and password `dev`.
 
+## Running with Docker
+
+The project ships a multi-stage `Dockerfile` and a `docker-compose.yml` that runs the full stack (PostgreSQL, web server, and background worker).
+
+```bash
+# Start everything (builds on first run)
+docker compose up --build
+
+# Start in the background
+docker compose up --build -d
+
+# Stop (worker shuts down gracefully)
+docker compose down
+```
+
+The web server is available at `http://localhost:3000`.
+Provider API keys and other secrets can be set via environment variables or a `.env` file:
+
+```env
+NORUSH_MASTER_KEY=your-secret-key
+ANTHROPIC_API_KEY=sk-ant-...
+OPENAI_API_KEY=sk-...
+```
+
+### Development (without Docker)
+
+```bash
+# Start just the database
+docker compose up postgres -d
+
+# Install dependencies and build
+pnpm install
+pnpm build
+
+# Run tests
+pnpm test
+```
+
 ## Project Status
 
 **Early development.** See [PLAN.md](./PLAN.md) for the full design document

@@ -1,0 +1,47 @@
+# Dependencies (rebuilt inside container)
+node_modules
+**/node_modules
+
+# Git
+.git
+.gitattributes
+.gitignore
+
+# Build output (rebuilt inside container)
+packages/core/dist
+packages/web/build
+packages/web/.svelte-kit
+
+# Documentation (not needed at runtime)
+*.md
+# ...but keep package manifests that happen to end in .md? No, .md files
+# are only docs here. The pnpm-workspace.yaml and package.json are safe.
+
+# Tests
+**/__tests__
+**/test
+**/*.test.ts
+**/*.spec.ts
+vitest.config.ts
+packages/*/vitest.config.ts
+
+# Environment and secrets
+.env
+.env.*
+
+# Editor / IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# CI / GitHub
+.github
+.claude
+tasks
+
+# Misc
+PLAN.md
+AGENTS.md
+CLAUDE.md
+eslint.config.js
