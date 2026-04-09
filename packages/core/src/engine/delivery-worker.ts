@@ -315,11 +315,12 @@ export class DeliveryWorker {
       await this.store.logEvent({
         entityType: "result",
         entityId: result.id,
-        event: "webhook_delivered",
+        event: "delivery_succeeded",
         details: {
           requestId: result.requestId,
           attempt: result.deliveryAttempts + 1,
           callbackUrl: request.callbackUrl ?? undefined,
+          webhookAttempted: !!request.callbackUrl,
         },
       });
 
@@ -349,12 +350,13 @@ export class DeliveryWorker {
         await this.store.logEvent({
           entityType: "result",
           entityId: result.id,
-          event: "webhook_delivery_exhausted",
+          event: "delivery_exhausted",
           details: {
             requestId: result.requestId,
             attempts,
             error: message,
             callbackUrl: request.callbackUrl ?? undefined,
+            webhookAttempted: !!request.callbackUrl,
           },
         });
 
@@ -381,13 +383,14 @@ export class DeliveryWorker {
         await this.store.logEvent({
           entityType: "result",
           entityId: result.id,
-          event: "webhook_delivery_failed",
+          event: "delivery_failed",
           details: {
             requestId: result.requestId,
             attempt: attempts,
             error: message,
             nextDeliveryAt: nextDeliveryAt.toISOString(),
             callbackUrl: request.callbackUrl ?? undefined,
+            webhookAttempted: !!request.callbackUrl,
           },
         });
 

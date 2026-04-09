@@ -182,7 +182,11 @@ describe("deliverWebhook", () => {
     const [, init] = (fetchFn as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit];
     const headers = init.headers as Record<string, string>;
 
-    const expectedHex = signWebhookPayload(secret, JSON.stringify(basePayload));
+    // Signature covers the canonical input "<timestamp>.<body>" so the
+    // timestamp is bound to the signature and cannot be rewritten.
+    const timestamp = headers["X-Norush-Timestamp"];
+    const body = JSON.stringify(basePayload);
+    const expectedHex = signWebhookPayload(secret, `${timestamp}.${body}`);
     expect(headers["X-Norush-Signature"]).toBe(`sha256=${expectedHex}`);
   });
 
@@ -219,7 +223,7 @@ describe("deliverWebhook", () => {
     expect(init.body).toBe(JSON.stringify(basePayload));
   });
 
-  it("returns ok:true on 2xx response", async () => {
+  it("returns statusCode on 2xx response", async () => {
     const fetchFn = mockFetchOk();
 
     const result = await deliverWebhook({
@@ -230,7 +234,6 @@ describe("deliverWebhook", () => {
       fetchFn,
     });
 
-    expect(result.ok).toBe(true);
     expect(result.statusCode).toBe(200);
   });
 

@@ -3,9 +3,15 @@
  *
  * POSTs a JSON payload to a callback URL with:
  *   - `Content-Type: application/json`
- *   - `X-Norush-Signature` (HMAC-SHA256, only when `webhookSecret` is set)
+ *   - `X-Norush-Timestamp` (Unix epoch seconds, included in signing input)
+ *   - `X-Norush-Signature` (HMAC-SHA256 of `"<timestamp>.<body>"`, only when `webhookSecret` is set)
  *   - `X-Norush-Attempt` (current attempt number, 1-based)
  *   - `X-Norush-Request-Id` (norush request ID for correlation)
+ *
+ * The timestamp is bound to the signature so that consumers can verify
+ * both authenticity and recency (replay protection). Consumers should
+ * verify the signature against `"${X-Norush-Timestamp}.${body}"` and
+ * reject deliveries whose timestamp falls outside an allowed clock skew.
  *
  * The payload includes `norush_id` for consumer-side deduplication.
  *
@@ -49,11 +55,13 @@ export interface DeliverWebhookOptions {
   timeoutMs?: number;
 }
 
-/** Result of a webhook delivery attempt. */
+/**
+ * Result of a successful webhook delivery attempt.
+ * The function throws on non-2xx responses and network errors, so
+ * callers only receive this when delivery actually succeeded.
+ */
 export interface DeliveryResult {
-  ok: boolean;
-  statusCode: number | null;
-  error?: string;
+  statusCode: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -109,19 +117,23 @@ export async function deliverWebhook(
   } = options;
 
   const body = JSON.stringify(payload);
+  const timestamp = String(Math.floor(Date.now() / 1000));
 
   // Build headers.
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     "X-Norush-Attempt": String(attempt),
     "X-Norush-Request-Id": requestId,
-    "X-Norush-Timestamp": String(Math.floor(Date.now() / 1000)),
+    "X-Norush-Timestamp": timestamp,
   };
 
-  // Sign the payload if a webhook secret is provided.
+  // Sign a canonical string that binds the timestamp to the body so the
+  // timestamp cannot be rewritten without invalidating the signature.
+  // Signing input: "<timestamp>.<body>"
   if (webhookSecret) {
+    const signingInput = `${timestamp}.${body}`;
     headers["X-Norush-Signature"] =
-      `sha256=${signWebhookPayload(webhookSecret, body)}`;
+      `sha256=${signWebhookPayload(webhookSecret, signingInput)}`;
   }
 
   // Use AbortController for timeout.
@@ -143,7 +155,7 @@ export async function deliverWebhook(
       );
     }
 
-    return { ok: true, statusCode: response.status };
+    return { statusCode: response.status };
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
       throw new Error(`Webhook delivery timed out after ${timeoutMs}ms`, {

@@ -970,7 +970,7 @@ describe("DeliveryWorker", () => {
 
       const events = store.getEvents();
       const deliveredEvent = events.find(
-        (e) => e.event === "webhook_delivered" && e.entityId === result.id,
+        (e) => e.event === "delivery_succeeded" && e.entityId === result.id,
       );
       expect(deliveredEvent).toBeDefined();
       expect(deliveredEvent?.entityType).toBe("result");
@@ -995,7 +995,7 @@ describe("DeliveryWorker", () => {
       const events = store.getEvents();
       const failedEvent = events.find(
         (e) =>
-          e.event === "webhook_delivery_failed" && e.entityId === result.id,
+          e.event === "delivery_failed" && e.entityId === result.id,
       );
       expect(failedEvent).toBeDefined();
       expect(failedEvent?.entityType).toBe("result");
@@ -1020,7 +1020,7 @@ describe("DeliveryWorker", () => {
       const events = store.getEvents();
       const exhaustedEvent = events.find(
         (e) =>
-          e.event === "webhook_delivery_exhausted" &&
+          e.event === "delivery_exhausted" &&
           e.entityId === result.id,
       );
       expect(exhaustedEvent).toBeDefined();
@@ -1050,7 +1050,7 @@ describe("DeliveryWorker", () => {
       const events = store.getEvents();
       const failedEvent = events.find(
         (e) =>
-          e.event === "webhook_delivery_failed" && e.entityId === result.id,
+          e.event === "delivery_failed" && e.entityId === result.id,
       );
       expect(failedEvent).toBeDefined();
       expect(failedEvent?.details?.error).toMatch(/500/);

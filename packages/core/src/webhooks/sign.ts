@@ -28,8 +28,12 @@ export function signWebhookPayload(secret: string, body: string): string {
  * Accepts both the `sha256=<hex>` prefixed format (as sent in headers)
  * and the raw hex format.
  *
+ * When verifying timestamp-bound signatures (as produced by the delivery
+ * helper), pass the canonical signing input as the `body` argument:
+ * `verifyWebhookSignature(secret, \`${timestamp}.${rawBody}\`, signature)`
+ *
  * @param secret - The webhook secret.
- * @param body - The serialised JSON body string.
+ * @param body - The signing input (raw body or `"<timestamp>.<body>"`).
  * @param signature - The signature to verify (`sha256=<hex>` or raw hex).
  * @returns True if the signature is valid.
  */
