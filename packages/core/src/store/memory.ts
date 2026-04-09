@@ -153,6 +153,15 @@ export class MemoryStore implements Store {
     return inFlight;
   }
 
+  async getRequestsByBatchId(batchId: string): Promise<Request[]> {
+    const results: Request[] = [];
+    for (const r of this.requests.values()) {
+      if (r.batchId === batchId) results.push(structuredClone(r));
+    }
+    results.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+    return results;
+  }
+
   // -- Result lifecycle -----------------------------------------------------
 
   async createResult(result: NewResult): Promise<Result> {

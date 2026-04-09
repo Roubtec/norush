@@ -60,6 +60,9 @@ export interface Store {
   /** Fetch all batches that have been submitted but not yet completed. */
   getInFlightBatches(): Promise<Batch[]>;
 
+  /** Fetch all requests belonging to a specific batch. */
+  getRequestsByBatchId(batchId: string): Promise<Request[]>;
+
   // -- Result lifecycle -----------------------------------------------------
 
   /** Persist a new result and return the full record with generated ID. */
