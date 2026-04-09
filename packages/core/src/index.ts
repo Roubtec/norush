@@ -31,6 +31,9 @@ export type {
   PollContext,
   DateRange,
   UsageStats,
+  EventEntityType,
+  NewEvent,
+  EventLogEntry,
   HealthScore,
 } from "./types.js";
 

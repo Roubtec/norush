@@ -146,7 +146,27 @@ describe("deliverWebhook", () => {
     expect(headers["X-Norush-Request-Id"]).toBe("req_001");
   });
 
-  it("includes HMAC signature when webhookSecret is set", async () => {
+  it("includes X-Norush-Timestamp header with Unix epoch seconds", async () => {
+    const fetchFn = mockFetchOk();
+    const before = Math.floor(Date.now() / 1000);
+
+    await deliverWebhook({
+      callbackUrl: "https://example.com/hook",
+      payload: basePayload,
+      attempt: 1,
+      requestId: "req_001",
+      fetchFn,
+    });
+
+    const after = Math.floor(Date.now() / 1000);
+    const [, init] = (fetchFn as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit];
+    const headers = init.headers as Record<string, string>;
+    const timestamp = Number(headers["X-Norush-Timestamp"]);
+    expect(timestamp).toBeGreaterThanOrEqual(before);
+    expect(timestamp).toBeLessThanOrEqual(after);
+  });
+
+  it("includes HMAC signature with sha256= prefix when webhookSecret is set", async () => {
     const fetchFn = mockFetchOk();
     const secret = "my-secret";
 
@@ -162,8 +182,8 @@ describe("deliverWebhook", () => {
     const [, init] = (fetchFn as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit];
     const headers = init.headers as Record<string, string>;
 
-    const expectedSig = signWebhookPayload(secret, JSON.stringify(basePayload));
-    expect(headers["X-Norush-Signature"]).toBe(expectedSig);
+    const expectedHex = signWebhookPayload(secret, JSON.stringify(basePayload));
+    expect(headers["X-Norush-Signature"]).toBe(`sha256=${expectedHex}`);
   });
 
   it("omits signature header when no webhookSecret", async () => {

@@ -25,10 +25,12 @@ export function signWebhookPayload(secret: string, body: string): string {
  * Verify an HMAC-SHA256 signature against a payload.
  *
  * Uses timing-safe comparison to prevent timing attacks.
+ * Accepts both the `sha256=<hex>` prefixed format (as sent in headers)
+ * and the raw hex format.
  *
  * @param secret - The webhook secret.
  * @param body - The serialised JSON body string.
- * @param signature - The signature to verify (hex-encoded).
+ * @param signature - The signature to verify (`sha256=<hex>` or raw hex).
  * @returns True if the signature is valid.
  */
 export function verifyWebhookSignature(
@@ -36,13 +38,18 @@ export function verifyWebhookSignature(
   body: string,
   signature: string,
 ): boolean {
+  // Strip optional `sha256=` prefix so callers can pass the header value directly.
+  const hex = signature.startsWith("sha256=")
+    ? signature.slice("sha256=".length)
+    : signature;
+
   const expected = signWebhookPayload(secret, body);
 
   // Timing-safe comparison requires equal-length buffers.
-  if (expected.length !== signature.length) return false;
+  if (expected.length !== hex.length) return false;
 
   const a = Buffer.from(expected, "hex");
-  const b = Buffer.from(signature, "hex");
+  const b = Buffer.from(hex, "hex");
 
   if (a.length !== b.length) return false;
 

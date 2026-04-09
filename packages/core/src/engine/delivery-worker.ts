@@ -313,6 +313,18 @@ export class DeliveryWorker {
       // Delivery succeeded — mark delivered.
       await this.store.markDelivered(result.id);
 
+      // Log the successful delivery event.
+      await this.store.logEvent({
+        entityType: "result",
+        entityId: result.id,
+        event: "webhook_delivered",
+        details: {
+          requestId: result.requestId,
+          attempt: result.deliveryAttempts + 1,
+          callbackUrl: request.callbackUrl ?? undefined,
+        },
+      });
+
       this.emit("delivery:success", {
         resultId: result.id,
         requestId: result.requestId,
@@ -335,6 +347,19 @@ export class DeliveryWorker {
           lastDeliveryError: message,
         });
 
+        // Log the exhausted delivery event.
+        await this.store.logEvent({
+          entityType: "result",
+          entityId: result.id,
+          event: "webhook_delivery_exhausted",
+          details: {
+            requestId: result.requestId,
+            attempts,
+            error: message,
+            callbackUrl: request.callbackUrl ?? undefined,
+          },
+        });
+
         this.emit("delivery:exhausted", {
           resultId: result.id,
           requestId: result.requestId,
@@ -352,6 +377,20 @@ export class DeliveryWorker {
           deliveryAttempts: attempts,
           lastDeliveryError: message,
           nextDeliveryAt,
+        });
+
+        // Log the failed delivery attempt.
+        await this.store.logEvent({
+          entityType: "result",
+          entityId: result.id,
+          event: "webhook_delivery_failed",
+          details: {
+            requestId: result.requestId,
+            attempt: attempts,
+            error: message,
+            nextDeliveryAt: nextDeliveryAt.toISOString(),
+            callbackUrl: request.callbackUrl ?? undefined,
+          },
         });
 
         this.emit("delivery:failure", {

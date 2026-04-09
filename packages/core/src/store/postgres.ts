@@ -12,7 +12,9 @@ import type { Store, ResultDeliveryUpdate } from "../interfaces/store.js";
 import type {
   Batch,
   DateRange,
+  EventLogEntry,
   NewBatch,
+  NewEvent,
   NewRequest,
   NewResult,
   Request,
@@ -362,6 +364,32 @@ export class PostgresStore implements Store {
       SET delivery_status = 'delivered', delivered_at = now()
       WHERE id = ${id}
     `;
+  }
+
+  // -- Event log ------------------------------------------------------------
+
+  async logEvent(event: NewEvent): Promise<EventLogEntry> {
+    const id = ulid();
+    const rows = await this.sql`
+      INSERT INTO event_log (id, entity_type, entity_id, event, details)
+      VALUES (
+        ${id},
+        ${event.entityType},
+        ${event.entityId},
+        ${event.event},
+        ${event.details ? this.sql.json(event.details as JSONValue) : null}
+      )
+      RETURNING *
+    `;
+    const row = rows[0] as Record<string, unknown>;
+    return {
+      id: row.id as string,
+      entityType: row.entity_type as EventLogEntry["entityType"],
+      entityId: row.entity_id as string,
+      event: row.event as string,
+      details: (row.details as Record<string, unknown>) ?? null,
+      createdAt: new Date(row.created_at as string),
+    };
   }
 
   // -- Retention ------------------------------------------------------------

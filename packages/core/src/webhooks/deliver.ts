@@ -115,11 +115,13 @@ export async function deliverWebhook(
     "Content-Type": "application/json",
     "X-Norush-Attempt": String(attempt),
     "X-Norush-Request-Id": requestId,
+    "X-Norush-Timestamp": String(Math.floor(Date.now() / 1000)),
   };
 
   // Sign the payload if a webhook secret is provided.
   if (webhookSecret) {
-    headers["X-Norush-Signature"] = signWebhookPayload(webhookSecret, body);
+    headers["X-Norush-Signature"] =
+      `sha256=${signWebhookPayload(webhookSecret, body)}`;
   }
 
   // Use AbortController for timeout.

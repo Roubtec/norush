@@ -843,7 +843,7 @@ describe("DeliveryWorker", () => {
       const [, init] = (fetchFn as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit];
       const headers = init.headers as Record<string, string>;
       expect(headers["X-Norush-Signature"]).toBeDefined();
-      expect(headers["X-Norush-Signature"]).toMatch(/^[a-f0-9]{64}$/);
+      expect(headers["X-Norush-Signature"]).toMatch(/^sha256=[a-f0-9]{64}$/);
     });
 
     it("omits signature when no webhookSecret", async () => {
@@ -945,6 +945,115 @@ describe("DeliveryWorker", () => {
       const headers = init.headers as Record<string, string>;
       expect(headers["X-Norush-Attempt"]).toBe("1");
       expect(headers["X-Norush-Request-Id"]).toBe(request.id);
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Event logging
+  // -----------------------------------------------------------------------
+
+  describe("event logging", () => {
+    it("logs a webhook_delivered event on successful delivery", async () => {
+      const { result } = await createPendingResult(store);
+
+      const callback = vi.fn().mockResolvedValue(undefined);
+
+      const worker = new DeliveryWorker({
+        store,
+        now: () => new Date(currentTime),
+        fetchFn: mockFetchOk(),
+      });
+      worker.addCallback(callback);
+
+      await worker.tick();
+
+      const events = store.getEvents();
+      const deliveredEvent = events.find(
+        (e) => e.event === "webhook_delivered" && e.entityId === result.id,
+      );
+      expect(deliveredEvent).toBeDefined();
+      expect(deliveredEvent?.entityType).toBe("result");
+      expect(deliveredEvent?.details?.requestId).toBe(result.requestId);
+      expect(deliveredEvent?.details?.attempt).toBe(1);
+    });
+
+    it("logs a webhook_delivery_failed event on retryable failure", async () => {
+      const { result } = await createPendingResult(store);
+
+      const callback = vi.fn().mockRejectedValue(new Error("Network error"));
+
+      const worker = new DeliveryWorker({
+        store,
+        now: () => new Date(currentTime),
+        fetchFn: mockFetchOk(),
+      });
+      worker.addCallback(callback);
+
+      await worker.tick();
+
+      const events = store.getEvents();
+      const failedEvent = events.find(
+        (e) =>
+          e.event === "webhook_delivery_failed" && e.entityId === result.id,
+      );
+      expect(failedEvent).toBeDefined();
+      expect(failedEvent?.entityType).toBe("result");
+      expect(failedEvent?.details?.error).toBe("Network error");
+      expect(failedEvent?.details?.attempt).toBe(1);
+    });
+
+    it("logs a webhook_delivery_exhausted event after max attempts", async () => {
+      const { result } = await createPendingResult(store);
+
+      const callback = vi.fn().mockRejectedValue(new Error("Always fails"));
+
+      const worker = new DeliveryWorker({
+        store,
+        now: () => new Date(currentTime),
+        maxDeliveryAttempts: 1,
+        fetchFn: mockFetchOk(),
+      });
+      worker.addCallback(callback);
+
+      await worker.tick();
+
+      const events = store.getEvents();
+      const exhaustedEvent = events.find(
+        (e) =>
+          e.event === "webhook_delivery_exhausted" &&
+          e.entityId === result.id,
+      );
+      expect(exhaustedEvent).toBeDefined();
+      expect(exhaustedEvent?.entityType).toBe("result");
+      expect(exhaustedEvent?.details?.attempts).toBe(1);
+      expect(exhaustedEvent?.details?.error).toBe("Always fails");
+    });
+
+    it("logs events for webhook HTTP delivery failures", async () => {
+      const fetchFn = vi.fn().mockResolvedValue(
+        new Response("Server Error", {
+          status: 500,
+          statusText: "Internal Server Error",
+        }),
+      );
+
+      const { result } = await createPendingResult(store);
+
+      const worker = new DeliveryWorker({
+        store,
+        now: () => new Date(currentTime),
+        fetchFn: fetchFn as typeof globalThis.fetch,
+      });
+
+      await worker.tick();
+
+      const events = store.getEvents();
+      const failedEvent = events.find(
+        (e) =>
+          e.event === "webhook_delivery_failed" && e.entityId === result.id,
+      );
+      expect(failedEvent).toBeDefined();
+      expect(failedEvent?.details?.error).toMatch(/500/);
     });
   });
 

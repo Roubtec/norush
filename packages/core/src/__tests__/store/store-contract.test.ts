@@ -389,6 +389,36 @@ export function runStoreContractTests(
       });
     });
 
+    describe("Event log", () => {
+      test("logEvent creates an event log entry with generated ID", async () => {
+        store = await factory();
+        const entry = await store.logEvent({
+          entityType: "result",
+          entityId: "res_001",
+          event: "webhook_delivered",
+          details: { attempt: 1, statusCode: 200 },
+        });
+
+        expect(entry.id).toBeTruthy();
+        expect(entry.entityType).toBe("result");
+        expect(entry.entityId).toBe("res_001");
+        expect(entry.event).toBe("webhook_delivered");
+        expect(entry.details).toEqual({ attempt: 1, statusCode: 200 });
+        expect(entry.createdAt).toBeInstanceOf(Date);
+      });
+
+      test("logEvent handles null details", async () => {
+        store = await factory();
+        const entry = await store.logEvent({
+          entityType: "batch",
+          entityId: "batch_001",
+          event: "submitted",
+        });
+
+        expect(entry.details).toBeNull();
+      });
+    });
+
     describe("Analytics", () => {
       test("getStats aggregates usage for a user within a period", async () => {
         store = await factory();

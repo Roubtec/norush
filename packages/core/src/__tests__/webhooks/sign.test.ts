@@ -95,4 +95,17 @@ describe("verifyWebhookSignature", () => {
   it("returns false for an empty signature", () => {
     expect(verifyWebhookSignature(secret, body, "")).toBe(false);
   });
+
+  it("accepts sha256= prefixed signature (header format)", () => {
+    const hex = signWebhookPayload(secret, body);
+    expect(verifyWebhookSignature(secret, body, `sha256=${hex}`)).toBe(true);
+  });
+
+  it("rejects sha256= prefixed signature with wrong body", () => {
+    const hex = signWebhookPayload(secret, body);
+    const tampered = body.replace("123", "456");
+    expect(verifyWebhookSignature(secret, tampered, `sha256=${hex}`)).toBe(
+      false,
+    );
+  });
 });
