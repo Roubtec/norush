@@ -12,6 +12,7 @@ import {
   StatusTracker,
   OrphanRecovery,
   CircuitBreaker,
+  createNorush,
 } from "../index.js";
 
 // Type-only imports to verify they are exported
@@ -54,6 +55,10 @@ import type {
   OrphanRecoveryResult,
   CircuitBreakerState,
   CircuitBreakerSnapshot,
+  NorushConfig,
+  NorushEngine as _NorushEngine,
+  NorushEventName,
+  NorushEventHandler,
 } from "../index.js";
 
 describe("@norush/core exports", () => {
@@ -113,6 +118,10 @@ describe("@norush/core exports", () => {
     const cb = new CircuitBreaker();
     expect(cb).toBeInstanceOf(CircuitBreaker);
     expect(cb.state).toBe("closed");
+  });
+
+  it("exports createNorush factory function", () => {
+    expect(typeof createNorush).toBe("function");
   });
 
   // Type-level assertions — these verify that all type exports compile.
@@ -177,6 +186,12 @@ describe("@norush/core exports", () => {
     const _eventName: StatusTrackerEventName = "batch:completed";
     const _eventHandler: StatusTrackerEventHandler = () => {};
     const _orphanResult: OrphanRecoveryResult = { recovered: 0, failed: 0 };
+    const _norushEventName: NorushEventName = "batch:completed";
+    const _norushEventHandler: NorushEventHandler = () => {};
+    const _norushConfig: NorushConfig = {
+      store: new MemoryStore(),
+      providers: new Map(),
+    };
 
     // Use variables to avoid unused-variable lint errors
     expect(_claudeOpts).toBeDefined();
@@ -186,6 +201,9 @@ describe("@norush/core exports", () => {
     expect(_eventName).toBeDefined();
     expect(_eventHandler).toBeDefined();
     expect(_orphanResult).toBeDefined();
+    expect(_norushEventName).toBeDefined();
+    expect(_norushEventHandler).toBeDefined();
+    expect(_norushConfig).toBeDefined();
     expect(_id).toBeDefined();
     expect(_batchId).toBeDefined();
     expect(_resultId).toBeDefined();

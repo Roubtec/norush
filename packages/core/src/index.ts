@@ -148,3 +148,15 @@ export {
 
 export { NoopTelemetry } from "./telemetry/noop.js";
 export { ConsoleTelemetry } from "./telemetry/console.js";
+
+// ---------------------------------------------------------------------------
+// Engine entry point
+// ---------------------------------------------------------------------------
+
+export {
+  createNorush,
+  type NorushConfig,
+  type NorushEngine,
+  type NorushEventName,
+  type NorushEventHandler,
+} from "./norush.js";
