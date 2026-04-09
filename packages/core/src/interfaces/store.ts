@@ -13,6 +13,23 @@ import type {
 } from "../types.js";
 
 /**
+ * The subset of Result fields that may be mutated after creation.
+ *
+ * Immutable fields (id, requestId, batchId, response, tokens, createdAt) are
+ * excluded so all store implementations stay consistent — callers cannot
+ * accidentally overwrite them via `updateResult()`.
+ */
+export interface ResultDeliveryUpdate {
+  deliveryStatus?: Result["deliveryStatus"];
+  deliveryAttempts?: number;
+  maxDeliveryAttempts?: number;
+  lastDeliveryError?: string | null;
+  nextDeliveryAt?: Date | null;
+  deliveredAt?: Date | null;
+  contentScrubbedAt?: Date | null;
+}
+
+/**
  * Persistence layer interface.
  *
  * Abstracts all database operations for requests, batches, results, retention,
@@ -71,8 +88,8 @@ export interface Store {
   /** Fetch up to `limit` results that have not yet been delivered. */
   getUndeliveredResults(limit: number): Promise<Result[]>;
 
-  /** Apply partial updates to a result record. */
-  updateResult(id: string, updates: Partial<Result>): Promise<void>;
+  /** Apply delivery-tracking updates to a result record. */
+  updateResult(id: string, updates: ResultDeliveryUpdate): Promise<void>;
 
   /** Mark a result as successfully delivered. */
   markDelivered(id: ResultId): Promise<void>;

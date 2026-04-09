@@ -8,7 +8,7 @@
 import { ulid } from "ulidx";
 import type postgres from "postgres";
 import type { JSONValue } from "postgres";
-import type { Store } from "../interfaces/store.js";
+import type { Store, ResultDeliveryUpdate } from "../interfaces/store.js";
 import type {
   Batch,
   DateRange,
@@ -308,7 +308,7 @@ export class PostgresStore implements Store {
     return toResult(rows[0] as Record<string, unknown>);
   }
 
-  async updateResult(id: string, updates: Partial<Result>): Promise<void> {
+  async updateResult(id: string, updates: ResultDeliveryUpdate): Promise<void> {
     const sets: Record<string, unknown> = {};
 
     if (updates.deliveryStatus !== undefined)

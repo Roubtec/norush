@@ -176,8 +176,12 @@ export class DeliveryWorker {
   start(): void {
     if (this.tickTimer !== null) return;
     this.tickTimer = setInterval(() => {
-      void this.tick().catch(() => {
-        // Errors are captured in telemetry during tick.
+      void this.tick().catch((error: unknown) => {
+        this.telemetry.event("delivery_worker.tick_error", {
+          message: error instanceof Error ? error.message : String(error),
+          name: error instanceof Error ? error.name : undefined,
+          stack: error instanceof Error ? error.stack : undefined,
+        });
       });
     }, this.tickIntervalMs);
     if (typeof this.tickTimer === "object" && "unref" in this.tickTimer) {
@@ -227,7 +231,10 @@ export class DeliveryWorker {
       }
 
       // Skip results that have already exhausted delivery attempts.
-      if (result.deliveryAttempts >= this.maxDeliveryAttempts) {
+      // Use the per-result limit, falling back to the worker-level default.
+      const maxAttempts =
+        result.maxDeliveryAttempts || this.maxDeliveryAttempts;
+      if (result.deliveryAttempts >= maxAttempts) {
         continue;
       }
 
@@ -250,18 +257,24 @@ export class DeliveryWorker {
     // Look up the associated request (for callback URL, etc.).
     const request = await this.store.getRequest(result.requestId);
     if (!request) {
-      // Orphaned result — mark as failed since we can't deliver without
-      // a request context.
+      // Orphaned result — mark as permanently failed. Set deliveryAttempts to
+      // the effective max so getUndeliveredResults callers skip it on the next
+      // tick rather than retrying forever.
+      const maxAttempts =
+        result.maxDeliveryAttempts || this.maxDeliveryAttempts;
       await this.store.updateResult(result.id, {
         deliveryStatus: "failed",
+        deliveryAttempts: maxAttempts,
         lastDeliveryError: `Request ${result.requestId} not found`,
       });
       return;
     }
 
-    // If there are no callbacks and no callback URL on the request,
-    // mark as no_target — nothing to deliver to.
-    if (this.callbacks.length === 0 && !request.callbackUrl) {
+    // If there are no registered callbacks there is nothing to deliver to.
+    // Mark as no_target regardless of callbackUrl (HTTP delivery via
+    // callbackUrl is not yet implemented — treating it as no_target prevents
+    // silently marking results delivered when no delivery actually occurred).
+    if (this.callbacks.length === 0) {
       await this.store.updateResult(result.id, {
         deliveryStatus: "no_target",
       });
@@ -287,8 +300,11 @@ export class DeliveryWorker {
         error instanceof Error ? error.message : String(error);
 
       const attempts = result.deliveryAttempts + 1;
+      // Use per-result limit, falling back to the worker-level default.
+      const maxAttempts =
+        result.maxDeliveryAttempts || this.maxDeliveryAttempts;
 
-      if (attempts >= this.maxDeliveryAttempts) {
+      if (attempts >= maxAttempts) {
         // Exhausted all attempts — mark permanently failed.
         await this.store.updateResult(result.id, {
           deliveryStatus: "failed",

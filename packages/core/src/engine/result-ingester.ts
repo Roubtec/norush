@@ -4,13 +4,14 @@
  * Streams results from a provider one at a time and persists each to the store
  * immediately. Crash-safe: if the process dies mid-ingestion, already-persisted
  * results survive. On restart, duplicate results (same request_id) are handled
- * gracefully via idempotent upsert logic.
+ * gracefully by attempting insertion and treating duplicate-key conflicts as
+ * already-persisted results — the request status is still updated idempotently.
  *
  * Called when a batch reaches terminal status (`ended`). The ingester:
  *   1. Calls `provider.fetchResults(ref)` which returns `AsyncIterable<NorushResult>`.
- *   2. For each result: `store.createResult()` immediately.
- *   3. Updates the corresponding request status (`succeeded` or `failed`).
- *   4. Updates batch-level succeeded/failed counters.
+ *   2. For each result: calls `store.createResult()` immediately and skips duplicates.
+ *   3. Updates the corresponding request status (`succeeded` or `failed`), even on duplicate.
+ *   4. Recomputes batch-level succeeded/failed counters from request statuses (idempotent).
  */
 
 import type { Store } from "../interfaces/store.js";
@@ -96,10 +97,8 @@ export class ResultIngester {
       return result;
     }
 
-    let succeededCount = batch.succeededCount;
-    let failedCount = batch.failedCount;
-
     for await (const norushResult of adapter.fetchResults(ref)) {
+      const newStatus = norushResult.success ? "succeeded" : "failed";
       try {
         // Persist result to store immediately (crash-safe).
         await this.store.createResult({
@@ -112,17 +111,14 @@ export class ResultIngester {
         });
 
         // Update the corresponding request status.
-        const newStatus = norushResult.success ? "succeeded" : "failed";
         await this.store.updateRequest(norushResult.requestId, {
           status: newStatus,
         });
 
         if (norushResult.success) {
           result.succeeded++;
-          succeededCount++;
         } else {
           result.failed++;
-          failedCount++;
         }
 
         result.ingested++;
@@ -132,6 +128,16 @@ export class ResultIngester {
 
         // Check for duplicate (request_id uniqueness constraint).
         if (isDuplicateError(message)) {
+          // Still update the request status idempotently so that a crash
+          // between createResult() and updateRequest() on the previous run
+          // doesn't leave the request stuck in 'batched'.
+          try {
+            await this.store.updateRequest(norushResult.requestId, {
+              status: newStatus,
+            });
+          } catch {
+            // Request may not exist (orphaned result) — safe to ignore.
+          }
           result.duplicates++;
           this.telemetry.event("result_duplicate_skipped", {
             requestId: norushResult.requestId,
@@ -150,7 +156,16 @@ export class ResultIngester {
       }
     }
 
-    // Update batch-level counters.
+    // Recompute batch counters from authoritative request statuses so the
+    // final numbers converge correctly even after a mid-ingestion crash and
+    // restart (idempotent regardless of how many results were duplicates).
+    const batchRequests = await this.store.getRequestsByBatchId(batch.id);
+    const succeededCount = batchRequests.filter(
+      (r) => r.status === "succeeded",
+    ).length;
+    const failedCount = batchRequests.filter(
+      (r) => r.status === "failed" || r.status === "failed_final",
+    ).length;
     await this.store.updateBatch(batch.id, {
       succeededCount,
       failedCount,

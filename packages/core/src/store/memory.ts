@@ -7,7 +7,7 @@
  */
 
 import { ulid } from "ulidx";
-import type { Store } from "../interfaces/store.js";
+import type { Store, ResultDeliveryUpdate } from "../interfaces/store.js";
 import type {
   Batch,
   DateRange,
@@ -187,12 +187,34 @@ export class MemoryStore implements Store {
     return structuredClone(record);
   }
 
-  async updateResult(id: string, updates: Partial<Result>): Promise<void> {
+  async updateResult(id: string, updates: ResultDeliveryUpdate): Promise<void> {
     const existing = this.results.get(id);
     if (!existing) throw new Error(`Result not found: ${id}`);
-    const updated = { ...existing, ...updates };
-    // Preserve the original id — callers should not change it.
-    updated.id = existing.id;
+    // Only delivery-tracking fields are mutable — immutable fields (id,
+    // requestId, batchId, response, tokens, createdAt) are never touched.
+    const updated: Result = {
+      ...existing,
+      deliveryStatus: updates.deliveryStatus ?? existing.deliveryStatus,
+      deliveryAttempts: updates.deliveryAttempts ?? existing.deliveryAttempts,
+      maxDeliveryAttempts:
+        updates.maxDeliveryAttempts ?? existing.maxDeliveryAttempts,
+      lastDeliveryError:
+        updates.lastDeliveryError !== undefined
+          ? updates.lastDeliveryError
+          : existing.lastDeliveryError,
+      nextDeliveryAt:
+        updates.nextDeliveryAt !== undefined
+          ? updates.nextDeliveryAt
+          : existing.nextDeliveryAt,
+      deliveredAt:
+        updates.deliveredAt !== undefined
+          ? updates.deliveredAt
+          : existing.deliveredAt,
+      contentScrubbedAt:
+        updates.contentScrubbedAt !== undefined
+          ? updates.contentScrubbedAt
+          : existing.contentScrubbedAt,
+    };
     this.results.set(id, updated);
   }
 

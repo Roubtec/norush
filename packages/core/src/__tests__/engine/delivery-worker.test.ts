@@ -31,7 +31,7 @@ function makeNewRequest(overrides: Partial<NewRequest> = {}): NewRequest {
  */
 async function createPendingResult(
   store: MemoryStore,
-  overrides: { callbackUrl?: string | null } = {},
+  overrides: { callbackUrl?: string | null; maxDeliveryAttempts?: number } = {},
 ): Promise<{ request: Request; result: Result }> {
   const request = await store.createRequest(
     makeNewRequest({ callbackUrl: overrides.callbackUrl ?? "https://example.com/cb" }),
@@ -41,7 +41,7 @@ async function createPendingResult(
     apiKeyId: "user_01",
     requestCount: 1,
   });
-  const result = await store.createResult({
+  let result = await store.createResult({
     requestId: request.id,
     batchId: batch.id,
     response: { content: "Hello response" },
@@ -49,6 +49,16 @@ async function createPendingResult(
     inputTokens: 10,
     outputTokens: 20,
   });
+
+  if (overrides.maxDeliveryAttempts !== undefined) {
+    await store.updateResult(result.id, {
+      maxDeliveryAttempts: overrides.maxDeliveryAttempts,
+    });
+    // Re-fetch to get the updated value.
+    const all = await store.getUndeliveredResults(100);
+    const updated = all.find((r) => r.id === result.id);
+    if (updated) result = updated;
+  }
 
   return { request, result };
 }
@@ -206,14 +216,15 @@ describe("DeliveryWorker", () => {
     });
 
     it("uses exponential backoff for retry scheduling", async () => {
-      const { result } = await createPendingResult(store);
+      const { result } = await createPendingResult(store, {
+        maxDeliveryAttempts: 5,
+      });
 
       const callback = vi.fn().mockRejectedValue(new Error("Fail"));
 
       const worker = new DeliveryWorker({
         store,
         now: () => new Date(currentTime),
-        maxDeliveryAttempts: 5,
       });
       worker.addCallback(callback);
 
@@ -252,14 +263,15 @@ describe("DeliveryWorker", () => {
     });
 
     it("caps backoff at MAX_DELAY_MS (10 minutes)", async () => {
-      const { result } = await createPendingResult(store);
+      const { result } = await createPendingResult(store, {
+        maxDeliveryAttempts: 20, // High limit so we can test backoff cap
+      });
 
       const callback = vi.fn().mockRejectedValue(new Error("Fail"));
 
       const worker = new DeliveryWorker({
         store,
         now: () => new Date(currentTime),
-        maxDeliveryAttempts: 20, // High limit so we can test backoff cap
       });
       worker.addCallback(callback);
 
@@ -356,14 +368,15 @@ describe("DeliveryWorker", () => {
 
   describe("exhausted delivery attempts", () => {
     it("marks result as failed after maxDeliveryAttempts", async () => {
-      const { result } = await createPendingResult(store);
+      const { result } = await createPendingResult(store, {
+        maxDeliveryAttempts: 3,
+      });
 
       const callback = vi.fn().mockRejectedValue(new Error("Always fails"));
 
       const worker = new DeliveryWorker({
         store,
         now: () => new Date(currentTime),
-        maxDeliveryAttempts: 3,
       });
       worker.addCallback(callback);
 
@@ -388,7 +401,7 @@ describe("DeliveryWorker", () => {
     });
 
     it("emits delivery:exhausted event when max attempts reached", async () => {
-      await createPendingResult(store);
+      await createPendingResult(store, { maxDeliveryAttempts: 1 });
 
       const callback = vi.fn().mockRejectedValue(new Error("Always fails"));
       const handler = vi.fn();
@@ -396,7 +409,6 @@ describe("DeliveryWorker", () => {
       const worker = new DeliveryWorker({
         store,
         now: () => new Date(currentTime),
-        maxDeliveryAttempts: 1,
       });
       worker.addCallback(callback);
       worker.on("delivery:exhausted", handler);
@@ -413,14 +425,13 @@ describe("DeliveryWorker", () => {
     });
 
     it("emits delivery_failures telemetry counter", async () => {
-      await createPendingResult(store);
+      await createPendingResult(store, { maxDeliveryAttempts: 1 });
 
       const callback = vi.fn().mockRejectedValue(new Error("Fail"));
       const telemetry = { counter: vi.fn(), histogram: vi.fn(), event: vi.fn() };
 
       const worker = new DeliveryWorker({
         store,
-        maxDeliveryAttempts: 1,
         telemetry,
         now: () => new Date(currentTime),
       });
@@ -455,6 +466,67 @@ describe("DeliveryWorker", () => {
       const res = found.find((r) => r.id === result.id);
       expect(res).toBeUndefined();
     });
+
+    it("marks result as no_target when no callbacks even if callbackUrl is set", async () => {
+      // callbackUrl is present but HTTP delivery is not implemented yet — no
+      // callbacks means there is nothing to actually invoke.
+      const { result } = await createPendingResult(store, {
+        callbackUrl: "https://example.com/hook",
+      });
+
+      const worker = new DeliveryWorker({
+        store,
+        now: () => new Date(currentTime),
+        // No callbacks registered.
+      });
+
+      await worker.tick();
+
+      const found = await store.getUndeliveredResults(100);
+      const res = found.find((r) => r.id === result.id);
+      // Should be no_target, not vacuously "delivered".
+      expect(res).toBeUndefined();
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Orphaned result handling
+  // -----------------------------------------------------------------------
+
+  describe("orphaned result handling", () => {
+    it("marks orphaned result as permanently failed without infinite retry", async () => {
+      const batch = await store.createBatch({
+        provider: "claude",
+        apiKeyId: "user_01",
+        requestCount: 1,
+      });
+      // Create a result whose requestId does not exist in the store.
+      const orphanResult = await store.createResult({
+        requestId: "req_nonexistent",
+        batchId: batch.id,
+        response: { content: "orphan" },
+      });
+
+      const worker = new DeliveryWorker({
+        store,
+        now: () => new Date(currentTime),
+      });
+      worker.addCallback(vi.fn().mockResolvedValue(undefined));
+
+      // First tick: orphan is detected, marked failed with attempts at max.
+      await worker.tick();
+
+      const all = await store.getUndeliveredResults(100);
+      const orphan = all.find((r) => r.id === orphanResult.id);
+      expect(orphan?.deliveryStatus).toBe("failed");
+      expect(orphan?.deliveryAttempts).toBeGreaterThanOrEqual(
+        orphan?.maxDeliveryAttempts ?? 5,
+      );
+
+      // Second tick: orphan is skipped (attempts >= max), so nothing processed.
+      const processed = await worker.tick();
+      expect(processed).toBe(0);
+    });
   });
 
   // -----------------------------------------------------------------------
@@ -463,7 +535,7 @@ describe("DeliveryWorker", () => {
 
   describe("callback management", () => {
     it("removeCallback removes a previously registered callback", async () => {
-      await createPendingResult(store);
+      const { result } = await createPendingResult(store);
 
       const callback = vi.fn().mockResolvedValue(undefined);
 
@@ -474,13 +546,17 @@ describe("DeliveryWorker", () => {
       worker.addCallback(callback);
       worker.removeCallback(callback);
 
-      // With no callbacks and a request that has callbackUrl, the worker
-      // would still try to deliver but there's no callback to invoke.
-      // Since there are no callbacks but the request has a callbackUrl,
-      // it should still attempt (with no callbacks to invoke, it succeeds vacuously).
+      // After removing all callbacks there is nothing to deliver to,
+      // so the result is marked no_target.
       await worker.tick();
 
       expect(callback).not.toHaveBeenCalled();
+
+      const updated = (await store.getUndeliveredResults(100)).find(
+        (r) => r.id === result.id,
+      );
+      // no_target results are excluded from getUndeliveredResults.
+      expect(updated).toBeUndefined();
     });
   });
 
@@ -636,6 +712,34 @@ describe("DeliveryWorker", () => {
         (c: unknown[]) => c[0] === "deliveries_attempted",
       );
       expect(attemptedCalls).toHaveLength(0);
+    });
+
+    it("emits delivery_worker.tick_error telemetry when tick throws", async () => {
+      const telemetry = { counter: vi.fn(), histogram: vi.fn(), event: vi.fn() };
+
+      const worker = new DeliveryWorker({
+        store,
+        telemetry,
+        tickIntervalMs: 10,
+        now: () => new Date(currentTime),
+      });
+
+      // Make the store throw on getUndeliveredResults to simulate a tick error.
+      vi.spyOn(store, "getUndeliveredResults").mockRejectedValueOnce(
+        new Error("store unavailable"),
+      );
+
+      worker.start();
+
+      // Wait for at least one tick to fire and the error to be emitted.
+      await vi.waitFor(() => {
+        expect(telemetry.event).toHaveBeenCalledWith(
+          "delivery_worker.tick_error",
+          expect.objectContaining({ message: "store unavailable" }),
+        );
+      });
+
+      worker.stop();
     });
   });
 

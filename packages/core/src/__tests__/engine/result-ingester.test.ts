@@ -407,6 +407,58 @@ describe("ResultIngester", () => {
       expect(result.duplicates).toBe(1);
       expect(result.ingested).toBe(1);
       expect(result.errors).toHaveLength(0);
+
+      // Even the duplicate's request status should be updated idempotently.
+      const req = await store.getRequest(requestIds[0]);
+      expect(req?.status).toBe("succeeded");
+    });
+
+    it("recomputes batch counters from request statuses (idempotent on restart)", async () => {
+      const { batch, requestIds } = await createEndedBatch(store, {
+        requestCount: 3,
+      });
+
+      // Simulate a previous partial run: first result already persisted and
+      // request already updated to 'succeeded'.
+      await store.createResult({
+        requestId: requestIds[0],
+        batchId: batch.id,
+        response: { content: "Hello" },
+      });
+      await store.updateRequest(requestIds[0], { status: "succeeded" });
+
+      // Ingester streams all 3 results; requestIds[0] triggers a duplicate.
+      const norushResults: NorushResult[] = requestIds.map((id) => ({
+        requestId: id,
+        response: { content: "Hello" },
+        success: true,
+      }));
+
+      const originalCreateResult = store.createResult.bind(store);
+      let callCount = 0;
+      vi.spyOn(store, "createResult").mockImplementation(async (res) => {
+        callCount++;
+        if (callCount === 1) {
+          throw new Error("duplicate key: unique constraint violation");
+        }
+        return originalCreateResult(res);
+      });
+
+      const provider = mockProvider({
+        fetchResults: vi.fn().mockReturnValue(makeResultStream(norushResults)),
+      });
+
+      const ingester = new ResultIngester({
+        store,
+        providers: new Map([["claude", provider]]),
+      });
+
+      await ingester.ingest(batch);
+
+      // Batch counters should reflect all 3 requests, not just the 2 newly ingested.
+      const updatedBatch = await store.getBatch(batch.id);
+      expect(updatedBatch?.succeededCount).toBe(3);
+      expect(updatedBatch?.failedCount).toBe(0);
     });
 
     it("captures non-duplicate errors without stopping ingestion", async () => {
