@@ -48,16 +48,16 @@ packages/core/test/
   - Uses `@anthropic-ai/sdk` for API calls.
   - `submitBatch`: POST array of `{ custom_id, params }`. Each `params` is a standard Messages API body.
   - `checkStatus`: GET batch by ID. Map `in_progress` → processing, `ended` → ended.
-  - `fetchResults`: Use SDK's `results()` iterator to stream results one at a time. Yield `NorushResult` for each.
+  - `fetchResults`: Returns `AsyncIterable<NorushResult>`. Use SDK's `results()` async iterator — yields each normalized `NorushResult` as it arrives from the API. Results are available as soon as individual requests complete, so this is true early streaming.
   - Auth via `x-api-key` header (SDK handles this).
 
 - **OpenAIBatchAdapter:**
   - Uses `openai` SDK for API calls.
   - `submitBatch`: (1) Build JSONL string from requests, (2) upload via Files API, (3) create batch referencing file ID.
   - `checkStatus`: GET batch by ID. Map `validating`/`in_progress` → processing, `completed` → ended, `expired`/`cancelled`/`failed` → terminal states.
-  - `fetchResults`: Download output file by `output_file_id`. Parse JSONL line-by-line. Also check `error_file_id` for per-request errors.
+  - `fetchResults`: Returns `AsyncIterable<NorushResult>`. Download output file by `output_file_id`, stream the download and parse JSONL line-by-line. Also check `error_file_id` for per-request errors. All results arrive at once (after the full batch completes), so this yields in bulk but uses the same interface — the ingester sees no difference.
   - Output line order may not match input — use `custom_id` to correlate.
-  - For large output files, stream the download and parse line-by-line (memory bounded).
+  - Stream the download and parse line-by-line to keep memory bounded for large output files.
 
 - **Shared concerns:**
   - `custom_id` should be the `norush_id` (or a derivative) so results map back trivially.

@@ -48,10 +48,11 @@ packages/core/test/
 
 - **Result Ingester (Phase A):**
   - Called when a batch reaches terminal status (`ended`).
-  - Calls `provider.fetchResults(ref)` which yields results one at a time.
+  - Calls `provider.fetchResults(ref)` which returns `AsyncIterable<NorushResult>`. The ingester `for await`s over it, persisting each result as it arrives.
+  - **Claude:** yields results early as individual requests within the batch complete — true streaming. The ingester persists and delivers results before the full batch is done.
+  - **OpenAI:** the adapter streams the output file line-by-line internally (task 1-05), but all results arrive only after the batch completes. The ingester uses the same iteration pattern; results just arrive in bulk after a delay.
   - For each result: `store.createResult()` immediately. Update corresponding request status (`succeeded` or `failed`).
   - Crash safety: if process dies mid-ingestion, already-persisted results survive. On restart, `request_id` UNIQUE constraint on `results` prevents duplicates.
-  - For OpenAI: the adapter streams the output file line-by-line (implemented in task 1-05), so the ingester just iterates.
 
 - **Delivery Worker (Phase B):**
   - Runs on interval (or via `tick()`).

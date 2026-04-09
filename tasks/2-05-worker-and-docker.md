@@ -49,7 +49,7 @@ packages/core/src/worker.ts   # Already exists from 1-09, verify it works in con
   
   FROM node:24-slim AS runtime
   # Copy built output + production node_modules
-  # Default entrypoint: node packages/web/build/index.js (SvelteKit Node adapter output)
+  # Default entrypoint: node packages/web/dist/server.js (SvelteKit Node adapter output, configured in svelte.config.js)
   ```
 
 - **Docker Compose** should define three services:

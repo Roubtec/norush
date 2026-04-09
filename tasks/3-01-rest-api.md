@@ -90,9 +90,9 @@ packages/web/test/
 ## Validation
 
 - `pnpm test` passes all REST API tests.
-- `curl -H "Authorization: Bearer TOKEN" POST /api/v1/requests` creates a request.
-- `curl GET /api/v1/requests/:id` returns the request with its current status.
-- Pagination: request with `limit=2` returns 2 items and a cursor for the next page.
+- `curl -X POST "http://localhost:3000/api/v1/requests" -H "Authorization: Bearer TOKEN" -H "Content-Type: application/json" -d '{"requests":[{"provider":"claude","model":"claude-3-5-haiku-20241022","params":{"messages":[{"role":"user","content":"test"}]}}]}'` creates a request.
+- `curl "http://localhost:3000/api/v1/requests/:id" -H "Authorization: Bearer TOKEN"` returns the request with its current status.
+- Pagination: `curl "http://localhost:3000/api/v1/requests?limit=2" -H "Authorization: Bearer TOKEN"` returns 2 items and a cursor for the next page.
 - Invalid token → 401. Missing required field → 400 with descriptive error.
 
 ## Review plan

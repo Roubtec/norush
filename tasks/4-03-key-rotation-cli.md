@@ -42,7 +42,7 @@ packages/core/bin/
 - **Dry-run:** Decrypt all keys with the old key to verify they're valid. Report count and any failures. Don't write anything.
 - **CLI interface:** Can use a simple argument parser (no heavy CLI framework needed). The command connects to the database via `DATABASE_URL`.
 - **Safety:** Require both `--old-key` and `--new-key` to prevent accidents. Refuse to run if they're the same.
-- Add a `bin` entry in `package.json` so `npx norush rotate-key` works after npm publish.
+- **Development-first invocation:** Run directly via `npx tsx packages/core/src/cli/rotate-key.ts --old-key <hex> --new-key <hex>` during development and testing. A `bin` entry and published `npx norush rotate-key` shorthand will be added in task 4-04 when the package is published.
 
 ### Dependencies
 
@@ -51,7 +51,7 @@ packages/core/bin/
 
 ## Acceptance criteria
 
-- `norush rotate-key --old-key X --new-key Y` re-encrypts all API keys.
+- `npx tsx packages/core/src/cli/rotate-key.ts --old-key X --new-key Y` re-encrypts all API keys.
 - All keys decrypt correctly with the new key after rotation.
 - Operation is atomic: partial failure rolls back.
 - `--dry-run` reports success/failure without modifying data.
@@ -61,7 +61,7 @@ packages/core/bin/
 
 ## Validation
 
-- Store several API keys with one master key. Run rotation. Verify all keys decrypt with new key.
+- Store several API keys with one master key. Run `npx tsx packages/core/src/cli/rotate-key.ts --old-key X --new-key Y`. Verify all keys decrypt with new key.
 - Run with wrong old key → verify abort with clear error message.
 - Run `--dry-run` → verify no database changes.
 - After rotation, verify the application works with the new `NORUSH_MASTER_KEY`.

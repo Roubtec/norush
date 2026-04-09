@@ -30,12 +30,15 @@ This task delivers the final production-readiness items.
 ```
 packages/core/src/
 ├── telemetry/
-│   ├── prometheus.ts         # PrometheusTelemetry
-│   └── opentelemetry.ts      # OpenTelemetryTelemetry
+│   ├── prometheus.ts         # PrometheusTelemetry adapter (TelemetryHook)
+│   └── opentelemetry.ts      # OpenTelemetryTelemetry adapter (TelemetryHook)
 packages/core/test/
 └── telemetry/
     ├── prometheus.test.ts
     └── opentelemetry.test.ts
+packages/web/src/routes/
+└── metrics/
+    └── +server.ts            # GET /metrics — serves Prometheus-format text via prom-client registry
 docs/                          # Documentation
 ├── getting-started.md
 ├── configuration.md
@@ -53,7 +56,7 @@ infra/
 
 ## Implementation notes
 
-- **PrometheusTelemetry:** Use `prom-client` library. Register counters, histograms, and gauges matching PLAN.md Section 6.7 metric categories. Expose a `/metrics` endpoint in the web server.
+- **PrometheusTelemetry:** Use `prom-client` library. Register counters, histograms, and gauges matching PLAN.md Section 6.7 metric categories. The `GET /metrics` SvelteKit route at `packages/web/src/routes/metrics/+server.ts` calls `registry.metrics()` and returns the Prometheus-format text with `Content-Type: text/plain; version=0.0.4`.
 - **OpenTelemetryTelemetry:** Use `@opentelemetry/api`. Create meters and instruments for each metric. Compatible with any OTLP-compatible backend.
 - **Documentation:** Can be Markdown files in `docs/` (rendered by GitHub) or a simple static site. Cover:
   - Getting started: install, configure, first batch
@@ -73,7 +76,7 @@ infra/
 ## Acceptance criteria
 
 - `PrometheusTelemetry` and `OpenTelemetryTelemetry` implement `TelemetryHook` correctly.
-- `/metrics` endpoint exposes Prometheus-format metrics.
+- `GET /metrics` route (`packages/web/src/routes/metrics/+server.ts`) exposes Prometheus-format metrics from `prom-client` registry.
 - Documentation covers getting started, configuration, API, deployment, and architecture.
 - Azure Bicep template deploys a working norush instance.
 - Examples are self-contained and runnable.
