@@ -234,6 +234,31 @@ export interface UsageStats {
 }
 
 // ---------------------------------------------------------------------------
+// Event log
+// ---------------------------------------------------------------------------
+
+/** Entity types tracked in the event log. */
+export type EventEntityType = "batch" | "request" | "result";
+
+/** Fields required to create a new event log entry. */
+export interface NewEvent {
+  entityType: EventEntityType;
+  entityId: string;
+  event: string;
+  details?: Record<string, unknown> | null;
+}
+
+/** Full event log record as stored in the database. */
+export interface EventLogEntry {
+  id: string;
+  entityType: EventEntityType;
+  entityId: string;
+  event: string;
+  details: Record<string, unknown> | null;
+  createdAt: Date;
+}
+
+// ---------------------------------------------------------------------------
 // Health score (rate limiting)
 // ---------------------------------------------------------------------------
 

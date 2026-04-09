@@ -31,6 +31,9 @@ export type {
   PollContext,
   DateRange,
   UsageStats,
+  EventEntityType,
+  NewEvent,
+  EventLogEntry,
   HealthScore,
 } from "./types.js";
 
@@ -153,6 +156,23 @@ export {
   maskApiKey,
   type EncryptedPayload,
 } from "./crypto/index.js";
+
+// ---------------------------------------------------------------------------
+// Webhooks
+// ---------------------------------------------------------------------------
+
+export {
+  signWebhookPayload,
+  verifyWebhookSignature,
+} from "./webhooks/sign.js";
+
+export {
+  deliverWebhook,
+  buildWebhookPayload,
+  type WebhookPayload,
+  type DeliverWebhookOptions,
+  type DeliveryResult,
+} from "./webhooks/deliver.js";
 
 // ---------------------------------------------------------------------------
 // Telemetry implementations

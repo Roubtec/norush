@@ -11,7 +11,9 @@ import type { Store, ResultDeliveryUpdate } from "../interfaces/store.js";
 import type {
   Batch,
   DateRange,
+  EventLogEntry,
   NewBatch,
+  NewEvent,
   NewRequest,
   NewResult,
   Request,
@@ -23,6 +25,7 @@ export class MemoryStore implements Store {
   private requests = new Map<string, Request>();
   private batches = new Map<string, Batch>();
   private results = new Map<string, Result>();
+  private events: EventLogEntry[] = [];
 
   // -- Request lifecycle ----------------------------------------------------
 
@@ -242,6 +245,26 @@ export class MemoryStore implements Store {
     if (!existing) throw new Error(`Result not found: ${id}`);
     existing.deliveryStatus = "delivered";
     existing.deliveredAt = new Date();
+  }
+
+  // -- Event log ------------------------------------------------------------
+
+  async logEvent(event: NewEvent): Promise<EventLogEntry> {
+    const entry: EventLogEntry = {
+      id: ulid(),
+      entityType: event.entityType,
+      entityId: event.entityId,
+      event: event.event,
+      details: event.details ?? null,
+      createdAt: new Date(),
+    };
+    this.events.push(entry);
+    return structuredClone(entry);
+  }
+
+  /** Get all event log entries (test helper, not part of Store interface). */
+  getEvents(): EventLogEntry[] {
+    return structuredClone(this.events);
   }
 
   // -- Retention ------------------------------------------------------------

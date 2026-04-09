@@ -2,7 +2,9 @@ import type {
   Batch,
   BatchId,
   DateRange,
+  EventLogEntry,
   NewBatch,
+  NewEvent,
   NewRequest,
   NewResult,
   NorushId,
@@ -107,6 +109,11 @@ export interface Store {
 
   /** Remove prompt/response content from records older than `before`. Returns count of scrubbed records. */
   scrubExpiredContent(before: Date): Promise<number>;
+
+  // -- Event log ------------------------------------------------------------
+
+  /** Write an entry to the event log. */
+  logEvent(event: NewEvent): Promise<EventLogEntry>;
 
   // -- Telemetry / analytics ------------------------------------------------
 

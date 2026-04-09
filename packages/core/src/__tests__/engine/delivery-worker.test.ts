@@ -26,6 +26,13 @@ function makeNewRequest(overrides: Partial<NewRequest> = {}): NewRequest {
   };
 }
 
+/** A no-op fetch mock that always returns 200 OK. */
+function mockFetchOk(): typeof globalThis.fetch {
+  return vi.fn().mockResolvedValue(
+    new Response("OK", { status: 200, statusText: "OK" }),
+  );
+}
+
 /**
  * Create a request and a pending (undelivered) result in the store.
  */
@@ -33,8 +40,11 @@ async function createPendingResult(
   store: MemoryStore,
   overrides: { callbackUrl?: string | null; maxDeliveryAttempts?: number } = {},
 ): Promise<{ request: Request; result: Result }> {
+  const callbackUrl = "callbackUrl" in overrides
+    ? overrides.callbackUrl
+    : "https://example.com/cb";
   const request = await store.createRequest(
-    makeNewRequest({ callbackUrl: overrides.callbackUrl ?? "https://example.com/cb" }),
+    makeNewRequest({ callbackUrl }),
   );
   const batch = await store.createBatch({
     provider: "claude",
@@ -93,6 +103,7 @@ describe("DeliveryWorker", () => {
       const worker = new DeliveryWorker({
         store,
         now: () => new Date(currentTime),
+        fetchFn: mockFetchOk(),
       });
       worker.addCallback(callback);
 
@@ -113,6 +124,7 @@ describe("DeliveryWorker", () => {
       const worker = new DeliveryWorker({
         store,
         now: () => new Date(currentTime),
+        fetchFn: mockFetchOk(),
       });
       worker.addCallback(callback);
 
@@ -134,6 +146,7 @@ describe("DeliveryWorker", () => {
       const worker = new DeliveryWorker({
         store,
         now: () => new Date(currentTime),
+        fetchFn: mockFetchOk(),
       });
       worker.addCallback(callback);
 
@@ -152,6 +165,7 @@ describe("DeliveryWorker", () => {
       const worker = new DeliveryWorker({
         store,
         now: () => new Date(currentTime),
+        fetchFn: mockFetchOk(),
       });
       worker.addCallback(cb1);
       worker.addCallback(cb2);
@@ -171,6 +185,7 @@ describe("DeliveryWorker", () => {
       const worker = new DeliveryWorker({
         store,
         now: () => new Date(currentTime),
+        fetchFn: mockFetchOk(),
       });
       worker.addCallback(callback);
       worker.on("delivery:success", handler);
@@ -200,6 +215,7 @@ describe("DeliveryWorker", () => {
       const worker = new DeliveryWorker({
         store,
         now: () => new Date(currentTime),
+        fetchFn: mockFetchOk(),
       });
       worker.addCallback(callback);
 
@@ -305,6 +321,7 @@ describe("DeliveryWorker", () => {
       const worker = new DeliveryWorker({
         store,
         now: () => new Date(currentTime),
+        fetchFn: mockFetchOk(),
       });
       worker.addCallback(callback);
 
@@ -328,6 +345,7 @@ describe("DeliveryWorker", () => {
       const worker = new DeliveryWorker({
         store,
         now: () => new Date(currentTime),
+        fetchFn: mockFetchOk(),
       });
       worker.addCallback(callback);
 
@@ -346,6 +364,7 @@ describe("DeliveryWorker", () => {
       const worker = new DeliveryWorker({
         store,
         now: () => new Date(currentTime),
+        fetchFn: mockFetchOk(),
       });
       worker.addCallback(callback);
       worker.on("delivery:failure", handler);
@@ -434,6 +453,7 @@ describe("DeliveryWorker", () => {
         store,
         telemetry,
         now: () => new Date(currentTime),
+        fetchFn: mockFetchOk(),
       });
       worker.addCallback(callback);
 
@@ -467,9 +487,8 @@ describe("DeliveryWorker", () => {
       expect(res).toBeUndefined();
     });
 
-    it("marks result as no_target when no callbacks even if callbackUrl is set", async () => {
-      // callbackUrl is present but HTTP delivery is not implemented yet — no
-      // callbacks means there is nothing to actually invoke.
+    it("delivers via webhook when callbackUrl is set and no callbacks registered", async () => {
+      const fetchFn = mockFetchOk();
       const { result } = await createPendingResult(store, {
         callbackUrl: "https://example.com/hook",
       });
@@ -477,14 +496,17 @@ describe("DeliveryWorker", () => {
       const worker = new DeliveryWorker({
         store,
         now: () => new Date(currentTime),
+        fetchFn,
         // No callbacks registered.
       });
 
       await worker.tick();
 
+      // Webhook delivery should have been attempted.
+      expect(fetchFn).toHaveBeenCalledOnce();
+      // Result should be delivered (not in undelivered).
       const found = await store.getUndeliveredResults(100);
       const res = found.find((r) => r.id === result.id);
-      // Should be no_target, not vacuously "delivered".
       expect(res).toBeUndefined();
     });
   });
@@ -542,6 +564,7 @@ describe("DeliveryWorker", () => {
       const worker = new DeliveryWorker({
         store,
         now: () => new Date(currentTime),
+        fetchFn: mockFetchOk(),
       });
       worker.addCallback(callback);
       worker.removeCallback(callback);
@@ -574,6 +597,7 @@ describe("DeliveryWorker", () => {
       const worker = new DeliveryWorker({
         store,
         now: () => new Date(currentTime),
+        fetchFn: mockFetchOk(),
       });
       worker.addCallback(callback);
       worker.on("delivery:success", handler);
@@ -592,6 +616,7 @@ describe("DeliveryWorker", () => {
       const worker = new DeliveryWorker({
         store,
         now: () => new Date(currentTime),
+        fetchFn: mockFetchOk(),
       });
       worker.addCallback(callback);
       worker.on("delivery:success", () => {
@@ -621,6 +646,7 @@ describe("DeliveryWorker", () => {
       const worker = new DeliveryWorker({
         store,
         now: () => new Date(currentTime),
+        fetchFn: mockFetchOk(),
       });
       worker.addCallback(callback);
 
@@ -686,6 +712,7 @@ describe("DeliveryWorker", () => {
         store,
         telemetry,
         now: () => new Date(currentTime),
+        fetchFn: mockFetchOk(),
       });
       worker.addCallback(callback);
 
@@ -740,6 +767,293 @@ describe("DeliveryWorker", () => {
       });
 
       worker.stop();
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Webhook delivery integration
+  // -----------------------------------------------------------------------
+
+  describe("webhook delivery", () => {
+    it("POSTs to callbackUrl when set on the request", async () => {
+      const fetchFn = mockFetchOk();
+      await createPendingResult(store);
+
+      const worker = new DeliveryWorker({
+        store,
+        now: () => new Date(currentTime),
+        fetchFn,
+      });
+
+      await worker.tick();
+
+      expect(fetchFn).toHaveBeenCalledOnce();
+      const [url, init] = (fetchFn as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit];
+      expect(url).toBe("https://example.com/cb");
+      expect(init.method).toBe("POST");
+    });
+
+    it("does not POST when callbackUrl is null", async () => {
+      const fetchFn = mockFetchOk();
+      await createPendingResult(store, { callbackUrl: null });
+
+      // Register a callback so it's not marked as no_target.
+      const callback = vi.fn().mockResolvedValue(undefined);
+
+      const worker = new DeliveryWorker({
+        store,
+        now: () => new Date(currentTime),
+        fetchFn,
+      });
+      worker.addCallback(callback);
+
+      await worker.tick();
+
+      expect(fetchFn).not.toHaveBeenCalled();
+      expect(callback).toHaveBeenCalledOnce();
+    });
+
+    it("includes HMAC signature when webhookSecret is set", async () => {
+      const fetchFn = mockFetchOk();
+      const request = await store.createRequest(
+        makeNewRequest({
+          callbackUrl: "https://example.com/hook",
+          webhookSecret: "my-secret",
+        }),
+      );
+      const batch = await store.createBatch({
+        provider: "claude",
+        apiKeyId: "user_01",
+        requestCount: 1,
+      });
+      await store.createResult({
+        requestId: request.id,
+        batchId: batch.id,
+        response: { content: "Hello" },
+        inputTokens: 10,
+        outputTokens: 20,
+      });
+
+      const worker = new DeliveryWorker({
+        store,
+        now: () => new Date(currentTime),
+        fetchFn,
+      });
+
+      await worker.tick();
+
+      const [, init] = (fetchFn as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit];
+      const headers = init.headers as Record<string, string>;
+      expect(headers["X-Norush-Signature"]).toBeDefined();
+      expect(headers["X-Norush-Signature"]).toMatch(/^sha256=[a-f0-9]{64}$/);
+    });
+
+    it("omits signature when no webhookSecret", async () => {
+      const fetchFn = mockFetchOk();
+      await createPendingResult(store);
+
+      const worker = new DeliveryWorker({
+        store,
+        now: () => new Date(currentTime),
+        fetchFn,
+      });
+
+      await worker.tick();
+
+      const [, init] = (fetchFn as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit];
+      const headers = init.headers as Record<string, string>;
+      expect(headers["X-Norush-Signature"]).toBeUndefined();
+    });
+
+    it("retries on webhook delivery failure (non-2xx)", async () => {
+      const fetchFn = vi.fn().mockResolvedValue(
+        new Response("Server Error", { status: 500, statusText: "Internal Server Error" }),
+      );
+
+      const { result } = await createPendingResult(store);
+
+      const worker = new DeliveryWorker({
+        store,
+        now: () => new Date(currentTime),
+        fetchFn: fetchFn as typeof globalThis.fetch,
+      });
+
+      await worker.tick();
+
+      const undelivered = await store.getUndeliveredResults(100);
+      const found = undelivered.find((r) => r.id === result.id);
+      expect(found).toBeDefined();
+      expect(found?.deliveryAttempts).toBe(1);
+      expect(found?.lastDeliveryError).toMatch(/500/);
+    });
+
+    it("marks as failed after max webhook delivery attempts", async () => {
+      const fetchFn = vi.fn().mockResolvedValue(
+        new Response("Error", { status: 502, statusText: "Bad Gateway" }),
+      );
+
+      const { result } = await createPendingResult(store, { maxDeliveryAttempts: 2 });
+
+      const worker = new DeliveryWorker({
+        store,
+        now: () => new Date(currentTime),
+        fetchFn: fetchFn as typeof globalThis.fetch,
+      });
+
+      // First attempt
+      await worker.tick();
+      currentTime += MAX_DELAY_MS + 1;
+
+      // Second attempt (exhausts max attempts)
+      await worker.tick();
+
+      const undelivered = await store.getUndeliveredResults(100);
+      const found = undelivered.find((r) => r.id === result.id);
+      expect(found?.deliveryStatus).toBe("failed");
+      expect(found?.deliveryAttempts).toBe(2);
+    });
+
+    it("includes norush_id in the webhook payload", async () => {
+      const fetchFn = mockFetchOk();
+      const { request } = await createPendingResult(store);
+
+      const worker = new DeliveryWorker({
+        store,
+        now: () => new Date(currentTime),
+        fetchFn,
+      });
+
+      await worker.tick();
+
+      const [, init] = (fetchFn as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit];
+      const body = JSON.parse(init.body as string) as Record<string, unknown>;
+      expect(body.norush_id).toBe(request.id);
+    });
+
+    it("includes X-Norush-Attempt and X-Norush-Request-Id headers", async () => {
+      const fetchFn = mockFetchOk();
+      const { request } = await createPendingResult(store);
+
+      const worker = new DeliveryWorker({
+        store,
+        now: () => new Date(currentTime),
+        fetchFn,
+      });
+
+      await worker.tick();
+
+      const [, init] = (fetchFn as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit];
+      const headers = init.headers as Record<string, string>;
+      expect(headers["X-Norush-Attempt"]).toBe("1");
+      expect(headers["X-Norush-Request-Id"]).toBe(request.id);
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Event logging
+  // -----------------------------------------------------------------------
+
+  describe("event logging", () => {
+    it("logs a webhook_delivered event on successful delivery", async () => {
+      const { result } = await createPendingResult(store);
+
+      const callback = vi.fn().mockResolvedValue(undefined);
+
+      const worker = new DeliveryWorker({
+        store,
+        now: () => new Date(currentTime),
+        fetchFn: mockFetchOk(),
+      });
+      worker.addCallback(callback);
+
+      await worker.tick();
+
+      const events = store.getEvents();
+      const deliveredEvent = events.find(
+        (e) => e.event === "delivery_succeeded" && e.entityId === result.id,
+      );
+      expect(deliveredEvent).toBeDefined();
+      expect(deliveredEvent?.entityType).toBe("result");
+      expect(deliveredEvent?.details?.requestId).toBe(result.requestId);
+      expect(deliveredEvent?.details?.attempt).toBe(1);
+    });
+
+    it("logs a webhook_delivery_failed event on retryable failure", async () => {
+      const { result } = await createPendingResult(store);
+
+      const callback = vi.fn().mockRejectedValue(new Error("Network error"));
+
+      const worker = new DeliveryWorker({
+        store,
+        now: () => new Date(currentTime),
+        fetchFn: mockFetchOk(),
+      });
+      worker.addCallback(callback);
+
+      await worker.tick();
+
+      const events = store.getEvents();
+      const failedEvent = events.find(
+        (e) =>
+          e.event === "delivery_failed" && e.entityId === result.id,
+      );
+      expect(failedEvent).toBeDefined();
+      expect(failedEvent?.entityType).toBe("result");
+      expect(failedEvent?.details?.error).toBe("Network error");
+      expect(failedEvent?.details?.attempt).toBe(1);
+    });
+
+    it("logs a webhook_delivery_exhausted event after max attempts", async () => {
+      const { result } = await createPendingResult(store, { maxDeliveryAttempts: 1 });
+
+      const callback = vi.fn().mockRejectedValue(new Error("Always fails"));
+
+      const worker = new DeliveryWorker({
+        store,
+        now: () => new Date(currentTime),
+        fetchFn: mockFetchOk(),
+      });
+      worker.addCallback(callback);
+
+      await worker.tick();
+
+      const events = store.getEvents();
+      const exhaustedEvent = events.find(
+        (e) =>
+          e.event === "delivery_exhausted" &&
+          e.entityId === result.id,
+      );
+      expect(exhaustedEvent).toBeDefined();
+      expect(exhaustedEvent?.entityType).toBe("result");
+      expect(exhaustedEvent?.details?.attempts).toBe(1);
+      expect(exhaustedEvent?.details?.error).toBe("Always fails");
+    });
+
+    it("logs events for webhook HTTP delivery failures", async () => {
+      const fetchFn = vi.fn().mockResolvedValue(
+        new Response("Server Error", {
+          status: 500,
+          statusText: "Internal Server Error",
+        }),
+      );
+
+      const { result } = await createPendingResult(store);
+
+      const worker = new DeliveryWorker({
+        store,
+        now: () => new Date(currentTime),
+        fetchFn: fetchFn as typeof globalThis.fetch,
+      });
+
+      await worker.tick();
+
+      const events = store.getEvents();
+      const failedEvent = events.find(
+        (e) =>
+          e.event === "delivery_failed" && e.entityId === result.id,
+      );
+      expect(failedEvent).toBeDefined();
+      expect(failedEvent?.details?.error).toMatch(/500/);
     });
   });
 

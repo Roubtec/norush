@@ -18,6 +18,7 @@ import type { Store } from "../interfaces/store.js";
 import type { TelemetryHook } from "../interfaces/telemetry.js";
 import type { Request, Result } from "../types.js";
 import { NoopTelemetry } from "../telemetry/noop.js";
+import { deliverWebhook, buildWebhookPayload } from "../webhooks/deliver.js";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -72,6 +73,10 @@ export interface DeliveryWorkerOptions {
   telemetry?: TelemetryHook;
   /** Clock function for testability. */
   now?: () => Date;
+  /** Optional fetch implementation for webhook delivery (testing). */
+  fetchFn?: typeof globalThis.fetch;
+  /** Webhook request timeout in milliseconds. Default: 30_000. */
+  webhookTimeoutMs?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -85,6 +90,8 @@ export class DeliveryWorker {
   private readonly tickIntervalMs: number;
   private readonly telemetry: TelemetryHook;
   private readonly now: () => Date;
+  private readonly fetchFn: typeof globalThis.fetch;
+  private readonly webhookTimeoutMs: number;
 
   /** Registered delivery callbacks. */
   private callbacks: DeliveryCallback[] = [];
@@ -109,6 +116,8 @@ export class DeliveryWorker {
     this.tickIntervalMs = options.tickIntervalMs ?? 5_000;
     this.telemetry = options.telemetry ?? new NoopTelemetry();
     this.now = options.now ?? (() => new Date());
+    this.fetchFn = options.fetchFn ?? globalThis.fetch;
+    this.webhookTimeoutMs = options.webhookTimeoutMs ?? 30_000;
   }
 
   // -------------------------------------------------------------------------
@@ -270,11 +279,9 @@ export class DeliveryWorker {
       return;
     }
 
-    // If there are no registered callbacks there is nothing to deliver to.
-    // Mark as no_target regardless of callbackUrl (HTTP delivery via
-    // callbackUrl is not yet implemented — treating it as no_target prevents
-    // silently marking results delivered when no delivery actually occurred).
-    if (this.callbacks.length === 0) {
+    // If there are no registered callbacks and no callbackUrl, there is
+    // nothing to deliver to — mark as no_target.
+    if (this.callbacks.length === 0 && !request.callbackUrl) {
       await this.store.updateResult(result.id, {
         deliveryStatus: "no_target",
       });
@@ -287,8 +294,35 @@ export class DeliveryWorker {
         await callback(result, request);
       }
 
+      // POST to webhook URL if the request has a callback_url.
+      if (request.callbackUrl) {
+        const payload = buildWebhookPayload(result, request);
+        await deliverWebhook({
+          callbackUrl: request.callbackUrl,
+          payload,
+          webhookSecret: request.webhookSecret,
+          attempt: result.deliveryAttempts + 1,
+          requestId: request.id,
+          fetchFn: this.fetchFn,
+          timeoutMs: this.webhookTimeoutMs,
+        });
+      }
+
       // Delivery succeeded — mark delivered.
       await this.store.markDelivered(result.id);
+
+      // Log the successful delivery event.
+      await this.store.logEvent({
+        entityType: "result",
+        entityId: result.id,
+        event: "delivery_succeeded",
+        details: {
+          requestId: result.requestId,
+          attempt: result.deliveryAttempts + 1,
+          callbackUrl: request.callbackUrl ?? undefined,
+          webhookAttempted: !!request.callbackUrl,
+        },
+      });
 
       this.emit("delivery:success", {
         resultId: result.id,
@@ -312,6 +346,20 @@ export class DeliveryWorker {
           lastDeliveryError: message,
         });
 
+        // Log the exhausted delivery event.
+        await this.store.logEvent({
+          entityType: "result",
+          entityId: result.id,
+          event: "delivery_exhausted",
+          details: {
+            requestId: result.requestId,
+            attempts,
+            error: message,
+            callbackUrl: request.callbackUrl ?? undefined,
+            webhookAttempted: !!request.callbackUrl,
+          },
+        });
+
         this.emit("delivery:exhausted", {
           resultId: result.id,
           requestId: result.requestId,
@@ -329,6 +377,21 @@ export class DeliveryWorker {
           deliveryAttempts: attempts,
           lastDeliveryError: message,
           nextDeliveryAt,
+        });
+
+        // Log the failed delivery attempt.
+        await this.store.logEvent({
+          entityType: "result",
+          entityId: result.id,
+          event: "delivery_failed",
+          details: {
+            requestId: result.requestId,
+            attempt: attempts,
+            error: message,
+            nextDeliveryAt: nextDeliveryAt.toISOString(),
+            callbackUrl: request.callbackUrl ?? undefined,
+            webhookAttempted: !!request.callbackUrl,
+          },
         });
 
         this.emit("delivery:failure", {
