@@ -107,11 +107,24 @@ async function main(): Promise<void> {
 
     console.log(`Received ${signal}, shutting down gracefully...`);
 
+    // Force-exit after 30 s in case shutdown hangs (e.g., stuck provider call).
+    const forceExitTimer = setTimeout(() => {
+      console.error("Shutdown timed out after 30 s, forcing exit.");
+      process.exit(1);
+    }, 30_000);
+    // Don't let the timer prevent normal exit.
+    forceExitTimer.unref();
+
     try {
       await engine.stop();
+      // Close the database connection pool after the engine has flushed so
+      // no in-flight queries are cut off.
+      await sql.end();
+      clearTimeout(forceExitTimer);
       console.log("Engine stopped. Exiting.");
     } catch (error) {
       console.error("Error during shutdown:", error);
+      clearTimeout(forceExitTimer);
       process.exit(1);
     }
 

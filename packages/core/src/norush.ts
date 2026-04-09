@@ -205,6 +205,12 @@ export function createNorush(options: NorushConfig): NorushEngine {
   });
 
   // 5. Wire event flow: tracker completion -> ingester -> repackager.
+  //
+  // Fire-and-forget: the event emitter calls handlers synchronously and never
+  // awaits their return value, so async work must be self-contained. This is
+  // intentional — the ingest+repackage pipeline is crash-safe and idempotent,
+  // so any in-flight work that is lost on shutdown will be re-triggered on the
+  // next tick when the store still shows the batch as "ended".
   statusTracker.on("batch:completed", (data) => {
     const batchId = data.batchId as string;
     void (async () => {
@@ -231,6 +237,7 @@ export function createNorush(options: NorushConfig): NorushEngine {
   });
 
   // Also handle expired batches — repackage their requests.
+  // Fire-and-forget for the same reasons as batch:completed above.
   statusTracker.on("batch:expired", (data) => {
     const batchId = data.batchId as string;
     void (async () => {
@@ -238,13 +245,14 @@ export function createNorush(options: NorushConfig): NorushEngine {
         const batch = await store.getBatch(batchId);
         if (!batch) return;
 
-        // Mark all batched requests as expired so repackager can process them.
+        // Mark all batched/processing requests as expired so repackager can
+        // process them. Parallelise to avoid O(n) sequential round-trips.
         const requests = await store.getRequestsByBatchId(batchId);
-        for (const req of requests) {
-          if (req.status === "batched" || req.status === "processing") {
-            await store.updateRequest(req.id, { status: "expired" });
-          }
-        }
+        await Promise.all(
+          requests
+            .filter((req) => req.status === "batched" || req.status === "processing")
+            .map((req) => store.updateRequest(req.id, { status: "expired" })),
+        );
 
         await repackager.repackage(batch);
       } catch (error) {
@@ -323,6 +331,17 @@ export function createNorush(options: NorushConfig): NorushEngine {
 
 /**
  * Build a Map<string, Provider> from either a pre-built map or a config object.
+ *
+ * Keys in the provider map must be either `"provider"` (shared fallback) or
+ * `"provider::userId"` (per-user adapter for multi-tenant routing). The engine
+ * resolves adapters by trying `"provider::request.userId"` first, then falling
+ * back to `"provider"`.
+ *
+ * When building from a config object, the first key for each provider is
+ * registered as the shared fallback (`"claude"`, `"openai"`, etc.). This
+ * covers single-key and single-tenant setups. For multi-tenant deployments
+ * where different users should use different API keys, pass a pre-built
+ * `Map<string, Provider>` with `"provider::userId"` entries instead.
  */
 function buildProviderMap(
   input: Map<string, Provider> | Partial<Record<ProviderName, ProviderKeyConfig[]>>,
@@ -336,23 +355,21 @@ function buildProviderMap(
   if (input.claude) {
     for (const keyConfig of input.claude) {
       const adapter = new ClaudeAdapter({ apiKey: keyConfig.apiKey });
-      const label = keyConfig.label ?? "default";
-      // Register under provider name for fallback, and under label for specificity.
+      // Register as "claude" fallback only — the engine resolves adapters by
+      // "claude::userId", not "claude::label". Per-user routing requires a
+      // pre-built Map keyed by "claude::userId".
       if (!map.has("claude")) {
         map.set("claude", adapter);
       }
-      map.set(`claude::${label}`, adapter);
     }
   }
 
   if (input.openai) {
     for (const keyConfig of input.openai) {
       const adapter = new OpenAIBatchAdapter({ apiKey: keyConfig.apiKey });
-      const label = keyConfig.label ?? "default";
       if (!map.has("openai")) {
         map.set("openai", adapter);
       }
-      map.set(`openai::${label}`, adapter);
     }
   }
 

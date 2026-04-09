@@ -124,13 +124,18 @@ export class RequestQueue {
 
   /**
    * Stop the periodic flush timer and optionally perform a final flush.
+   *
+   * The final flush calls `batchManager.flush()` directly (same as `tick()`),
+   * so it also picks up requests already in the store — e.g., requests
+   * re-queued by the Repackager or written by a previous process instance —
+   * regardless of the in-memory `pendingCount`.
    */
   async stop(options?: { finalFlush?: boolean }): Promise<void> {
     if (this.flushTimer !== null) {
       clearInterval(this.flushTimer);
       this.flushTimer = null;
     }
-    if (options?.finalFlush && this.pendingCount > 0) {
+    if (options?.finalFlush) {
       await this.triggerFlush();
     }
   }
