@@ -336,7 +336,7 @@ az containerapp job create \
   --replica-timeout 300 \
   --cpu 0.25 \
   --memory 0.5Gi \
-  --command "node" "-e" "import('./packages/core/dist/store/migrate.js').then(m => m.migrate())" \
+  --command "node" "-e" "import('postgres').then(async ({ default: postgres }) => { const sql = postgres(process.env.DATABASE_URL); try { const m = await import('./packages/core/dist/store/migrate.js'); await m.migrate(sql); } finally { await sql.end(); } })" \
   --env-vars "DATABASE_URL=secretref:database-url" \
   --secrets "database-url=YOUR_DATABASE_URL"
 

@@ -24,7 +24,6 @@ import postgres from "postgres";
 import { createNorush, type NorushConfig } from "./norush.js";
 import { migrate } from "./store/migrate.js";
 import { PostgresStore } from "./store/postgres.js";
-import { migrate } from "./store/migrate.js";
 import { ConsoleTelemetry } from "./telemetry/console.js";
 import type { ProviderName } from "./types.js";
 import type { ProviderKeyConfig } from "./config/types.js";
