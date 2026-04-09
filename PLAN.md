@@ -345,6 +345,9 @@ The natural question: why wouldn't someone just call the batch API directly?
 | Auth | WorkOS AuthKit | 1M MAUs free; social login, passkeys, MFA, enterprise SSO (SAML, Entra) out of the box; TS SDK |
 | Package manager | pnpm | Fast, disk-efficient, good monorepo support |
 | Monorepo | pnpm workspaces | Keep `@norush/core` and `@norush/web` in one repo |
+| PG client | `postgres.js` (Porsager) | ESM-native, zero deps, tagged template queries, no ORM |
+| Migrations | Raw SQL files + minimal runner | Plain `.sql` files, simple runner with `schema_migrations` table, no framework deps |
+| Docker | Single image, two entrypoints | One build/test/push pipeline; web and worker share deps; split later if needed |
 | Provider SDKs | `@anthropic-ai/sdk`, `openai` | Official SDKs; handle auth, retries, types |
 | Testing | Vitest | Fast, TS-native, compatible with Node APIs |
 
@@ -1078,8 +1081,16 @@ interface Store {
 
 | Adapter | Use case | Notes |
 |---------|----------|-------|
-| `MemoryStore` | Unit tests | No persistence; fastest; no external deps |
-| `PostgresStore` | Dev, CI, staging, production | Uses `postgres.js`; connection string via `DATABASE_URL` |
+| `MemoryStore` | Unit tests; ephemeral scripts | No persistence; fastest; no external deps. **Not crash-safe** — if the process dies, in-flight state is lost. |
+| `PostgresStore` | Dev, CI, staging, production | Uses `postgres.js` (Porsager); connection string via `DATABASE_URL` |
+
+`MemoryStore` is a first-class citizen for two scenarios: (1) tests that need
+fast, isolated, deterministic storage without Docker or Postgres, and (2)
+ephemeral scripts where a developer batches a one-shot workload, waits for
+results in-process, and exits. Consumers should understand that MemoryStore
+provides **no crash recovery** — if the process dies mid-batch, all state is
+lost. For any workload where losing in-flight requests matters, use
+`PostgresStore`.
 
 **Local dev setup:**
 ```bash
@@ -1234,13 +1245,117 @@ failures is a service to the user, not just a defense for us.
 
 ---
 
-## 16. Remaining Open Questions
+## 16. Additional Resolved Decisions (Round 5)
 
-- **PostgreSQL client library:** `postgres.js` (Porsager) vs. `pg` (node-postgres)?
-  `postgres.js` is newer, has tagged template queries, and is ESM-native.
-  `pg` is battle-tested with a larger ecosystem. Leaning toward `postgres.js`.
-- **Migration tooling:** Raw SQL files with a simple runner? Or a library like
-  `node-pg-migrate` / `dbmate`? Needs to be lightweight and not hide the SQL.
-- **Dockerfile structure:** Multi-stage build for the monorepo. Web container
-  and worker container from the same image with different entrypoints, or
-  separate images?
+### 16.1 PostgreSQL Client: `postgres.js` (Porsager)
+
+**Decision:** Use `postgres.js` as the PostgreSQL client library.
+
+- ESM-native, zero dependencies, tagged template queries for safe
+  parameterized SQL.
+- Active maintenance, strong TypeScript support.
+- Tagged templates make SQL injection structurally impossible without
+  needing an ORM or query builder:
+  ```ts
+  const rows = await sql`
+    SELECT * FROM requests WHERE user_id = ${userId} AND status = ${status}
+  `;
+  ```
+- We write our own SQL — no abstraction layer hiding the queries.
+
+### 16.2 Migrations: Raw SQL Files with Minimal Runner
+
+**Decision:** Numbered raw SQL migration files executed by a lightweight
+runner. No ORM migration framework.
+
+**Structure:**
+```
+packages/core/migrations/
+  001_initial_schema.sql
+  002_add_health_score_fields.sql
+  ...
+```
+
+**Runner:** A small module (~50 lines) that:
+1. Reads the `migrations` directory.
+2. Compares against a `schema_migrations` table (stores applied filenames).
+3. Applies unapplied migrations in order, inside a transaction.
+4. Callable as `norush migrate` CLI command or programmatically.
+
+**Rationale:** We want to see and control the SQL. Migration libraries like
+`node-pg-migrate` or `dbmate` are fine tools, but they add dependencies and
+opinions we don't need. A simple runner that executes `.sql` files in order
+is trivial to write, easy to debug, and keeps migrations as plain SQL files
+that can be run manually if needed.
+
+If the migration complexity grows (rollbacks, conditional migrations,
+data transforms), we can adopt a library later without losing the existing
+SQL files.
+
+### 16.3 Dockerfile: Single Image, Two Entrypoints
+
+**Decision:** One Docker image for both the web server and the background
+worker. Different entrypoints select the mode.
+
+```dockerfile
+# Multi-stage build
+FROM node:24-slim AS base
+# ... install pnpm, copy monorepo, install deps, build ...
+
+FROM base AS runtime
+COPY --from=base /app /app
+WORKDIR /app
+
+# Default entrypoint is the web server
+ENTRYPOINT ["node", "packages/web/dist/server.js"]
+```
+
+**Deployment (Azure Container Apps):**
+```yaml
+# Web container
+- name: web
+  image: norush:latest
+  # Uses default entrypoint (web server)
+
+# Worker container
+- name: worker
+  image: norush:latest
+  command: ["node", "packages/core/dist/worker.js"]
+```
+
+**Why single image:**
+- **One build pipeline** — build once, test once, push once.
+- **Shared dependencies** — TypeScript types, provider SDKs, and core
+  library code included once. No duplication.
+- **Simpler CI** — one image to build, scan, and publish.
+- **Simpler registry** — one tag to track, not two.
+- **Minimal overhead** — the worker carries the web framework code but
+  doesn't load it. At our scale, the extra ~MB is irrelevant.
+- **Easy to split later** — if the images diverge significantly (unlikely),
+  we add a second `FROM` stage. The multi-stage build already supports this.
+
+**What runs where:**
+| Container | Entrypoint | Responsibilities |
+|-----------|-----------|-----------------|
+| `web` | `packages/web/dist/server.js` | SvelteKit app, API routes, WorkOS auth, serves chat UI |
+| `worker` | `packages/core/dist/worker.js` | Batch submission, status polling, result ingestion, delivery fan-out, retention scrubbing |
+
+Both containers share the same `DATABASE_URL` and `NORUSH_MASTER_KEY`
+environment variables. They communicate only through the database — no
+inter-process messaging needed.
+
+---
+
+## 17. Remaining Open Questions
+
+No blocking open questions remain for starting Phase 1 implementation.
+The following are noted for future consideration:
+
+- **Worker process management:** Should the worker use a single event loop
+  with `setInterval` for each concern (polling, delivery, retention), or
+  separate sub-processes? Single loop is simpler; split if any concern
+  becomes CPU-bound.
+- **ULID generation:** Use `ulid` package or `ulidx`? Minor; pick during
+  scaffolding.
+- **CI pipeline:** GitHub Actions for lint/test/build/push? Define during
+  Phase 1 scaffolding.
