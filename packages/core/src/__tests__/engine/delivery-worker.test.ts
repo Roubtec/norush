@@ -487,9 +487,8 @@ describe("DeliveryWorker", () => {
       expect(res).toBeUndefined();
     });
 
-    it("marks result as no_target when no callbacks even if callbackUrl is set", async () => {
-      // callbackUrl is present but HTTP delivery is not implemented yet — no
-      // callbacks means there is nothing to actually invoke.
+    it("delivers via webhook when callbackUrl is set and no callbacks registered", async () => {
+      const fetchFn = mockFetchOk();
       const { result } = await createPendingResult(store, {
         callbackUrl: "https://example.com/hook",
       });
@@ -497,14 +496,17 @@ describe("DeliveryWorker", () => {
       const worker = new DeliveryWorker({
         store,
         now: () => new Date(currentTime),
+        fetchFn,
         // No callbacks registered.
       });
 
       await worker.tick();
 
+      // Webhook delivery should have been attempted.
+      expect(fetchFn).toHaveBeenCalledOnce();
+      // Result should be delivered (not in undelivered).
       const found = await store.getUndeliveredResults(100);
       const res = found.find((r) => r.id === result.id);
-      // Should be no_target, not vacuously "delivered".
       expect(res).toBeUndefined();
     });
   });
@@ -890,12 +892,11 @@ describe("DeliveryWorker", () => {
         new Response("Error", { status: 502, statusText: "Bad Gateway" }),
       );
 
-      const { result } = await createPendingResult(store);
+      const { result } = await createPendingResult(store, { maxDeliveryAttempts: 2 });
 
       const worker = new DeliveryWorker({
         store,
         now: () => new Date(currentTime),
-        maxDeliveryAttempts: 2,
         fetchFn: fetchFn as typeof globalThis.fetch,
       });
 
@@ -1003,14 +1004,13 @@ describe("DeliveryWorker", () => {
     });
 
     it("logs a webhook_delivery_exhausted event after max attempts", async () => {
-      const { result } = await createPendingResult(store);
+      const { result } = await createPendingResult(store, { maxDeliveryAttempts: 1 });
 
       const callback = vi.fn().mockRejectedValue(new Error("Always fails"));
 
       const worker = new DeliveryWorker({
         store,
         now: () => new Date(currentTime),
-        maxDeliveryAttempts: 1,
         fetchFn: mockFetchOk(),
       });
       worker.addCallback(callback);

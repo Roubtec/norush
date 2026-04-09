@@ -279,11 +279,9 @@ export class DeliveryWorker {
       return;
     }
 
-    // If there are no registered callbacks there is nothing to deliver to.
-    // Mark as no_target regardless of callbackUrl (HTTP delivery via
-    // callbackUrl is not yet implemented — treating it as no_target prevents
-    // silently marking results delivered when no delivery actually occurred).
-    if (this.callbacks.length === 0) {
+    // If there are no registered callbacks and no callbackUrl, there is
+    // nothing to deliver to — mark as no_target.
+    if (this.callbacks.length === 0 && !request.callbackUrl) {
       await this.store.updateResult(result.id, {
         deliveryStatus: "no_target",
       });
