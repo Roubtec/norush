@@ -171,6 +171,61 @@ describe("CircuitBreaker", () => {
 
       expect(cb.canSubmit()).toBe(true); // half_open allows probe
     });
+
+    it("rejects subsequent canSubmit() calls in half_open until probe resolves", () => {
+      let currentTime = 0;
+      const { cb } = createBreaker({
+        threshold: 1,
+        cooldownMs: 100,
+        now: () => currentTime,
+      });
+
+      cb.recordFailure();
+      currentTime = 100;
+
+      expect(cb.canSubmit()).toBe(true);  // first call — probe granted
+      expect(cb.canSubmit()).toBe(false); // second call — probe already in flight
+    });
+
+    it("resets probe slot after recordSuccess()", () => {
+      let currentTime = 0;
+      const { cb } = createBreaker({
+        threshold: 1,
+        cooldownMs: 100,
+        now: () => currentTime,
+      });
+
+      cb.recordFailure();
+      currentTime = 100;
+
+      expect(cb.canSubmit()).toBe(true); // probe granted
+      cb.recordSuccess();                // probe resolved -> closed
+      expect(cb.state).toBe("closed");
+      expect(cb.canSubmit()).toBe(true); // back to normal
+    });
+
+    it("resets probe slot after recordFailure() (probe re-trips breaker)", () => {
+      let currentTime = 0;
+      const { cb } = createBreaker({
+        threshold: 1,
+        cooldownMs: 100,
+        now: () => currentTime,
+      });
+
+      cb.recordFailure();
+      currentTime = 100;
+
+      expect(cb.canSubmit()).toBe(true); // probe granted
+      expect(cb.canSubmit()).toBe(false); // still in flight
+      cb.recordFailure();                // probe failed -> open again
+
+      expect(cb.state).toBe("open");
+      expect(cb.canSubmit()).toBe(false);
+
+      // After another full cooldown, a fresh probe is available.
+      currentTime = 200;
+      expect(cb.canSubmit()).toBe(true);
+    });
   });
 
   // -----------------------------------------------------------------------

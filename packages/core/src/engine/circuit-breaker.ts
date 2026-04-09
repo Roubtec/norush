@@ -50,6 +50,8 @@ export class CircuitBreaker {
   private _consecutiveFailures = 0;
   private _lastFailureAt: number | null = null;
   private _lastTrippedAt: number | null = null;
+  /** True when a probe submission has been granted in half_open state. */
+  private _probeInFlight = false;
 
   constructor(options: CircuitBreakerOptions = {}) {
     this.threshold = options.threshold ?? 5;
@@ -69,6 +71,7 @@ export class CircuitBreaker {
       const elapsed = this.now() - this._lastTrippedAt;
       if (elapsed >= this.cooldownMs) {
         this._state = "half_open";
+        this._probeInFlight = false;
         this.telemetry.event("circuit_breaker:half_open");
       }
     }
@@ -84,12 +87,19 @@ export class CircuitBreaker {
    * Check whether a submission should be allowed.
    *
    * In `closed` state: always allows.
-   * In `half_open` state: allows (one probe).
+   * In `half_open` state: allows exactly one probe — subsequent calls return
+   * `false` until the probe records success or failure.
    * In `open` state (before cooldown): rejects.
    */
   canSubmit(): boolean {
     const currentState = this.state; // triggers cooldown check
-    return currentState !== "open";
+    if (currentState === "open") return false;
+    if (currentState === "half_open") {
+      if (this._probeInFlight) return false;
+      this._probeInFlight = true;
+      return true;
+    }
+    return true; // closed
   }
 
   /**
@@ -100,6 +110,7 @@ export class CircuitBreaker {
   recordSuccess(): void {
     this._consecutiveFailures = 0;
     this._lastFailureAt = null;
+    this._probeInFlight = false;
 
     // Use the getter to trigger cooldown -> half_open transition if needed.
     const currentState = this.state;
@@ -117,10 +128,14 @@ export class CircuitBreaker {
    * Increments the consecutive failure counter. If the threshold is reached
    * (and state is `closed`), trips to `open`. If in `half_open`, goes back
    * to `open`.
+   *
+   * Returns `true` if this call caused the breaker to transition to `open`
+   * (i.e. it just tripped), `false` otherwise.
    */
-  recordFailure(): void {
+  recordFailure(): boolean {
     this._consecutiveFailures++;
     this._lastFailureAt = this.now();
+    this._probeInFlight = false;
 
     // Use the getter to trigger cooldown -> half_open transition if needed.
     const currentState = this.state;
@@ -128,7 +143,7 @@ export class CircuitBreaker {
     if (currentState === "half_open") {
       // Probe failed — reopen.
       this.trip();
-      return;
+      return true;
     }
 
     if (
@@ -136,7 +151,10 @@ export class CircuitBreaker {
       this._consecutiveFailures >= this.threshold
     ) {
       this.trip();
+      return true;
     }
+
+    return false;
   }
 
   /**
@@ -147,6 +165,7 @@ export class CircuitBreaker {
     this._consecutiveFailures = 0;
     this._lastFailureAt = null;
     this._lastTrippedAt = null;
+    this._probeInFlight = false;
     this.telemetry.event("circuit_breaker:reset");
   }
 

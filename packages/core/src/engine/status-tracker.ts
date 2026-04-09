@@ -7,8 +7,8 @@
  *   2. Get in-flight batches from the store.
  *   3. For each batch, check if it's time to poll (using the polling strategy).
  *   4. Call provider.checkStatus() for due batches.
- *   5. Update batch status in store; emit lifecycle events.
- *   6. On terminal status, mark for result processing.
+ *   5. Update batch status in store.
+ *   6. Emit lifecycle events, including terminal-status events when applicable.
  *
  * Can run as a `setInterval` loop (long-running process) or be driven
  * externally via `tracker.tick()` (serverless / cron).
@@ -253,7 +253,20 @@ export class StatusTracker {
     if (!this.isDueForPoll(batch, pollState)) return;
 
     // In-flight batches should always have a provider batch ID.
-    if (!batch.providerBatchId) return;
+    if (!batch.providerBatchId) {
+      this.telemetry.event("status_check_error", {
+        batchId: batch.id,
+        provider: batch.provider,
+        error: "Invariant violated: in-flight batch is missing providerBatchId",
+      });
+      this.telemetry.counter("status_check_invariant_violations", 1, {
+        provider: batch.provider,
+        invariant: "missing_provider_batch_id",
+      });
+      pollState.lastPolledAt = this.now();
+      pollState.pollCount++;
+      return;
+    }
 
     const ref: ProviderBatchRef = {
       providerBatchId: batch.providerBatchId,
@@ -365,15 +378,16 @@ export class StatusTracker {
       case "expired":
         this.emit("batch:expired", eventData);
         break;
-      case "failed":
+      case "failed": {
         this.emit("batch:failed", eventData);
-        this.circuitBreaker.recordFailure();
-        if (!this.circuitBreaker.canSubmit()) {
+        const justTripped = this.circuitBreaker.recordFailure();
+        if (justTripped) {
           this.emit("circuit_breaker:tripped", {
             consecutiveFailures: this.circuitBreaker.consecutiveFailures,
           });
         }
         break;
+      }
       case "cancelled":
         this.emit("batch:error", eventData);
         break;

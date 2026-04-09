@@ -263,9 +263,10 @@ describe("OrphanRecovery", () => {
       expect(result).toEqual({ recovered: 0, failed: 1 });
       expect(provider.submitBatch).not.toHaveBeenCalled();
 
-      // Batch should be marked failed.
+      // Batch should be marked failed with endedAt set.
       const updated = await store.getBatch(batch.id);
       expect(updated?.status).toBe("failed");
+      expect(updated?.endedAt).toEqual(futureNow);
 
       // Request should also be failed.
       const updatedReq = await store.getRequest(req.id);
@@ -425,6 +426,82 @@ describe("OrphanRecovery", () => {
 
       expect(specificProvider.submitBatch).toHaveBeenCalledOnce();
       expect(fallbackProvider.submitBatch).not.toHaveBeenCalled();
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Concurrent resubmission prevention
+  // -----------------------------------------------------------------------
+
+  describe("concurrent resubmission prevention", () => {
+    it("skips a batch already claimed by a concurrent recovery instance", async () => {
+      const req = await store.createRequest(makeNewRequest());
+      const batch = await store.createBatch({
+        provider: "claude",
+        apiKeyId: "user_01",
+        requestCount: 1,
+      });
+      await store.updateRequest(req.id, { batchId: batch.id, status: "batched" });
+      await store.updateBatch(batch.id, { submissionAttempts: 1 });
+
+      const telemetry1 = { counter: vi.fn(), histogram: vi.fn(), event: vi.fn() };
+      const telemetry2 = { counter: vi.fn(), histogram: vi.fn(), event: vi.fn() };
+
+      // Simulate a long-running submitBatch to create an overlap window.
+      let resolveFirstSubmit!: () => void;
+      const firstSubmitStarted = new Promise<void>((resolve) => {
+        resolveFirstSubmit = resolve;
+      });
+      let resolveFirstSubmitDone!: () => void;
+      const firstSubmitBlock = new Promise<void>((resolve) => {
+        resolveFirstSubmitDone = resolve;
+      });
+
+      const provider = mockProvider({
+        submitBatch: vi.fn().mockImplementationOnce(async () => {
+          resolveFirstSubmit();
+          await firstSubmitBlock;
+          return { providerBatchId: "pb_001", provider: "claude" as const };
+        }),
+      });
+
+      const recovery1 = new OrphanRecovery({
+        store,
+        providers: new Map([["claude", provider]]),
+        gracePeriodMs: 0,
+        telemetry: telemetry1,
+        now: () => new Date(Date.now() + 10 * 60 * 1000),
+      });
+
+      const recovery2 = new OrphanRecovery({
+        store,
+        providers: new Map([["claude", provider]]),
+        gracePeriodMs: 0,
+        telemetry: telemetry2,
+        now: () => new Date(Date.now() + 10 * 60 * 1000),
+      });
+
+      // Start recovery1 (it will block on submitBatch).
+      const result1Promise = recovery1.recover();
+      // Wait until recovery1 has claimed the batch and entered submitBatch.
+      await firstSubmitStarted;
+
+      // Run recovery2 while recovery1 is in progress — should skip the batch.
+      const result2 = await recovery2.recover();
+
+      // Unblock recovery1.
+      resolveFirstSubmitDone();
+      const result1 = await result1Promise;
+
+      expect(result1).toEqual({ recovered: 1, failed: 0 });
+      // recovery2 should have skipped the batch (0 recovered).
+      expect(result2).toEqual({ recovered: 0, failed: 0 });
+      // Provider should only have been called once.
+      expect(provider.submitBatch).toHaveBeenCalledTimes(1);
+      expect(telemetry2.event).toHaveBeenCalledWith(
+        "orphan_recovery_skipped",
+        expect.objectContaining({ batchId: batch.id, reason: "recovery_already_in_progress" }),
+      );
     });
   });
 

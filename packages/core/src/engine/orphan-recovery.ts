@@ -49,6 +49,9 @@ export interface OrphanRecoveryResult {
 // ---------------------------------------------------------------------------
 
 export class OrphanRecovery {
+  /** Process-wide set of batch IDs currently being recovered, to prevent concurrent resubmission. */
+  private static readonly inFlightRecoveryBatchIds = new Set<string>();
+
   private readonly store: Store;
   private readonly providers: Map<string, Provider>;
   private readonly gracePeriodMs: number;
@@ -120,62 +123,88 @@ export class OrphanRecovery {
   /**
    * Attempt to re-submit an orphaned batch.
    *
-   * Increments submissionAttempts, then calls the provider. On success,
-   * updates with providerBatchId and status 'submitted'. On failure,
-   * leaves the batch in 'pending' for the next recovery cycle.
+   * Claims the batch for in-process recovery to prevent concurrent resubmission,
+   * increments submissionAttempts, then calls the provider. On success, updates
+   * with providerBatchId and status 'submitted'. On failure, leaves the batch in
+   * 'pending' for the next recovery cycle.
    */
   private async resubmit(batch: Batch): Promise<boolean> {
-    const adapter = this.resolveAdapter(batch.provider, batch.apiKeyId);
-    if (!adapter) {
-      this.telemetry.event("orphan_recovery_error", {
+    if (!this.claimBatchForRecovery(batch.id)) {
+      this.telemetry.event("orphan_recovery_skipped", {
         batchId: batch.id,
-        error: `No provider adapter found for ${batch.provider}`,
-      });
-      return false;
-    }
-
-    // Increment submission attempts.
-    await this.store.updateBatch(batch.id, {
-      submissionAttempts: batch.submissionAttempts + 1,
-    });
-
-    // Gather the requests for this batch.
-    const requests = await this.buildNorushRequests(batch.id);
-    if (requests.length === 0) {
-      this.telemetry.event("orphan_recovery_error", {
-        batchId: batch.id,
-        error: "No requests found for orphaned batch",
+        provider: batch.provider,
+        reason: "recovery_already_in_progress",
       });
       return false;
     }
 
     try {
-      const ref = await adapter.submitBatch(requests);
+      const adapter = this.resolveAdapter(batch.provider, batch.apiKeyId);
+      if (!adapter) {
+        this.telemetry.event("orphan_recovery_error", {
+          batchId: batch.id,
+          error: `No provider adapter found for ${batch.provider}`,
+        });
+        return false;
+      }
 
+      // Increment submission attempts.
       await this.store.updateBatch(batch.id, {
-        providerBatchId: ref.providerBatchId,
-        status: "submitted",
-        submittedAt: this.now(),
-      });
-
-      this.telemetry.event("orphan_recovered", {
-        batchId: batch.id,
-        provider: batch.provider,
-        providerBatchId: ref.providerBatchId,
         submissionAttempts: batch.submissionAttempts + 1,
       });
 
-      return true;
-    } catch (error) {
-      this.telemetry.event("orphan_recovery_error", {
-        batchId: batch.id,
-        provider: batch.provider,
-        error: error instanceof Error ? error.message : String(error),
-        submissionAttempts: batch.submissionAttempts + 1,
-      });
+      // Gather the requests for this batch.
+      const requests = await this.buildNorushRequests(batch.id);
+      if (requests.length === 0) {
+        this.telemetry.event("orphan_recovery_error", {
+          batchId: batch.id,
+          error: "No requests found for orphaned batch",
+        });
+        return false;
+      }
 
+      try {
+        const ref = await adapter.submitBatch(requests);
+
+        await this.store.updateBatch(batch.id, {
+          providerBatchId: ref.providerBatchId,
+          status: "submitted",
+          submittedAt: this.now(),
+        });
+
+        this.telemetry.event("orphan_recovered", {
+          batchId: batch.id,
+          provider: batch.provider,
+          providerBatchId: ref.providerBatchId,
+          submissionAttempts: batch.submissionAttempts + 1,
+        });
+
+        return true;
+      } catch (error) {
+        this.telemetry.event("orphan_recovery_error", {
+          batchId: batch.id,
+          provider: batch.provider,
+          error: error instanceof Error ? error.message : String(error),
+          submissionAttempts: batch.submissionAttempts + 1,
+        });
+
+        return false;
+      }
+    } finally {
+      this.releaseBatchForRecovery(batch.id);
+    }
+  }
+
+  private claimBatchForRecovery(batchId: string): boolean {
+    if (OrphanRecovery.inFlightRecoveryBatchIds.has(batchId)) {
       return false;
     }
+    OrphanRecovery.inFlightRecoveryBatchIds.add(batchId);
+    return true;
+  }
+
+  private releaseBatchForRecovery(batchId: string): void {
+    OrphanRecovery.inFlightRecoveryBatchIds.delete(batchId);
   }
 
   /**
@@ -196,7 +225,7 @@ export class OrphanRecovery {
    * Mark an orphaned batch as permanently failed and fail its requests.
    */
   private async markOrphanFailed(batch: Batch): Promise<void> {
-    await this.store.updateBatch(batch.id, { status: "failed" });
+    await this.store.updateBatch(batch.id, { status: "failed", endedAt: this.now() });
 
     // Also fail the associated requests.
     const requests = await this.store.getRequestsByBatchId(batch.id);
