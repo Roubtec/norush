@@ -505,6 +505,72 @@ export function runStoreContractTests(
       });
     });
 
+    describe("incrementPeriodTokens", () => {
+      test("increments currentPeriodTokens on the user limits row", async () => {
+        store = await factory();
+        await store.upsertUserLimits("test-user", { maxTokensPerPeriod: 10000 });
+
+        await store.incrementPeriodTokens("test-user", 150);
+
+        const limits = await store.getUserLimits("test-user");
+        if (!limits) throw new Error("expected user limits to exist");
+        expect(limits.currentPeriodTokens).toBe(150);
+      });
+
+      test("accumulates across multiple calls", async () => {
+        store = await factory();
+        await store.upsertUserLimits("test-user", { maxTokensPerPeriod: 10000 });
+
+        await store.incrementPeriodTokens("test-user", 100);
+        await store.incrementPeriodTokens("test-user", 250);
+        await store.incrementPeriodTokens("test-user", 50);
+
+        const limits = await store.getUserLimits("test-user");
+        if (!limits) throw new Error("expected user limits to exist");
+        expect(limits.currentPeriodTokens).toBe(400);
+      });
+
+      test("does not throw for non-existent user", async () => {
+        store = await factory();
+        await expect(
+          store.incrementPeriodTokens("nonexistent", 100),
+        ).resolves.toBeUndefined();
+      });
+    });
+
+    describe("incrementSpend", () => {
+      test("increments currentSpendUsd on the user limits row", async () => {
+        store = await factory();
+        await store.upsertUserLimits("test-user", { hardSpendLimitUsd: 100 });
+
+        await store.incrementSpend("test-user", 1.5);
+
+        const limits = await store.getUserLimits("test-user");
+        if (!limits) throw new Error("expected user limits to exist");
+        expect(limits.currentSpendUsd).toBeCloseTo(1.5);
+      });
+
+      test("accumulates across multiple calls", async () => {
+        store = await factory();
+        await store.upsertUserLimits("test-user", { hardSpendLimitUsd: 100 });
+
+        await store.incrementSpend("test-user", 0.75);
+        await store.incrementSpend("test-user", 1.25);
+        await store.incrementSpend("test-user", 0.50);
+
+        const limits = await store.getUserLimits("test-user");
+        if (!limits) throw new Error("expected user limits to exist");
+        expect(limits.currentSpendUsd).toBeCloseTo(2.50);
+      });
+
+      test("does not throw for non-existent user", async () => {
+        store = await factory();
+        await expect(
+          store.incrementSpend("nonexistent", 5.0),
+        ).resolves.toBeUndefined();
+      });
+    });
+
     describe("Analytics", () => {
       test("getStats aggregates usage for a user within a period", async () => {
         store = await factory();
