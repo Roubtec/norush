@@ -9,6 +9,7 @@ import {
   migrate,
   ClaudeAdapter,
   OpenAIBatchAdapter,
+  OpenAIFlexAdapter,
   StatusTracker,
   OrphanRecovery,
   CircuitBreaker,
@@ -71,6 +72,7 @@ import type {
   ResolvedConfig,
   ClaudeAdapterOptions,
   OpenAIBatchAdapterOptions,
+  OpenAIFlexAdapterOptions,
   StatusTrackerEventName,
   StatusTrackerEventHandler,
   OrphanRecoveryResult,
@@ -132,6 +134,11 @@ describe("@norush/core exports", () => {
   it("exports OpenAIBatchAdapter class", () => {
     expect(OpenAIBatchAdapter).toBeDefined();
     expect(typeof OpenAIBatchAdapter).toBe("function");
+  });
+
+  it("exports OpenAIFlexAdapter class", () => {
+    expect(OpenAIFlexAdapter).toBeDefined();
+    expect(typeof OpenAIFlexAdapter).toBe("function");
   });
 
   it("exports StatusTracker class", () => {
@@ -258,6 +265,7 @@ describe("@norush/core exports", () => {
 
     const _claudeOpts: ClaudeAdapterOptions = { apiKey: "sk-test" };
     const _openaiOpts: OpenAIBatchAdapterOptions = { apiKey: "sk-test" };
+    const _flexOpts: OpenAIFlexAdapterOptions = { apiKey: "sk-test" };
     const _cbState: CircuitBreakerState = "closed";
     const _cbSnapshot: CircuitBreakerSnapshot = {
       state: "closed",
@@ -278,6 +286,7 @@ describe("@norush/core exports", () => {
     // Use variables to avoid unused-variable lint errors
     expect(_claudeOpts).toBeDefined();
     expect(_openaiOpts).toBeDefined();
+    expect(_flexOpts).toBeDefined();
     expect(_cbState).toBeDefined();
     expect(_cbSnapshot).toBeDefined();
     expect(_eventName).toBeDefined();
