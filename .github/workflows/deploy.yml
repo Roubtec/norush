@@ -28,14 +28,48 @@ concurrency:
 
 jobs:
   # -----------------------------------------------------------------------
-  # 1. Build and push Docker image to ACR
+  # 0. Check whether Azure credentials are configured
   # -----------------------------------------------------------------------
-  build-and-push:
-    # Only deploy when CI succeeded (workflow_run fires on both success and failure).
-    # The condition is skipped for manual workflow_dispatch triggers.
+  check-credentials:
     if: >-
       github.event_name == 'workflow_dispatch' ||
       github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    outputs:
+      has-azure: ${{ steps.check.outputs.has-azure }}
+    steps:
+      - name: Check for Azure credentials
+        id: check
+        env:
+          ACR_LOGIN_SERVER: ${{ secrets.ACR_LOGIN_SERVER }}
+          ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
+          ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
+          AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
+          AZURE_RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP }}
+          AZURE_CONTAINER_APP_WEB: ${{ secrets.AZURE_CONTAINER_APP_WEB }}
+          AZURE_CONTAINER_APP_WORKER: ${{ secrets.AZURE_CONTAINER_APP_WORKER }}
+        run: |
+          if [ -n "$ACR_LOGIN_SERVER" ] && \
+             [ -n "$ACR_USERNAME" ] && \
+             [ -n "$ACR_PASSWORD" ] && \
+             [ -n "$AZURE_CREDENTIALS" ] && \
+             [ -n "$AZURE_RESOURCE_GROUP" ] && \
+             [ -n "$AZURE_CONTAINER_APP_WEB" ] && \
+             [ -n "$AZURE_CONTAINER_APP_WORKER" ]; then
+            echo "has-azure=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has-azure=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Skipping deploy — Azure deployment secrets are incomplete. Set ACR_LOGIN_SERVER, ACR_USERNAME, ACR_PASSWORD, AZURE_CREDENTIALS, AZURE_RESOURCE_GROUP, AZURE_CONTAINER_APP_WEB, and AZURE_CONTAINER_APP_WORKER secrets to enable deployment."
+          fi
+
+  # -----------------------------------------------------------------------
+  # 1. Build and push Docker image to ACR
+  # -----------------------------------------------------------------------
+  build-and-push:
+    needs: check-credentials
+    # Only deploy when Azure credentials are available.
+    # CI-success gate is handled by check-credentials job-level if.
+    if: needs.check-credentials.outputs.has-azure == 'true'
     runs-on: ubuntu-latest
     outputs:
       image-tag: ${{ steps.meta.outputs.tag }}
@@ -75,7 +109,8 @@ jobs:
   # -----------------------------------------------------------------------
   deploy-web:
     runs-on: ubuntu-latest
-    needs: build-and-push
+    needs: [check-credentials, build-and-push]
+    if: needs.check-credentials.outputs.has-azure == 'true'
     environment: production
     steps:
       - name: Log in to Azure
@@ -95,7 +130,8 @@ jobs:
   # -----------------------------------------------------------------------
   deploy-worker:
     runs-on: ubuntu-latest
-    needs: build-and-push
+    needs: [check-credentials, build-and-push]
+    if: needs.check-credentials.outputs.has-azure == 'true'
     environment: production
     steps:
       - name: Log in to Azure
@@ -115,14 +151,15 @@ jobs:
   # -----------------------------------------------------------------------
   verify:
     runs-on: ubuntu-latest
-    needs: [deploy-web, deploy-worker]
+    needs: [check-credentials, deploy-web, deploy-worker]
+    if: needs.check-credentials.outputs.has-azure == 'true'
     steps:
       - name: Wait for containers to start
         run: sleep 30
 
       - name: Health check
         run: |
-          HEALTH_URL="${{ vars.DEPLOY_URL || 'https://norush.chat' }}/api/health"
+          HEALTH_URL="${{ vars.DEPLOY_URL || 'https://norush.roubtec.com' }}/api/health"
           echo "Checking $HEALTH_URL ..."
 
           for i in 1 2 3 4 5; do
