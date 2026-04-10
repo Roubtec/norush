@@ -112,6 +112,11 @@ export {
   type OpenAIBatchAdapterOptions,
 } from "./providers/openai-batch.js";
 
+export {
+  OpenAIFlexAdapter,
+  type OpenAIFlexAdapterOptions,
+} from "./providers/openai-flex.js";
+
 // ---------------------------------------------------------------------------
 // Engine (queue + batch manager)
 // ---------------------------------------------------------------------------
