@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryStore } from "../../store/memory.js";
 import { ResultIngester } from "../../engine/result-ingester.js";
+import { checkRateLimit } from "../../rate-limit/limiter.js";
+import { batchCost } from "../../pricing.js";
 import type { Provider } from "../../interfaces/provider.js";
 import type {
   Batch,
@@ -8,6 +10,7 @@ import type {
   NewRequest,
   NorushResult,
   ProviderBatchRef,
+  SlidingWindow,
 } from "../../types.js";
 
 // ---------------------------------------------------------------------------
@@ -659,6 +662,466 @@ describe("ResultIngester", () => {
           batchId: batch.id,
         }),
       );
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Token and spend counter wiring
+  // -----------------------------------------------------------------------
+
+  describe("token and spend counter wiring", () => {
+    it("increments currentPeriodTokens by inputTokens + outputTokens after ingestion", async () => {
+      // Set up user limits so counters exist.
+      await store.upsertUserLimits("user_01", {
+        maxTokensPerPeriod: 1_000_000,
+      });
+
+      const { batch, requestIds } = await createEndedBatch(store, {
+        requestCount: 2,
+      });
+
+      const norushResults: NorushResult[] = [
+        {
+          requestId: requestIds[0],
+          response: { content: "Hello" },
+          success: true,
+          inputTokens: 100,
+          outputTokens: 200,
+        },
+        {
+          requestId: requestIds[1],
+          response: { content: "World" },
+          success: true,
+          inputTokens: 150,
+          outputTokens: 250,
+        },
+      ];
+
+      const provider = mockProvider({
+        fetchResults: vi.fn().mockReturnValue(makeResultStream(norushResults)),
+      });
+
+      const ingester = new ResultIngester({
+        store,
+        providers: new Map([["claude", provider]]),
+      });
+
+      await ingester.ingest(batch);
+
+      const limits = await store.getUserLimits("user_01");
+      if (!limits) throw new Error("expected user limits to exist");
+      // Total tokens: (100+200) + (150+250) = 700
+      expect(limits.currentPeriodTokens).toBe(700);
+    });
+
+    it("increments currentSpendUsd using batch cost rates after ingestion", async () => {
+      await store.upsertUserLimits("user_01", {
+        hardSpendLimitUsd: 100.0,
+      });
+
+      const { batch, requestIds } = await createEndedBatch(store, {
+        requestCount: 1,
+      });
+
+      const norushResults: NorushResult[] = [
+        {
+          requestId: requestIds[0],
+          response: { content: "Hello" },
+          success: true,
+          inputTokens: 1000,
+          outputTokens: 500,
+        },
+      ];
+
+      const provider = mockProvider({
+        fetchResults: vi.fn().mockReturnValue(makeResultStream(norushResults)),
+      });
+
+      const ingester = new ResultIngester({
+        store,
+        providers: new Map([["claude", provider]]),
+      });
+
+      await ingester.ingest(batch);
+
+      const limits = await store.getUserLimits("user_01");
+      if (!limits) throw new Error("expected user limits to exist");
+
+      // Expected cost using batch rates for claude provider.
+      const expectedCost = batchCost("claude", 1000, 500);
+      expect(expectedCost).toBeGreaterThan(0);
+      expect(limits.currentSpendUsd).toBeCloseTo(expectedCost, 10);
+    });
+
+    it("does not increment counters when token counts are null", async () => {
+      await store.upsertUserLimits("user_01", {
+        maxTokensPerPeriod: 1_000_000,
+        hardSpendLimitUsd: 100.0,
+      });
+
+      const { batch, requestIds } = await createEndedBatch(store, {
+        requestCount: 1,
+      });
+
+      const norushResults: NorushResult[] = [
+        {
+          requestId: requestIds[0],
+          response: { content: "Hello" },
+          success: true,
+          // No token counts — inputTokens and outputTokens default to null.
+        },
+      ];
+
+      const provider = mockProvider({
+        fetchResults: vi.fn().mockReturnValue(makeResultStream(norushResults)),
+      });
+
+      const ingester = new ResultIngester({
+        store,
+        providers: new Map([["claude", provider]]),
+      });
+
+      await ingester.ingest(batch);
+
+      const limits = await store.getUserLimits("user_01");
+      if (!limits) throw new Error("expected user limits to exist");
+      expect(limits.currentPeriodTokens).toBe(0);
+      expect(limits.currentSpendUsd).toBe(0);
+    });
+
+    it("increments counters for failed results that report tokens", async () => {
+      await store.upsertUserLimits("user_01", {
+        maxTokensPerPeriod: 1_000_000,
+      });
+
+      const { batch, requestIds } = await createEndedBatch(store, {
+        requestCount: 1,
+      });
+
+      // Some providers report token usage even for failed results.
+      const norushResults: NorushResult[] = [
+        {
+          requestId: requestIds[0],
+          response: { error: "content_filter" },
+          success: false,
+          inputTokens: 50,
+          outputTokens: 10,
+        },
+      ];
+
+      const provider = mockProvider({
+        fetchResults: vi.fn().mockReturnValue(makeResultStream(norushResults)),
+      });
+
+      const ingester = new ResultIngester({
+        store,
+        providers: new Map([["claude", provider]]),
+      });
+
+      await ingester.ingest(batch);
+
+      const limits = await store.getUserLimits("user_01");
+      if (!limits) throw new Error("expected user limits to exist");
+      expect(limits.currentPeriodTokens).toBe(60);
+    });
+
+    it("counter increment failure does not block result delivery", async () => {
+      await store.upsertUserLimits("user_01", {
+        maxTokensPerPeriod: 1_000_000,
+      });
+
+      const { batch, requestIds } = await createEndedBatch(store, {
+        requestCount: 1,
+      });
+
+      const norushResults: NorushResult[] = [
+        {
+          requestId: requestIds[0],
+          response: { content: "Hello" },
+          success: true,
+          inputTokens: 100,
+          outputTokens: 200,
+        },
+      ];
+
+      // Make incrementPeriodTokens throw to simulate a store failure.
+      vi.spyOn(store, "incrementPeriodTokens").mockRejectedValue(
+        new Error("db connection lost"),
+      );
+
+      const telemetry = { counter: vi.fn(), histogram: vi.fn(), event: vi.fn() };
+
+      const provider = mockProvider({
+        fetchResults: vi.fn().mockReturnValue(makeResultStream(norushResults)),
+      });
+
+      const ingester = new ResultIngester({
+        store,
+        providers: new Map([["claude", provider]]),
+        telemetry,
+      });
+
+      const result = await ingester.ingest(batch);
+
+      // Result should still be ingested successfully despite counter failure.
+      expect(result.ingested).toBe(1);
+      expect(result.succeeded).toBe(1);
+      expect(result.errors).toHaveLength(0);
+
+      // The error should be logged via telemetry.
+      expect(telemetry.event).toHaveBeenCalledWith(
+        "usage_counter_error",
+        expect.objectContaining({
+          requestId: requestIds[0],
+          error: "db connection lost",
+        }),
+      );
+    });
+
+    it("accumulates counters across multiple results from different batches", async () => {
+      await store.upsertUserLimits("user_01", {
+        maxTokensPerPeriod: 1_000_000,
+        hardSpendLimitUsd: 100.0,
+      });
+
+      // First batch.
+      const { batch: batch1, requestIds: reqIds1 } = await createEndedBatch(
+        store,
+        { requestCount: 1 },
+      );
+      const results1: NorushResult[] = [
+        {
+          requestId: reqIds1[0],
+          response: { content: "First" },
+          success: true,
+          inputTokens: 100,
+          outputTokens: 200,
+        },
+      ];
+
+      const provider1 = mockProvider({
+        fetchResults: vi.fn().mockReturnValue(makeResultStream(results1)),
+      });
+      const ingester1 = new ResultIngester({
+        store,
+        providers: new Map([["claude", provider1]]),
+      });
+      await ingester1.ingest(batch1);
+
+      // Second batch.
+      const { batch: batch2, requestIds: reqIds2 } = await createEndedBatch(
+        store,
+        { requestCount: 1 },
+      );
+      const results2: NorushResult[] = [
+        {
+          requestId: reqIds2[0],
+          response: { content: "Second" },
+          success: true,
+          inputTokens: 300,
+          outputTokens: 400,
+        },
+      ];
+
+      const provider2 = mockProvider({
+        fetchResults: vi.fn().mockReturnValue(makeResultStream(results2)),
+      });
+      const ingester2 = new ResultIngester({
+        store,
+        providers: new Map([["claude", provider2]]),
+      });
+      await ingester2.ingest(batch2);
+
+      const limits = await store.getUserLimits("user_01");
+      if (!limits) throw new Error("expected user limits to exist");
+      // Total tokens: (100+200) + (300+400) = 1000
+      expect(limits.currentPeriodTokens).toBe(1000);
+
+      // Total spend: batchCost(claude, 100, 200) + batchCost(claude, 300, 400)
+      const expectedSpend =
+        batchCost("claude", 100, 200) + batchCost("claude", 300, 400);
+      expect(limits.currentSpendUsd).toBeCloseTo(expectedSpend, 10);
+    });
+
+    it("does not increment when user has no limits configured", async () => {
+      // No upsertUserLimits call — user has no limits row.
+      const { batch, requestIds } = await createEndedBatch(store, {
+        requestCount: 1,
+      });
+
+      const norushResults: NorushResult[] = [
+        {
+          requestId: requestIds[0],
+          response: { content: "Hello" },
+          success: true,
+          inputTokens: 100,
+          outputTokens: 200,
+        },
+      ];
+
+      const provider = mockProvider({
+        fetchResults: vi.fn().mockReturnValue(makeResultStream(norushResults)),
+      });
+
+      const ingester = new ResultIngester({
+        store,
+        providers: new Map([["claude", provider]]),
+      });
+
+      const result = await ingester.ingest(batch);
+
+      // Should succeed without errors — incrementPeriodTokens/incrementSpend
+      // silently no-op when user has no limits row.
+      expect(result.ingested).toBe(1);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it("uses correct provider rates for openai vs claude", async () => {
+      await store.upsertUserLimits("user_01", {
+        hardSpendLimitUsd: 100.0,
+      });
+
+      const { batch, requestIds } = await createEndedBatch(store, {
+        requestCount: 1,
+        provider: "openai",
+      });
+
+      const norushResults: NorushResult[] = [
+        {
+          requestId: requestIds[0],
+          response: { content: "Hello from OpenAI" },
+          success: true,
+          inputTokens: 1000,
+          outputTokens: 500,
+        },
+      ];
+
+      const provider = mockProvider({
+        fetchResults: vi.fn().mockReturnValue(makeResultStream(norushResults)),
+      });
+
+      const ingester = new ResultIngester({
+        store,
+        providers: new Map([["openai", provider]]),
+      });
+
+      await ingester.ingest(batch);
+
+      const limits = await store.getUserLimits("user_01");
+      if (!limits) throw new Error("expected user limits to exist");
+
+      const expectedCost = batchCost("openai", 1000, 500);
+      expect(expectedCost).toBeGreaterThan(0);
+      expect(limits.currentSpendUsd).toBeCloseTo(expectedCost, 10);
+
+      // OpenAI and Claude have different rates — verify they differ.
+      const claudeCost = batchCost("claude", 1000, 500);
+      expect(expectedCost).not.toBeCloseTo(claudeCost, 10);
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Token/spend limits trigger after ingestion (end-to-end)
+  // -----------------------------------------------------------------------
+
+  describe("rate limit enforcement after ingestion", () => {
+    const HEALTHY_WINDOW: SlidingWindow = {
+      total: 10,
+      succeeded: 10,
+      failed: 0,
+    };
+
+    it("token limit triggers after ingesting results that exhaust the budget", async () => {
+      // Set a token limit of 500 tokens.
+      await store.upsertUserLimits("user_01", {
+        maxTokensPerPeriod: 500,
+      });
+
+      const { batch, requestIds } = await createEndedBatch(store, {
+        requestCount: 1,
+      });
+
+      const norushResults: NorushResult[] = [
+        {
+          requestId: requestIds[0],
+          response: { content: "Big response" },
+          success: true,
+          inputTokens: 200,
+          outputTokens: 350,
+        },
+      ];
+
+      const provider = mockProvider({
+        fetchResults: vi.fn().mockReturnValue(makeResultStream(norushResults)),
+      });
+
+      const ingester = new ResultIngester({
+        store,
+        providers: new Map([["claude", provider]]),
+      });
+
+      // Before ingestion: rate limit should allow.
+      let limits = await store.getUserLimits("user_01");
+      let rateLimitResult = checkRateLimit(limits, HEALTHY_WINDOW);
+      expect(rateLimitResult.allowed).toBe(true);
+
+      // Ingest the results (550 tokens > 500 limit).
+      await ingester.ingest(batch);
+
+      // After ingestion: rate limit should reject.
+      limits = await store.getUserLimits("user_01");
+      rateLimitResult = checkRateLimit(limits, HEALTHY_WINDOW);
+      expect(rateLimitResult.allowed).toBe(false);
+      expect(rateLimitResult.reason).toBe("token_limit_exceeded");
+    });
+
+    it("spend limit triggers after ingesting results that exhaust the budget", async () => {
+      // Compute how many tokens are needed to reach the spend limit.
+      // Use a very low spend limit that a single result can exhaust.
+      const spendLimit = 0.001; // $0.001
+      await store.upsertUserLimits("user_01", {
+        hardSpendLimitUsd: spendLimit,
+      });
+
+      const { batch, requestIds } = await createEndedBatch(store, {
+        requestCount: 1,
+      });
+
+      // Use enough tokens to exceed the tiny spend limit.
+      const norushResults: NorushResult[] = [
+        {
+          requestId: requestIds[0],
+          response: { content: "Expensive response" },
+          success: true,
+          inputTokens: 10_000,
+          outputTokens: 10_000,
+        },
+      ];
+
+      const provider = mockProvider({
+        fetchResults: vi.fn().mockReturnValue(makeResultStream(norushResults)),
+      });
+
+      const ingester = new ResultIngester({
+        store,
+        providers: new Map([["claude", provider]]),
+      });
+
+      // Before ingestion: rate limit should allow.
+      let limits = await store.getUserLimits("user_01");
+      let rateLimitResult = checkRateLimit(limits, HEALTHY_WINDOW);
+      expect(rateLimitResult.allowed).toBe(true);
+
+      await ingester.ingest(batch);
+
+      // After ingestion: spend should exceed limit.
+      limits = await store.getUserLimits("user_01");
+      if (!limits) throw new Error("expected user limits to exist");
+      expect(limits.currentSpendUsd).toBeGreaterThanOrEqual(spendLimit);
+
+      rateLimitResult = checkRateLimit(limits, HEALTHY_WINDOW);
+      expect(rateLimitResult.allowed).toBe(false);
+      expect(rateLimitResult.reason).toBe("hard_spend_limit_exceeded");
     });
   });
 });

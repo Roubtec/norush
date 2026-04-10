@@ -17,8 +17,9 @@
 import type { Store } from "../interfaces/store.js";
 import type { Provider } from "../interfaces/provider.js";
 import type { TelemetryHook } from "../interfaces/telemetry.js";
-import type { Batch, ProviderBatchRef } from "../types.js";
+import type { Batch, NorushResult, ProviderBatchRef } from "../types.js";
 import { NoopTelemetry } from "../telemetry/noop.js";
+import { batchCost } from "../pricing.js";
 
 // ---------------------------------------------------------------------------
 // Options
@@ -115,6 +116,12 @@ export class ResultIngester {
           status: newStatus,
         });
 
+        // Increment token and spend counters (best-effort).
+        await this.updateUsageCounters(
+          norushResult,
+          batch.provider,
+        );
+
         if (norushResult.success) {
           result.succeeded++;
         } else {
@@ -193,6 +200,66 @@ export class ResultIngester {
     });
 
     return result;
+  }
+
+  // -------------------------------------------------------------------------
+  // Token and spend counter updates
+  // -------------------------------------------------------------------------
+
+  /**
+   * Increment the user's token and spend counters after a result is persisted.
+   *
+   * Best-effort: failures are logged but never block result delivery. The
+   * userId is looked up from the request record (results don't carry it
+   * directly).
+   */
+  private async updateUsageCounters(
+    norushResult: NorushResult,
+    provider: string,
+  ): Promise<void> {
+    const inputTokens = norushResult.inputTokens ?? 0;
+    const outputTokens = norushResult.outputTokens ?? 0;
+    const totalTokens = inputTokens + outputTokens;
+
+    // Nothing to increment if no token counts are available.
+    if (totalTokens === 0) return;
+
+    try {
+      // Look up the userId from the request record.
+      const request = await this.store.getRequest(norushResult.requestId);
+      if (!request) {
+        this.telemetry.event("usage_counter_skip", {
+          requestId: norushResult.requestId,
+          reason: "request_not_found",
+        });
+        return;
+      }
+
+      const userId = request.userId;
+
+      // Increment period token counter.
+      await this.store.incrementPeriodTokens(userId, totalTokens);
+
+      // Compute USD cost at batch (discounted) rates and increment spend.
+      const costUsd = batchCost(provider, inputTokens, outputTokens);
+      if (costUsd > 0) {
+        await this.store.incrementSpend(userId, costUsd);
+      }
+
+      this.telemetry.event("usage_counters_updated", {
+        requestId: norushResult.requestId,
+        userId,
+        totalTokens,
+        costUsd,
+      });
+    } catch (error) {
+      // Best-effort — log and continue. Never block result delivery.
+      const message = error instanceof Error ? error.message : String(error);
+      this.telemetry.event("usage_counter_error", {
+        requestId: norushResult.requestId,
+        error: message,
+      });
+    }
   }
 
   // -------------------------------------------------------------------------
