@@ -1,0 +1,10 @@
+{
+  "name": "norush-webhook-consumer-example",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Example webhook consumer for norush result deliveries.",
+  "scripts": {
+    "start": "node server.js"
+  }
+}

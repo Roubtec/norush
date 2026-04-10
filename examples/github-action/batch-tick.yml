@@ -1,0 +1,64 @@
+# Example GitHub Actions workflow: scheduled batch tick
+#
+# Runs engine.tick() on a cron schedule to process queued requests
+# without a dedicated worker process.
+#
+# Copy this file to .github/workflows/batch-tick.yml in your repository.
+
+name: Batch Tick
+
+on:
+  schedule:
+    # Run every 5 minutes (adjust as needed)
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+    # Allow manual triggering from the Actions tab
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm --filter @norush/core run build
+
+      - name: Run tick
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          node -e "
+            import postgres from 'postgres';
+            import { createNorush, PostgresStore, migrate, ConsoleTelemetry } from '@norush/core';
+
+            const sql = postgres(process.env.DATABASE_URL);
+            try {
+              await migrate(sql);
+              const store = new PostgresStore(sql);
+              const providers = {};
+              if (process.env.ANTHROPIC_API_KEY) providers.claude = [{ apiKey: process.env.ANTHROPIC_API_KEY }];
+              if (process.env.OPENAI_API_KEY) providers.openai = [{ apiKey: process.env.OPENAI_API_KEY }];
+              const engine = createNorush({ store, providers, telemetry: new ConsoleTelemetry() });
+              console.log('Running tick...');
+              await engine.tick();
+              console.log('Tick complete.');
+            } finally {
+              await sql.end();
+            }
+          "

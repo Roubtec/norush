@@ -1,0 +1,15 @@
+{
+  "name": "norush-cron-batch-example",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Example cron-triggered batch processing with norush.",
+  "dependencies": {
+    "@norush/core": "latest",
+    "postgres": "^3.4.5"
+  },
+  "scripts": {
+    "enqueue": "node enqueue.js",
+    "tick": "node tick.js"
+  }
+}
