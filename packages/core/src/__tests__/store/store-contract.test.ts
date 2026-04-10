@@ -351,7 +351,8 @@ export function runStoreContractTests(
 
         const scrubbedReq = await store.getRequest(req.id);
         expect(scrubbedReq).not.toBeNull();
-        expect(scrubbedReq?.params).toEqual({ scrubbed: true });
+        expect(scrubbedReq?.params).toMatchObject({ scrubbed: true });
+        expect(scrubbedReq?.params).toHaveProperty("scrubbed_at");
         expect(scrubbedReq?.contentScrubbedAt).toBeInstanceOf(Date);
       });
 
@@ -382,7 +383,7 @@ export function runStoreContractTests(
         const fetched = await store.getRequest(req.id);
         expect(fetched).not.toBeNull();
         expect(fetched?.contentScrubbedAt).toBeNull();
-        expect(fetched?.params).not.toEqual({ scrubbed: true });
+        expect(fetched?.params).not.toMatchObject({ scrubbed: true });
 
         // count may be 0 (no results either).
         expect(count).toBe(0);

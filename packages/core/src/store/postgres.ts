@@ -401,11 +401,16 @@ export class PostgresStore implements Store {
   // -- Retention ------------------------------------------------------------
 
   async scrubExpiredContent(before: Date): Promise<number> {
+    const tombstone = JSON.stringify({
+      scrubbed: true,
+      scrubbed_at: new Date().toISOString(),
+    });
+
     // Scrub requests: replace params with tombstone for completed requests
     // whose content hasn't been scrubbed yet.
     const scrubbedRequests = await this.sql`
       UPDATE requests
-      SET params = '{"scrubbed": true}'::jsonb,
+      SET params = ${tombstone}::jsonb,
           content_scrubbed_at = now(),
           updated_at = now()
       WHERE content_scrubbed_at IS NULL
@@ -416,13 +421,122 @@ export class PostgresStore implements Store {
     // Scrub results: replace response with tombstone.
     const scrubbedResults = await this.sql`
       UPDATE results
-      SET response = '{"scrubbed": true}'::jsonb,
+      SET response = ${tombstone}::jsonb,
           content_scrubbed_at = now()
       WHERE content_scrubbed_at IS NULL
         AND created_at < ${before}
     `;
 
     return scrubbedRequests.count + scrubbedResults.count;
+  }
+
+  async scrubContentForUser(userId: string, before: Date): Promise<number> {
+    const tombstone = JSON.stringify({
+      scrubbed: true,
+      scrubbed_at: new Date().toISOString(),
+    });
+
+    // Scrub requests for this user.
+    const scrubbedRequests = await this.sql`
+      UPDATE requests
+      SET params = ${tombstone}::jsonb,
+          content_scrubbed_at = now(),
+          updated_at = now()
+      WHERE user_id = ${userId}
+        AND content_scrubbed_at IS NULL
+        AND created_at < ${before}
+        AND status IN ('succeeded', 'failed', 'failed_final')
+    `;
+
+    // Scrub results linked to this user's requests.
+    const scrubbedResults = await this.sql`
+      UPDATE results
+      SET response = ${tombstone}::jsonb,
+          content_scrubbed_at = now()
+      WHERE content_scrubbed_at IS NULL
+        AND created_at < ${before}
+        AND request_id IN (
+          SELECT id FROM requests WHERE user_id = ${userId}
+        )
+    `;
+
+    return scrubbedRequests.count + scrubbedResults.count;
+  }
+
+  async scrubDeliveredContent(userId: string): Promise<number> {
+    const tombstone = JSON.stringify({
+      scrubbed: true,
+      scrubbed_at: new Date().toISOString(),
+    });
+
+    // Scrub results that have been delivered for this user's requests.
+    const scrubbedResults = await this.sql`
+      UPDATE results
+      SET response = ${tombstone}::jsonb,
+          content_scrubbed_at = now()
+      WHERE content_scrubbed_at IS NULL
+        AND delivery_status = 'delivered'
+        AND request_id IN (
+          SELECT id FROM requests WHERE user_id = ${userId}
+        )
+    `;
+
+    // Scrub the corresponding requests.
+    const scrubbedRequests = await this.sql`
+      UPDATE requests
+      SET params = ${tombstone}::jsonb,
+          content_scrubbed_at = now(),
+          updated_at = now()
+      WHERE user_id = ${userId}
+        AND content_scrubbed_at IS NULL
+        AND status IN ('succeeded', 'failed', 'failed_final')
+        AND id IN (
+          SELECT request_id FROM results
+          WHERE delivery_status = 'delivered'
+            AND content_scrubbed_at IS NOT NULL
+        )
+    `;
+
+    return scrubbedResults.count + scrubbedRequests.count;
+  }
+
+  async getDistinctUserIdsWithUnscrubbedContent(): Promise<string[]> {
+    const rows = await this.sql`
+      SELECT DISTINCT user_id FROM requests
+      WHERE content_scrubbed_at IS NULL
+        AND status IN ('succeeded', 'failed', 'failed_final')
+    `;
+    return rows.map((row) => row.user_id as string);
+  }
+
+  async scrubEventLogForUser(userId: string): Promise<number> {
+    const tombstone = JSON.stringify({
+      scrubbed: true,
+      scrubbed_at: new Date().toISOString(),
+    });
+
+    // Scrub event log entries for requests belonging to this user that
+    // have been scrubbed.
+    const scrubbedRequestEvents = await this.sql`
+      UPDATE event_log
+      SET details = ${tombstone}::jsonb
+      WHERE details IS NOT NULL
+        AND NOT (details ? 'scrubbed')
+        AND (
+          (entity_type = 'request' AND entity_id IN (
+            SELECT id FROM requests
+            WHERE user_id = ${userId} AND content_scrubbed_at IS NOT NULL
+          ))
+          OR
+          (entity_type = 'result' AND entity_id IN (
+            SELECT res.id FROM results res
+            JOIN requests req ON req.id = res.request_id
+            WHERE req.user_id = ${userId} AND res.content_scrubbed_at IS NOT NULL
+          ))
+        )
+    `;
+
+    return scrubbedRequestEvents.count;
   }
 
   // -- Telemetry / analytics ------------------------------------------------

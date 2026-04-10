@@ -155,6 +155,16 @@ export {
   Repackager,
   type RepackagerOptions,
   type RepackageResult,
+  RetentionWorker,
+  parseRetentionPolicy,
+  computeCutoffDate,
+  DEFAULT_RETENTION_POLICY,
+  DEFAULT_HARD_CAP_DAYS,
+  DEFAULT_RETENTION_INTERVAL_MS,
+  type RetentionPolicy,
+  type RetentionPolicyResolver,
+  type RetentionWorkerOptions,
+  type RetentionSweepResult,
 } from "./engine/index.js";
 
 // ---------------------------------------------------------------------------

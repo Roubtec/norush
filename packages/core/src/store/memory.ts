@@ -285,7 +285,7 @@ export class MemoryStore implements Store {
         r.createdAt < before &&
         (r.status === "succeeded" || r.status === "failed" || r.status === "failed_final")
       ) {
-        r.params = { scrubbed: true };
+        r.params = { scrubbed: true, scrubbed_at: now.toISOString() };
         r.contentScrubbedAt = now;
         r.updatedAt = now;
         count++;
@@ -294,8 +294,138 @@ export class MemoryStore implements Store {
 
     for (const r of this.results.values()) {
       if (r.contentScrubbedAt === null && r.createdAt < before) {
-        r.response = { scrubbed: true };
+        r.response = { scrubbed: true, scrubbed_at: now.toISOString() };
         r.contentScrubbedAt = now;
+        count++;
+      }
+    }
+
+    return count;
+  }
+
+  async scrubContentForUser(userId: string, before: Date): Promise<number> {
+    let count = 0;
+    const now = new Date();
+
+    for (const r of this.requests.values()) {
+      if (
+        r.userId === userId &&
+        r.contentScrubbedAt === null &&
+        r.createdAt < before &&
+        (r.status === "succeeded" || r.status === "failed" || r.status === "failed_final")
+      ) {
+        r.params = { scrubbed: true, scrubbed_at: now.toISOString() };
+        r.contentScrubbedAt = now;
+        r.updatedAt = now;
+        count++;
+      }
+    }
+
+    for (const res of this.results.values()) {
+      const req = this.requests.get(res.requestId);
+      if (
+        req &&
+        req.userId === userId &&
+        res.contentScrubbedAt === null &&
+        res.createdAt < before
+      ) {
+        res.response = { scrubbed: true, scrubbed_at: now.toISOString() };
+        res.contentScrubbedAt = now;
+        count++;
+      }
+    }
+
+    return count;
+  }
+
+  async scrubDeliveredContent(userId: string): Promise<number> {
+    let count = 0;
+    const now = new Date();
+
+    // Build a set of request IDs for this user that have delivered results.
+    const deliveredRequestIds = new Set<string>();
+    for (const res of this.results.values()) {
+      if (res.deliveryStatus === "delivered" && res.contentScrubbedAt === null) {
+        const req = this.requests.get(res.requestId);
+        if (req && req.userId === userId) {
+          deliveredRequestIds.add(res.requestId);
+
+          res.response = { scrubbed: true, scrubbed_at: now.toISOString() };
+          res.contentScrubbedAt = now;
+          count++;
+        }
+      }
+    }
+
+    // Scrub the corresponding requests.
+    for (const reqId of deliveredRequestIds) {
+      const req = this.requests.get(reqId);
+      if (req && req.contentScrubbedAt === null) {
+        req.params = { scrubbed: true, scrubbed_at: now.toISOString() };
+        req.contentScrubbedAt = now;
+        req.updatedAt = now;
+        count++;
+      }
+    }
+
+    return count;
+  }
+
+  async getDistinctUserIdsWithUnscrubbedContent(): Promise<string[]> {
+    const userIds = new Set<string>();
+
+    for (const r of this.requests.values()) {
+      if (
+        r.contentScrubbedAt === null &&
+        (r.status === "succeeded" || r.status === "failed" || r.status === "failed_final")
+      ) {
+        userIds.add(r.userId);
+      }
+    }
+
+    // Also check results via their parent requests.
+    for (const res of this.results.values()) {
+      if (res.contentScrubbedAt === null) {
+        const req = this.requests.get(res.requestId);
+        if (req) {
+          userIds.add(req.userId);
+        }
+      }
+    }
+
+    return [...userIds];
+  }
+
+  async scrubEventLogForUser(userId: string): Promise<number> {
+    let count = 0;
+    const now = new Date();
+
+    // Collect entity IDs that belong to this user and have been scrubbed.
+    const scrubbedEntityIds = new Set<string>();
+
+    for (const r of this.requests.values()) {
+      if (r.userId === userId && r.contentScrubbedAt !== null) {
+        scrubbedEntityIds.add(r.id);
+      }
+    }
+
+    for (const res of this.results.values()) {
+      if (res.contentScrubbedAt !== null) {
+        const req = this.requests.get(res.requestId);
+        if (req && req.userId === userId) {
+          scrubbedEntityIds.add(res.id);
+        }
+      }
+    }
+
+    // Scrub event log entries for those entities.
+    for (const event of this.events) {
+      if (
+        scrubbedEntityIds.has(event.entityId) &&
+        event.details !== null &&
+        !(event.details as Record<string, unknown>).scrubbed
+      ) {
+        event.details = { scrubbed: true, scrubbed_at: now.toISOString() };
         count++;
       }
     }
