@@ -68,11 +68,9 @@ export class MemoryStore implements Store {
   async updateRequest(id: string, updates: Partial<Request>): Promise<void> {
     const existing = this.requests.get(id);
     if (!existing) throw new Error(`Request not found: ${id}`);
-    const { createdAt: _createdAt, ...mutableUpdates } = updates;
     const updated = {
       ...existing,
-      ...mutableUpdates,
-      createdAt: existing.createdAt,
+      ...updates,
       updatedAt: new Date(),
     };
     // Preserve the original id — callers should not change it.
