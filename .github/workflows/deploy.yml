@@ -31,18 +31,35 @@ jobs:
   # 0. Check whether Azure credentials are configured
   # -----------------------------------------------------------------------
   check-credentials:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     outputs:
       has-azure: ${{ steps.check.outputs.has-azure }}
     steps:
       - name: Check for Azure credentials
         id: check
+        env:
+          ACR_LOGIN_SERVER: ${{ secrets.ACR_LOGIN_SERVER }}
+          ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
+          ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
+          AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
+          AZURE_RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP }}
+          AZURE_CONTAINER_APP_WEB: ${{ secrets.AZURE_CONTAINER_APP_WEB }}
+          AZURE_CONTAINER_APP_WORKER: ${{ secrets.AZURE_CONTAINER_APP_WORKER }}
         run: |
-          if [ -n "${{ secrets.ACR_LOGIN_SERVER }}" ] && [ -n "${{ secrets.AZURE_CREDENTIALS }}" ]; then
+          if [ -n "$ACR_LOGIN_SERVER" ] && \
+             [ -n "$ACR_USERNAME" ] && \
+             [ -n "$ACR_PASSWORD" ] && \
+             [ -n "$AZURE_CREDENTIALS" ] && \
+             [ -n "$AZURE_RESOURCE_GROUP" ] && \
+             [ -n "$AZURE_CONTAINER_APP_WEB" ] && \
+             [ -n "$AZURE_CONTAINER_APP_WORKER" ]; then
             echo "has-azure=true" >> "$GITHUB_OUTPUT"
           else
             echo "has-azure=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::Skipping deploy — Azure credentials not configured. Set ACR_LOGIN_SERVER, ACR_USERNAME, ACR_PASSWORD, AZURE_CREDENTIALS, and AZURE_RESOURCE_GROUP secrets to enable deployment."
+            echo "::notice::Skipping deploy — Azure deployment secrets are incomplete. Set ACR_LOGIN_SERVER, ACR_USERNAME, ACR_PASSWORD, AZURE_CREDENTIALS, AZURE_RESOURCE_GROUP, AZURE_CONTAINER_APP_WEB, and AZURE_CONTAINER_APP_WORKER secrets to enable deployment."
           fi
 
   # -----------------------------------------------------------------------
@@ -145,7 +162,7 @@ jobs:
 
       - name: Health check
         run: |
-          HEALTH_URL="${{ vars.DEPLOY_URL || 'https://norush.chat' }}/api/health"
+          HEALTH_URL="${{ vars.DEPLOY_URL || 'https://norush.roubtec.com/' }}/api/health"
           echo "Checking $HEALTH_URL ..."
 
           for i in 1 2 3 4 5; do
