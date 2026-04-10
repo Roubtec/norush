@@ -60,7 +60,7 @@ async function getUserLimitsFromDb(
   return {
     userId: row.user_id as string,
     maxRequestsPerHour: (row.max_requests_per_hour as number) ?? null,
-    maxTokensPerDay: (row.max_tokens_per_day as number) ?? null,
+    maxTokensPerPeriod: (row.max_tokens_per_period as number) ?? null,
     hardSpendLimitUsd:
       row.hard_spend_limit_usd != null
         ? Number(row.hard_spend_limit_usd)
@@ -127,7 +127,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     limits: limits
       ? {
           maxRequestsPerHour: limits.maxRequestsPerHour,
-          maxTokensPerDay: limits.maxTokensPerDay,
+          maxTokensPerPeriod: limits.maxTokensPerPeriod,
           hardSpendLimitUsd: limits.hardSpendLimitUsd,
           currentPeriodRequests: limits.currentPeriodRequests,
           currentPeriodTokens: limits.currentPeriodTokens,

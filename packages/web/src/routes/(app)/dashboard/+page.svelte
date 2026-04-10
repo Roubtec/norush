@@ -93,8 +93,8 @@
 
   /** Token limit utilization percentage. */
   let tokenUtilization = $derived(
-    limits?.maxTokensPerDay != null && limits.maxTokensPerDay > 0
-      ? Math.min((limits.currentPeriodTokens / limits.maxTokensPerDay) * 100, 100)
+    limits?.maxTokensPerPeriod != null && limits.maxTokensPerPeriod > 0
+      ? Math.min((limits.currentPeriodTokens / limits.maxTokensPerPeriod) * 100, 100)
       : null,
   );
 </script>
@@ -194,12 +194,12 @@
             max={fmtTokens(limits.maxRequestsPerHour)}
           />
         {/if}
-        {#if limits.maxTokensPerDay != null && tokenUtilization != null}
+        {#if limits.maxTokensPerPeriod != null && tokenUtilization != null}
           <LimitBar
             label="Tokens / day"
             utilization={tokenUtilization}
             current={fmtTokens(limits.currentPeriodTokens)}
-            max={fmtTokens(limits.maxTokensPerDay)}
+            max={fmtTokens(limits.maxTokensPerPeriod)}
           />
         {/if}
       </div>
