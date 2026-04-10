@@ -428,8 +428,8 @@ export function runStoreContractTests(
         expect(consumed).toBe(true);
 
         const limits = await store.getUserLimits("test-user");
-        expect(limits).not.toBeNull();
-        expect(limits!.currentPeriodRequests).toBe(5);
+        if (!limits) throw new Error("expected user limits to exist");
+        expect(limits.currentPeriodRequests).toBe(5);
       });
 
       test("returns true when exactly at limit boundary", async () => {
@@ -444,7 +444,8 @@ export function runStoreContractTests(
         expect(consumed).toBe(true);
 
         const limits = await store.getUserLimits("test-user");
-        expect(limits!.currentPeriodRequests).toBe(10);
+        if (!limits) throw new Error("expected user limits to exist");
+        expect(limits.currentPeriodRequests).toBe(10);
       });
 
       test("returns false and does not increment when over limit", async () => {
@@ -460,7 +461,8 @@ export function runStoreContractTests(
 
         // Counter should remain at 8
         const limits = await store.getUserLimits("test-user");
-        expect(limits!.currentPeriodRequests).toBe(8);
+        if (!limits) throw new Error("expected user limits to exist");
+        expect(limits.currentPeriodRequests).toBe(8);
       });
 
       test("returns false for non-existent user", async () => {
