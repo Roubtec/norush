@@ -45,6 +45,11 @@ export interface OpenAIFlexAdapterOptions {
    * SDK timeout in milliseconds. Defaults to 900,000 (15 minutes).
    */
   timeoutMs?: number;
+  /**
+   * Sleep function override. Useful for testing to avoid real delays.
+   * Defaults to a standard setTimeout-based Promise.
+   */
+  sleep?: (ms: number) => Promise<void>;
 }
 
 // ---------------------------------------------------------------------------
@@ -120,19 +125,26 @@ export class OpenAIFlexAdapter implements Provider {
   private readonly client: OpenAI;
   private readonly maxRetries: number;
   private readonly baseDelayMs: number;
+  private readonly _sleep: (ms: number) => Promise<void>;
 
   /**
-   * In-memory cache of results from the latest submitBatch call.
-   * Keyed by the synthetic batch reference ID.
+   * In-memory cache of results keyed by synthetic batch ID.
+   *
+   * Flex requests complete synchronously inside `submitBatch`, so results are
+   * always available by the time the engine polls `checkStatus`. The cache
+   * bridges the gap between submission and ingestion within a single process
+   * lifetime.
+   *
+   * **Limitation**: if the process crashes after `submitBatch` returns but
+   * before `fetchResults` is consumed, the cached results are lost. In that
+   * case `checkStatus` will throw for the stale `providerBatchId`, which
+   * signals the engine to re-queue the affected requests (either for a fresh
+   * Flex attempt or a fallback to the async batch API).
    */
   private readonly resultCache = new Map<string, NorushResult[]>();
 
   /** Counter for generating synthetic batch IDs. */
   private batchCounter = 0;
-
-  /** Sleep function — injectable for testing. */
-  public _sleep: (ms: number) => Promise<void> = (ms) =>
-    new Promise((resolve) => setTimeout(resolve, ms));
 
   constructor(options: OpenAIFlexAdapterOptions) {
     this.client = new OpenAI({
@@ -142,6 +154,8 @@ export class OpenAIFlexAdapter implements Provider {
     });
     this.maxRetries = options.maxRetries ?? DEFAULT_MAX_RETRIES;
     this.baseDelayMs = options.baseDelayMs ?? DEFAULT_BASE_DELAY_MS;
+    this._sleep =
+      options.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
   }
 
   /**
@@ -170,26 +184,38 @@ export class OpenAIFlexAdapter implements Provider {
   }
 
   /**
-   * Flex requests are synchronous — status is always "ended" once
-   * submitBatch has returned.
+   * Flex requests are synchronous, but a batch can only be considered
+   * complete while its cached results are still available for retrieval.
+   *
+   * Throws if the results are no longer in the cache (e.g. the process
+   * restarted between submission and ingestion). The engine should treat this
+   * as a signal to re-queue the affected requests.
    */
-  async checkStatus(_ref: ProviderBatchRef): Promise<BatchStatus> {
+  async checkStatus(ref: ProviderBatchRef): Promise<BatchStatus> {
+    if (!this.resultCache.has(ref.providerBatchId)) {
+      throw new Error(
+        `OpenAI Flex batch results are unavailable for providerBatchId: ${ref.providerBatchId}`,
+      );
+    }
     return "ended";
   }
 
   /**
    * Yield the cached results from the synchronous submission.
+   * The cache entry is deleted in a `finally` block so cleanup happens even
+   * if the consumer breaks out of the iteration early.
    */
   async *fetchResults(ref: ProviderBatchRef): AsyncIterable<NorushResult> {
     const results = this.resultCache.get(ref.providerBatchId);
     if (!results) return;
 
-    for (const result of results) {
-      yield result;
+    try {
+      for (const result of results) {
+        yield result;
+      }
+    } finally {
+      this.resultCache.delete(ref.providerBatchId);
     }
-
-    // Clean up after yielding all results
-    this.resultCache.delete(ref.providerBatchId);
   }
 
   /**
@@ -218,6 +244,7 @@ export class OpenAIFlexAdapter implements Provider {
           ...req.params,
           model: req.model,
           service_tier: "flex",
+          stream: false,
         } as OpenAI.ChatCompletionCreateParamsNonStreaming);
 
         const body = response as unknown as Record<string, unknown>;
@@ -236,8 +263,9 @@ export class OpenAIFlexAdapter implements Provider {
         lastError = err;
 
         if (is429Error(err) && attempt < this.maxRetries) {
-          // Exponential backoff with jitter
-          const delay = this.baseDelayMs * Math.pow(2, attempt);
+          // Exponential backoff with ±5% jitter (98–105% of base delay)
+          const jitterFactor = 0.98 + Math.random() * 0.07;
+          const delay = Math.round(this.baseDelayMs * Math.pow(2, attempt) * jitterFactor);
           await this._sleep(delay);
           continue;
         }

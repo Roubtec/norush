@@ -77,6 +77,7 @@ function make429Error(message = "Resource temporarily unavailable") {
 
 describe("OpenAIFlexAdapter", () => {
   let adapter: OpenAIFlexAdapter;
+  let sleepMock: ReturnType<typeof vi.fn>;
 
   beforeEach(async () => {
     mockChatCompletionsCreate.mockReset();
@@ -93,9 +94,8 @@ describe("OpenAIFlexAdapter", () => {
       }),
     );
 
-    adapter = new OpenAIFlexAdapter({ apiKey: "sk-test-key" });
-    // Replace sleep with immediate resolution for tests
-    adapter._sleep = vi.fn().mockResolvedValue(undefined);
+    sleepMock = vi.fn().mockResolvedValue(undefined);
+    adapter = new OpenAIFlexAdapter({ apiKey: "sk-test-key", sleep: sleepMock });
   });
 
   afterEach(() => {
@@ -160,6 +160,21 @@ describe("OpenAIFlexAdapter", () => {
       expect(mockChatCompletionsCreate).toHaveBeenCalledOnce();
       const callArg = mockChatCompletionsCreate.mock.calls[0][0];
       expect(callArg.service_tier).toBe("flex");
+    });
+
+    it("forces stream: false even if params contains stream: true", async () => {
+      mockChatCompletionsCreate.mockResolvedValue(mockCompletionResponse());
+
+      const req = makeRequest({
+        params: {
+          messages: [{ role: "user", content: "test" }],
+          stream: true,
+        },
+      });
+      await adapter.submitBatch([req]);
+
+      const callArg = mockChatCompletionsCreate.mock.calls[0][0];
+      expect(callArg.stream).toBe(false);
     });
 
     it("includes model from request, overriding params.model", async () => {
@@ -352,10 +367,10 @@ describe("OpenAIFlexAdapter", () => {
 
       expect(mockChatCompletionsCreate).toHaveBeenCalledTimes(2);
       expect(results[0].success).toBe(true);
-      expect(adapter._sleep).toHaveBeenCalledOnce();
+      expect(sleepMock).toHaveBeenCalledOnce();
     });
 
-    it("uses exponential backoff delays", async () => {
+    it("uses exponential backoff delays with ±5% jitter", async () => {
       mockChatCompletionsCreate
         .mockRejectedValueOnce(make429Error())
         .mockRejectedValueOnce(make429Error())
@@ -363,12 +378,12 @@ describe("OpenAIFlexAdapter", () => {
         .mockResolvedValueOnce(mockCompletionResponse());
 
       // Use custom base delay for predictable assertions
+      const customSleepMock = vi.fn().mockResolvedValue(undefined);
       const customAdapter = new OpenAIFlexAdapter({
         apiKey: "sk-test",
         baseDelayMs: 100,
+        sleep: customSleepMock,
       });
-      const sleepMock = vi.fn().mockResolvedValue(undefined);
-      customAdapter._sleep = sleepMock;
 
       const ref = await customAdapter.submitBatch([makeRequest()]);
       const results: NorushResult[] = [];
@@ -376,11 +391,20 @@ describe("OpenAIFlexAdapter", () => {
         results.push(r);
       }
 
-      expect(sleepMock).toHaveBeenCalledTimes(3);
-      // Exponential: 100*2^0=100, 100*2^1=200, 100*2^2=400
-      expect(sleepMock).toHaveBeenNthCalledWith(1, 100);
-      expect(sleepMock).toHaveBeenNthCalledWith(2, 200);
-      expect(sleepMock).toHaveBeenNthCalledWith(3, 400);
+      expect(customSleepMock).toHaveBeenCalledTimes(3);
+      // Exponential with 98–105% jitter applied to base * 2^attempt
+      // attempt 0: 100 * [0.98, 1.05) → [98, 105]
+      // attempt 1: 200 * [0.98, 1.05) → [196, 210]
+      // attempt 2: 400 * [0.98, 1.05) → [392, 420]
+      const [delay0] = customSleepMock.mock.calls[0] as [number];
+      const [delay1] = customSleepMock.mock.calls[1] as [number];
+      const [delay2] = customSleepMock.mock.calls[2] as [number];
+      expect(delay0).toBeGreaterThanOrEqual(98);
+      expect(delay0).toBeLessThanOrEqual(105);
+      expect(delay1).toBeGreaterThanOrEqual(196);
+      expect(delay1).toBeLessThanOrEqual(210);
+      expect(delay2).toBeGreaterThanOrEqual(392);
+      expect(delay2).toBeLessThanOrEqual(420);
 
       expect(results[0].success).toBe(true);
     });
@@ -409,8 +433,8 @@ describe("OpenAIFlexAdapter", () => {
       const customAdapter = new OpenAIFlexAdapter({
         apiKey: "sk-test",
         maxRetries: 2,
+        sleep: vi.fn().mockResolvedValue(undefined),
       });
-      customAdapter._sleep = vi.fn().mockResolvedValue(undefined);
 
       // 3 failures total (initial + 2 retries)
       for (let i = 0; i < 3; i++) {
@@ -440,7 +464,7 @@ describe("OpenAIFlexAdapter", () => {
 
       expect(mockChatCompletionsCreate).toHaveBeenCalledOnce();
       expect(results[0].success).toBe(false);
-      expect(adapter._sleep).not.toHaveBeenCalled();
+      expect(sleepMock).not.toHaveBeenCalled();
     });
 
     it("does not retry on plain Error without status", async () => {
@@ -455,7 +479,7 @@ describe("OpenAIFlexAdapter", () => {
       }
 
       expect(mockChatCompletionsCreate).toHaveBeenCalledOnce();
-      expect(adapter._sleep).not.toHaveBeenCalled();
+      expect(sleepMock).not.toHaveBeenCalled();
     });
   });
 
@@ -464,16 +488,19 @@ describe("OpenAIFlexAdapter", () => {
   // -------------------------------------------------------------------------
 
   describe("checkStatus", () => {
-    it("always returns 'ended' since Flex is synchronous", async () => {
-      const status = await adapter.checkStatus(makeRef());
+    it("returns 'ended' when results are in cache", async () => {
+      mockChatCompletionsCreate.mockResolvedValue(mockCompletionResponse());
+      const ref = await adapter.submitBatch([makeRequest()]);
+      const status = await adapter.checkStatus(ref);
       expect(status).toBe("ended");
     });
 
-    it("returns 'ended' regardless of the ref passed", async () => {
-      const status = await adapter.checkStatus(
-        makeRef({ providerBatchId: "nonexistent" }),
+    it("throws when batch results are not in cache (unknown or post-restart)", async () => {
+      await expect(
+        adapter.checkStatus(makeRef({ providerBatchId: "nonexistent" })),
+      ).rejects.toThrow(
+        "OpenAI Flex batch results are unavailable for providerBatchId: nonexistent",
       );
-      expect(status).toBe("ended");
     });
   });
 
@@ -527,6 +554,27 @@ describe("OpenAIFlexAdapter", () => {
         secondResults.push(r);
       }
       expect(secondResults).toHaveLength(0);
+    });
+
+    it("cleans up cache even when consumer breaks out early", async () => {
+      mockChatCompletionsCreate.mockResolvedValue(mockCompletionResponse());
+
+      const requests = [
+        makeRequest({ id: "req_001" }),
+        makeRequest({ id: "req_002" }),
+        makeRequest({ id: "req_003" }),
+      ];
+      const ref = await adapter.submitBatch(requests);
+
+      // Break after first result
+      for await (const _r of adapter.fetchResults(ref)) {
+        break;
+      }
+
+      // Cache should be gone; subsequent checkStatus should throw
+      await expect(adapter.checkStatus(ref)).rejects.toThrow(
+        "OpenAI Flex batch results are unavailable",
+      );
     });
   });
 
