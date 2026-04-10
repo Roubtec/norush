@@ -67,12 +67,9 @@ jobs:
   # -----------------------------------------------------------------------
   build-and-push:
     needs: check-credentials
-    # Only deploy when CI succeeded and Azure credentials are available.
-    # The CI check is skipped for manual workflow_dispatch triggers.
-    if: >-
-      needs.check-credentials.outputs.has-azure == 'true' &&
-      (github.event_name == 'workflow_dispatch' ||
-      github.event.workflow_run.conclusion == 'success')
+    # Only deploy when Azure credentials are available.
+    # CI-success gate is handled by check-credentials job-level if.
+    if: needs.check-credentials.outputs.has-azure == 'true'
     runs-on: ubuntu-latest
     outputs:
       image-tag: ${{ steps.meta.outputs.tag }}
@@ -162,7 +159,7 @@ jobs:
 
       - name: Health check
         run: |
-          HEALTH_URL="${{ vars.DEPLOY_URL || 'https://norush.roubtec.com/' }}/api/health"
+          HEALTH_URL="${{ vars.DEPLOY_URL || 'https://norush.roubtec.com' }}/api/health"
           echo "Checking $HEALTH_URL ..."
 
           for i in 1 2 3 4 5; do
