@@ -182,8 +182,17 @@ export const POST: RequestHandler = async ({ request }) => {
     );
 
     if (!consumed) {
-      // Another concurrent request consumed the remaining capacity.
-      const headers = buildRateLimitHeaders(limitCheck);
+      // Another concurrent request consumed the remaining capacity between our
+      // checkRateLimit pass and the atomic consume. Return 429 with a
+      // Retry-After derived from the stored period reset time.
+      const retryAfterSeconds = Math.max(
+        Math.ceil((userLimits.periodResetAt.getTime() - Date.now()) / 1000),
+        1,
+      );
+      const headers = {
+        "Retry-After": String(retryAfterSeconds),
+        ...buildRateLimitHeaders(limitCheck),
+      };
       return json(
         {
           error: {
@@ -196,26 +205,38 @@ export const POST: RequestHandler = async ({ request }) => {
     }
   }
 
-  // Enqueue all requests
+  // Enqueue all requests.
+  // NOTE: quota is already consumed above; if enqueue throws for any item the
+  // consumed count is not rolled back. This is a known tradeoff — the user's
+  // quota is charged even on a transient DB error, but they will recover when
+  // the period resets. A full compensation mechanism would require a
+  // decrementPeriodRequests store method and is left for a future iteration.
   const created = [];
 
-  for (const item of validatedItems) {
-    const req = await engine.enqueue({
-      provider: item.provider as ProviderName,
-      model: item.model,
-      params: item.params,
-      userId: caller.userId,
-      callbackUrl: item.callback_url,
-      webhookSecret: item.webhook_secret,
-    });
+  try {
+    for (const item of validatedItems) {
+      const req = await engine.enqueue({
+        provider: item.provider as ProviderName,
+        model: item.model,
+        params: item.params,
+        userId: caller.userId,
+        callbackUrl: item.callback_url,
+        webhookSecret: item.webhook_secret,
+      });
 
-    created.push({
-      id: req.id,
-      provider: req.provider,
-      model: req.model,
-      status: req.status,
-      createdAt: req.createdAt.toISOString(),
-    });
+      created.push({
+        id: req.id,
+        provider: req.provider,
+        model: req.model,
+        status: req.status,
+        createdAt: req.createdAt.toISOString(),
+      });
+    }
+  } catch (err) {
+    // Quota was consumed before the error; log and return 500 so the client
+    // knows to retry (not silently drop) the submission.
+    console.error("enqueue failed after quota consumed:", err);
+    return apiError("enqueue_failed", "Failed to enqueue request", 500);
   }
 
   // Include rate limit headers on successful responses too

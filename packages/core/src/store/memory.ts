@@ -527,6 +527,12 @@ export class MemoryStore implements Store {
     count: number,
     effectiveLimit: number,
   ): Promise<boolean> {
+    if (!Number.isFinite(count) || count <= 0 || !Number.isInteger(count)) {
+      throw new Error("count must be a positive integer");
+    }
+    if (!Number.isFinite(effectiveLimit) || effectiveLimit < 0 || !Number.isInteger(effectiveLimit)) {
+      throw new Error("effectiveLimit must be a non-negative integer");
+    }
     const limits = this.userLimits.get(userId);
     if (!limits) return false;
     if (limits.currentPeriodRequests + count > effectiveLimit) return false;
@@ -555,6 +561,9 @@ export class MemoryStore implements Store {
   async resetPeriod(userId: string, nextResetAt: Date): Promise<void> {
     const limits = this.userLimits.get(userId);
     if (!limits) return;
+    // Only reset if the period is actually expired; prevents a concurrent
+    // request from wiping a reset that another request already applied.
+    if (new Date() < limits.periodResetAt) return;
     limits.currentPeriodRequests = 0;
     limits.currentPeriodTokens = 0;
     limits.periodResetAt = nextResetAt;

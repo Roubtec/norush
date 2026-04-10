@@ -150,6 +150,15 @@ export interface Store {
    * single atomic operation. In PostgresStore this is a single UPDATE with
    * a WHERE guard; in MemoryStore the single-threaded event loop makes the
    * synchronous check+increment inherently safe.
+   *
+   * **Period expiry:** this method enforces against the stored counters as-is.
+   * If the current period has expired, callers must invoke `resetPeriod()`
+   * first so the counters are zero before consuming. Both implementations
+   * make `resetPeriod()` conditional (no-op if the period is not expired)
+   * so it is safe to call it speculatively from concurrent requests.
+   *
+   * @throws if `count` is not a positive integer or `effectiveLimit` is not
+   *   a non-negative integer.
    */
   consumePeriodRequests(
     userId: string,

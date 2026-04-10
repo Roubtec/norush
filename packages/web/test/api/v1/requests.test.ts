@@ -454,6 +454,11 @@ describe("POST /api/v1/requests", () => {
 
     // Verify enqueue was never called (request should be rejected before enqueuing)
     expect(mockEnqueue).not.toHaveBeenCalled();
+
+    // Retry-After must be present so clients know when to retry
+    const retryAfter = response.headers.get("Retry-After");
+    expect(retryAfter).not.toBeNull();
+    expect(Number(retryAfter)).toBeGreaterThan(0);
   });
 
   it("rejects bulk submission that would exceed the rate limit", async () => {
