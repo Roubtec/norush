@@ -241,6 +241,8 @@ export {
 
 export { NoopTelemetry } from "./telemetry/noop.js";
 export { ConsoleTelemetry } from "./telemetry/console.js";
+export { PrometheusTelemetry } from "./telemetry/prometheus.js";
+export { OpenTelemetryTelemetry } from "./telemetry/opentelemetry.js";
 
 // ---------------------------------------------------------------------------
 // Engine entry point

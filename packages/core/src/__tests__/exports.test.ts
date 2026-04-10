@@ -4,6 +4,8 @@ import {
   resolveConfig,
   NoopTelemetry,
   ConsoleTelemetry,
+  PrometheusTelemetry,
+  OpenTelemetryTelemetry,
   MemoryStore,
   PostgresStore,
   migrate,
@@ -120,6 +122,16 @@ describe("@norush/core exports", () => {
   it("exports ConsoleTelemetry class", () => {
     const t = new ConsoleTelemetry();
     expect(t).toBeInstanceOf(ConsoleTelemetry);
+  });
+
+  it("exports PrometheusTelemetry class", () => {
+    const t = new PrometheusTelemetry();
+    expect(t).toBeInstanceOf(PrometheusTelemetry);
+  });
+
+  it("exports OpenTelemetryTelemetry class", () => {
+    const t = new OpenTelemetryTelemetry();
+    expect(t).toBeInstanceOf(OpenTelemetryTelemetry);
   });
 
   it("exports MemoryStore class", () => {
