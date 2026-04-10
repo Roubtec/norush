@@ -98,6 +98,15 @@ export class ResultIngester {
       return result;
     }
 
+    // Prefetch userId for every request in this batch once, before the loop,
+    // to avoid an N+1 store round-trip per result inside updateUsageCounters.
+    // All requests in a batch share the same (provider, model, userId) grouping,
+    // so in practice this resolves to a single userId for the whole batch.
+    const prefetchedRequests = await this.store.getRequestsByBatchId(batch.id);
+    const userIdByRequestId = new Map<string, string>(
+      prefetchedRequests.map((r) => [r.id, r.userId]),
+    );
+
     for await (const norushResult of adapter.fetchResults(ref)) {
       const newStatus = norushResult.success ? "succeeded" : "failed";
       try {
@@ -120,6 +129,7 @@ export class ResultIngester {
         await this.updateUsageCounters(
           norushResult,
           batch.provider,
+          userIdByRequestId,
         );
 
         if (norushResult.success) {
@@ -145,6 +155,18 @@ export class ResultIngester {
           } catch {
             // Request may not exist (orphaned result) — safe to ignore.
           }
+
+          // Best-effort: update usage counters on the duplicate path too. If
+          // the prior run crashed between createResult() and the counter update,
+          // this run ensures tokens/spend are still recorded. The risk of
+          // double-counting (if counters were already updated before the crash)
+          // is accepted until idempotent per-request counter tracking is added.
+          await this.updateUsageCounters(
+            norushResult,
+            batch.provider,
+            userIdByRequestId,
+          );
+
           result.duplicates++;
           this.telemetry.event("result_duplicate_skipped", {
             requestId: norushResult.requestId,
@@ -209,13 +231,18 @@ export class ResultIngester {
   /**
    * Increment the user's token and spend counters after a result is persisted.
    *
-   * Best-effort: failures are logged but never block result delivery. The
-   * userId is looked up from the request record (results don't carry it
-   * directly).
+   * Best-effort: each counter is attempted independently via Promise.allSettled
+   * so a failure in one does not skip the other. Failures are logged but never
+   * block result delivery.
+   *
+   * userId is resolved from the prefetched `userIdByRequestId` map. A store
+   * lookup fallback is used only for results whose requestId was not in the
+   * batch (e.g. orphaned replays).
    */
   private async updateUsageCounters(
     norushResult: NorushResult,
     provider: string,
+    userIdByRequestId: Map<string, string>,
   ): Promise<void> {
     const inputTokens = norushResult.inputTokens ?? 0;
     const outputTokens = norushResult.outputTokens ?? 0;
@@ -224,40 +251,77 @@ export class ResultIngester {
     // Nothing to increment if no token counts are available.
     if (totalTokens === 0) return;
 
-    try {
-      // Look up the userId from the request record.
-      const request = await this.store.getRequest(norushResult.requestId);
-      if (!request) {
-        this.telemetry.event("usage_counter_skip", {
+    // Resolve userId from prefetched map; fall back to a store lookup for
+    // results whose requestId was not pre-loaded (e.g. orphaned replays).
+    let userId = userIdByRequestId.get(norushResult.requestId);
+    if (!userId) {
+      try {
+        const request = await this.store.getRequest(norushResult.requestId);
+        if (!request) {
+          this.telemetry.event("usage_counter_skip", {
+            requestId: norushResult.requestId,
+            reason: "request_not_found",
+          });
+          return;
+        }
+        userId = request.userId;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.telemetry.event("usage_counter_error", {
           requestId: norushResult.requestId,
-          reason: "request_not_found",
+          error: message,
         });
         return;
       }
+    }
 
-      const userId = request.userId;
+    const costUsd = batchCost(provider, inputTokens, outputTokens);
+    const shouldIncrementSpend = costUsd > 0;
 
-      // Increment period token counter.
-      await this.store.incrementPeriodTokens(userId, totalTokens);
+    // Attempt both counter updates independently so one failure does not
+    // prevent the other from being recorded.
+    const [tokenResult, spendResult] = await Promise.allSettled([
+      this.store.incrementPeriodTokens(userId, totalTokens),
+      shouldIncrementSpend
+        ? this.store.incrementSpend(userId, costUsd)
+        : Promise.resolve(),
+    ]);
 
-      // Compute USD cost at batch (discounted) rates and increment spend.
-      const costUsd = batchCost(provider, inputTokens, outputTokens);
-      if (costUsd > 0) {
-        await this.store.incrementSpend(userId, costUsd);
-      }
+    if (tokenResult.status === "rejected") {
+      const message =
+        tokenResult.reason instanceof Error
+          ? tokenResult.reason.message
+          : String(tokenResult.reason);
+      this.telemetry.event("usage_counter_error", {
+        requestId: norushResult.requestId,
+        userId,
+        counter: "period_tokens",
+        error: message,
+      });
+    }
 
+    if (shouldIncrementSpend && spendResult.status === "rejected") {
+      const message =
+        spendResult.reason instanceof Error
+          ? spendResult.reason.message
+          : String(spendResult.reason);
+      this.telemetry.event("usage_counter_error", {
+        requestId: norushResult.requestId,
+        userId,
+        counter: "spend",
+        error: message,
+      });
+    }
+
+    if (
+      tokenResult.status === "fulfilled" &&
+      (!shouldIncrementSpend || spendResult.status === "fulfilled")
+    ) {
       this.telemetry.event("usage_counters_updated", {
         requestId: norushResult.requestId,
         userId,
         totalTokens,
         costUsd,
-      });
-    } catch (error) {
-      // Best-effort — log and continue. Never block result delivery.
-      const message = error instanceof Error ? error.message : String(error);
-      this.telemetry.event("usage_counter_error", {
-        requestId: norushResult.requestId,
-        error: message,
       });
     }
   }

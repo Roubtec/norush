@@ -464,6 +464,56 @@ describe("ResultIngester", () => {
       expect(updatedBatch?.failedCount).toBe(0);
     });
 
+    it("updates usage counters on the duplicate path to guard against crash between createResult and counter update", async () => {
+      await store.upsertUserLimits("user_01", {
+        maxTokensPerPeriod: 1_000_000,
+      });
+
+      const { batch, requestIds } = await createEndedBatch(store, {
+        requestCount: 1,
+      });
+
+      const norushResults: NorushResult[] = [
+        {
+          requestId: requestIds[0],
+          response: { content: "Hello" },
+          success: true,
+          inputTokens: 100,
+          outputTokens: 200,
+        },
+      ];
+
+      // Simulate restart after crash: createResult throws duplicate because the
+      // result was already persisted in the prior run, but the counter update
+      // never completed before the process died.
+      vi.spyOn(store, "createResult").mockRejectedValue(
+        new Error("duplicate key: unique constraint violation"),
+      );
+
+      const provider = mockProvider({
+        fetchResults: vi.fn().mockReturnValue(makeResultStream(norushResults)),
+      });
+
+      const ingester = new ResultIngester({
+        store,
+        providers: new Map([["claude", provider]]),
+      });
+
+      const result = await ingester.ingest(batch);
+
+      // The result is a duplicate — not re-ingested.
+      expect(result.duplicates).toBe(1);
+      expect(result.ingested).toBe(0);
+      expect(result.errors).toHaveLength(0);
+
+      // Counters must still be updated even on the duplicate path so that
+      // a crash between createResult() and the counter update on the previous
+      // run does not permanently undercount usage.
+      const limits = await store.getUserLimits("user_01");
+      if (!limits) throw new Error("expected user limits to exist");
+      expect(limits.currentPeriodTokens).toBe(300); // 100 + 200
+    });
+
     it("captures non-duplicate errors without stopping ingestion", async () => {
       const { batch, requestIds } = await createEndedBatch(store, {
         requestCount: 3,
