@@ -167,6 +167,33 @@ See [infra/README.md](./infra/README.md) for full Azure setup instructions, incl
 - Custom domain setup
 - Rollback procedures
 
+## Telemetry
+
+norush ships four telemetry adapters:
+
+| Adapter | Description |
+|---------|-------------|
+| `NoopTelemetry` | Default. Silently discards all metrics. |
+| `ConsoleTelemetry` | Logs to stdout with `[norush]` prefix. |
+| `PrometheusTelemetry` | Maps to `prom-client` counters and histograms. |
+| `OpenTelemetryTelemetry` | Maps to `@opentelemetry/api` meters (OTLP-compatible). |
+
+The web application exposes `GET /metrics` for Prometheus scraping.
+
+## Documentation
+
+- [Getting Started](./docs/getting-started.md)
+- [Configuration](./docs/configuration.md)
+- [API Reference](./docs/api-reference.md)
+- [Architecture](./docs/architecture.md)
+- [Deployment](./docs/deployment.md)
+
+## Examples
+
+- [Webhook Consumer](./examples/webhook-consumer/) -- receive and verify webhook deliveries.
+- [Cron Batch](./examples/cron-batch/) -- enqueue and tick via cron/serverless.
+- [GitHub Actions](./examples/github-action/) -- scheduled and manual workflows.
+
 ## Project Status
 
 **Early development.** See [PLAN.md](./PLAN.md) for the full design document

@@ -11,15 +11,8 @@
  * Configure your Prometheus scrape target to point at this endpoint.
  */
 
-import { Registry } from "prom-client";
 import type { RequestHandler } from "./$types";
-
-/**
- * Shared prom-client registry used by the PrometheusTelemetry adapter.
- * Import this from server modules that need to register the telemetry
- * adapter with the same registry.
- */
-export const registry = new Registry();
+import { registry } from "$lib/server/metrics";
 
 export const GET: RequestHandler = async () => {
   const body = await registry.metrics();
