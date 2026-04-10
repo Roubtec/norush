@@ -419,6 +419,66 @@ export function runStoreContractTests(
       });
     });
 
+    describe("consumePeriodRequests (atomic rate limit)", () => {
+      test("returns true and increments counter when under limit", async () => {
+        store = await factory();
+        await store.upsertUserLimits("test-user", { maxRequestsPerHour: 100 });
+
+        const consumed = await store.consumePeriodRequests("test-user", 5, 100);
+        expect(consumed).toBe(true);
+
+        const limits = await store.getUserLimits("test-user");
+        expect(limits).not.toBeNull();
+        expect(limits!.currentPeriodRequests).toBe(5);
+      });
+
+      test("returns true when exactly at limit boundary", async () => {
+        store = await factory();
+        await store.upsertUserLimits("test-user", { maxRequestsPerHour: 10 });
+
+        // Consume 7 first
+        await store.consumePeriodRequests("test-user", 7, 10);
+
+        // Consume remaining 3 (7 + 3 = 10, exactly at limit)
+        const consumed = await store.consumePeriodRequests("test-user", 3, 10);
+        expect(consumed).toBe(true);
+
+        const limits = await store.getUserLimits("test-user");
+        expect(limits!.currentPeriodRequests).toBe(10);
+      });
+
+      test("returns false and does not increment when over limit", async () => {
+        store = await factory();
+        await store.upsertUserLimits("test-user", { maxRequestsPerHour: 10 });
+
+        // Consume 8
+        await store.consumePeriodRequests("test-user", 8, 10);
+
+        // Try to consume 5 more (8 + 5 = 13 > 10)
+        const consumed = await store.consumePeriodRequests("test-user", 5, 10);
+        expect(consumed).toBe(false);
+
+        // Counter should remain at 8
+        const limits = await store.getUserLimits("test-user");
+        expect(limits!.currentPeriodRequests).toBe(8);
+      });
+
+      test("returns false for non-existent user", async () => {
+        store = await factory();
+        const consumed = await store.consumePeriodRequests("nonexistent", 1, 100);
+        expect(consumed).toBe(false);
+      });
+
+      test("returns false when single request would exceed limit of 0", async () => {
+        store = await factory();
+        await store.upsertUserLimits("test-user", { maxRequestsPerHour: 10 });
+
+        // effective limit of 0 means nothing is allowed
+        const consumed = await store.consumePeriodRequests("test-user", 1, 0);
+        expect(consumed).toBe(false);
+      });
+    });
+
     describe("Analytics", () => {
       test("getStats aggregates usage for a user within a period", async () => {
         store = await factory();

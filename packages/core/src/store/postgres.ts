@@ -589,6 +589,22 @@ export class PostgresStore implements Store {
     `;
   }
 
+  async consumePeriodRequests(
+    userId: string,
+    count: number,
+    effectiveLimit: number,
+  ): Promise<boolean> {
+    const rows = await this.sql`
+      UPDATE user_limits
+      SET current_period_requests = current_period_requests + ${count},
+          updated_at = now()
+      WHERE user_id = ${userId}
+        AND current_period_requests + ${count} <= ${effectiveLimit}
+      RETURNING current_period_requests
+    `;
+    return rows.length > 0;
+  }
+
   async incrementPeriodTokens(
     userId: string,
     count: number,

@@ -522,6 +522,19 @@ export class MemoryStore implements Store {
     limits.updatedAt = new Date();
   }
 
+  async consumePeriodRequests(
+    userId: string,
+    count: number,
+    effectiveLimit: number,
+  ): Promise<boolean> {
+    const limits = this.userLimits.get(userId);
+    if (!limits) return false;
+    if (limits.currentPeriodRequests + count > effectiveLimit) return false;
+    limits.currentPeriodRequests += count;
+    limits.updatedAt = new Date();
+    return true;
+  }
+
   async incrementPeriodTokens(
     userId: string,
     count: number,

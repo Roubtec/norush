@@ -138,6 +138,25 @@ export interface Store {
   /** Increment the user's period request counter by `count` (default 1). */
   incrementPeriodRequests(userId: string, count?: number): Promise<void>;
 
+  /**
+   * Atomically check whether the user's period request counter plus `count`
+   * is within `effectiveLimit`, and if so increment the counter.
+   *
+   * Returns `true` if the requests were consumed (counter incremented),
+   * `false` if the limit would be exceeded (counter unchanged).
+   *
+   * This eliminates the TOCTOU race between `checkRateLimit()` and
+   * `incrementPeriodRequests()` — the check and the increment happen in a
+   * single atomic operation. In PostgresStore this is a single UPDATE with
+   * a WHERE guard; in MemoryStore the single-threaded event loop makes the
+   * synchronous check+increment inherently safe.
+   */
+  consumePeriodRequests(
+    userId: string,
+    count: number,
+    effectiveLimit: number,
+  ): Promise<boolean>;
+
   /** Increment the user's period token counter by `count`. */
   incrementPeriodTokens(userId: string, count: number): Promise<void>;
 
