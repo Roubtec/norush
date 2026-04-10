@@ -589,6 +589,28 @@ export class PostgresStore implements Store {
     `;
   }
 
+  async consumePeriodRequests(
+    userId: string,
+    count: number,
+    effectiveLimit: number,
+  ): Promise<boolean> {
+    if (!Number.isFinite(count) || count <= 0 || !Number.isInteger(count)) {
+      throw new Error("count must be a positive integer");
+    }
+    if (!Number.isFinite(effectiveLimit) || effectiveLimit < 0 || !Number.isInteger(effectiveLimit)) {
+      throw new Error("effectiveLimit must be a non-negative integer");
+    }
+    const rows = await this.sql`
+      UPDATE user_limits
+      SET current_period_requests = current_period_requests + ${count},
+          updated_at = now()
+      WHERE user_id = ${userId}
+        AND current_period_requests + ${count} <= ${effectiveLimit}
+      RETURNING current_period_requests
+    `;
+    return rows.length > 0;
+  }
+
   async incrementPeriodTokens(
     userId: string,
     count: number,
@@ -611,6 +633,9 @@ export class PostgresStore implements Store {
   }
 
   async resetPeriod(userId: string, nextResetAt: Date): Promise<void> {
+    // Conditional reset: only execute when the stored period_reset_at is still
+    // in the past. This prevents a concurrent request from wiping counters that
+    // a sibling request already reset at the same period boundary.
     await this.sql`
       UPDATE user_limits
       SET current_period_requests = 0,
@@ -618,6 +643,7 @@ export class PostgresStore implements Store {
           period_reset_at = ${nextResetAt},
           updated_at = now()
       WHERE user_id = ${userId}
+        AND period_reset_at <= now()
     `;
   }
 

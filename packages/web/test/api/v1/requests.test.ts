@@ -16,6 +16,7 @@ const mockFlush = vi.fn();
 const mockGetUserLimits = vi.fn().mockResolvedValue(null);
 const mockGetSlidingWindow = vi.fn().mockResolvedValue({ total: 0, succeeded: 0, failed: 0 });
 const mockIncrementPeriodRequests = vi.fn().mockResolvedValue(undefined);
+const mockConsumePeriodRequests = vi.fn().mockResolvedValue(true);
 const mockResetPeriod = vi.fn().mockResolvedValue(undefined);
 
 vi.mock("$lib/server/norush", () => ({
@@ -25,6 +26,7 @@ vi.mock("$lib/server/norush", () => ({
     getUserLimits: mockGetUserLimits,
     getSlidingWindow: mockGetSlidingWindow,
     incrementPeriodRequests: mockIncrementPeriodRequests,
+    consumePeriodRequests: mockConsumePeriodRequests,
     resetPeriod: mockResetPeriod,
   }),
 }));
@@ -413,6 +415,50 @@ describe("POST /api/v1/requests", () => {
     const data = await response.json();
     expect(data.error.code).toBe("rate_limited");
     expect(data.error.message).toContain("Hard spend limit");
+  });
+
+  it("returns 429 when atomic consume rejects due to concurrent capacity exhaustion", async () => {
+    // checkRateLimit says "allowed" (limits configured, capacity looks fine),
+    // but consumePeriodRequests returns false — another concurrent request
+    // consumed the remaining capacity between check and consume.
+    mockGetUserLimits.mockResolvedValueOnce({
+      userId: "user_01",
+      maxRequestsPerHour: 10,
+      maxTokensPerPeriod: null,
+      hardSpendLimitUsd: null,
+      currentPeriodRequests: 5,
+      currentPeriodTokens: 0,
+      currentSpendUsd: 0,
+      periodResetAt: new Date(Date.now() + 3_600_000),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    mockGetSlidingWindow.mockResolvedValueOnce({ total: 0, succeeded: 0, failed: 0 });
+    mockConsumePeriodRequests.mockResolvedValueOnce(false);
+
+    const event = makeEvent("POST", {
+      provider: "claude",
+      model: "claude-sonnet-4-20250514",
+      params: { messages: [{ role: "user", content: "Hello" }] },
+    });
+
+    const response = await POST(event as never);
+    expect(response.status).toBe(429);
+
+    const data = await response.json();
+    expect(data.error.code).toBe("rate_limited");
+    expect(data.error.message).toContain("request_limit_exceeded");
+
+    // Verify consumePeriodRequests was actually called with the right args
+    expect(mockConsumePeriodRequests).toHaveBeenCalledWith("user_01", 1, 10);
+
+    // Verify enqueue was never called (request should be rejected before enqueuing)
+    expect(mockEnqueue).not.toHaveBeenCalled();
+
+    // Retry-After must be present so clients know when to retry
+    const retryAfter = response.headers.get("Retry-After");
+    expect(retryAfter).not.toBeNull();
+    expect(Number(retryAfter)).toBeGreaterThan(0);
   });
 
   it("rejects bulk submission that would exceed the rate limit", async () => {

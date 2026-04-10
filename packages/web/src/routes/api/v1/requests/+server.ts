@@ -165,42 +165,78 @@ export const POST: RequestHandler = async ({ request }) => {
     );
   }
 
-  // Enqueue all requests
-  const created = [];
+  // Atomically consume period request capacity before enqueuing.
+  // This eliminates the TOCTOU race where concurrent requests could all pass
+  // checkRateLimit() before any incrementPeriodRequests() call lands.
+  if (userLimits && limitCheck.effectiveLimit !== undefined) {
+    // If the period expired, reset counters first so the atomic consume
+    // operates against fresh counters.
+    if (limitCheck.periodExpired) {
+      await store.resetPeriod(caller.userId, nextPeriodReset());
+    }
 
-  for (const item of validatedItems) {
-    const req = await engine.enqueue({
-      provider: item.provider as ProviderName,
-      model: item.model,
-      params: item.params,
-      userId: caller.userId,
-      callbackUrl: item.callback_url,
-      webhookSecret: item.webhook_secret,
-    });
+    const consumed = await store.consumePeriodRequests(
+      caller.userId,
+      validatedItems.length,
+      limitCheck.effectiveLimit,
+    );
 
-    created.push({
-      id: req.id,
-      provider: req.provider,
-      model: req.model,
-      status: req.status,
-      createdAt: req.createdAt.toISOString(),
-    });
+    if (!consumed) {
+      // Another concurrent request consumed the remaining capacity between our
+      // checkRateLimit pass and the atomic consume. Return 429 with a
+      // Retry-After derived from the stored period reset time.
+      const retryAfterSeconds = Math.max(
+        Math.ceil((userLimits.periodResetAt.getTime() - Date.now()) / 1000),
+        1,
+      );
+      const headers = {
+        "Retry-After": String(retryAfterSeconds),
+        ...buildRateLimitHeaders(limitCheck),
+      };
+      return json(
+        {
+          error: {
+            code: "rate_limited",
+            message: "Rate limit exceeded: request_limit_exceeded",
+          },
+        },
+        { status: 429, headers },
+      );
+    }
   }
 
-  // Increment period request counter for rate limiting.
-  // If the period expired, reset counters first so subsequent requests see the
-  // new period rather than the stale periodExpired=true state indefinitely.
-  if (userLimits) {
-    const updateCounters = async () => {
-      if (limitCheck.periodExpired) {
-        await store.resetPeriod(caller.userId, nextPeriodReset());
-      }
-      await store.incrementPeriodRequests(caller.userId, validatedItems.length);
-    };
-    // Fire-and-forget — don't block the response
-    void updateCounters().catch(() => {
-      // Non-critical: counter update failure shouldn't fail the request
-    });
+  // Enqueue all requests.
+  // NOTE: quota is already consumed above; if enqueue throws for any item the
+  // consumed count is not rolled back. This is a known tradeoff — the user's
+  // quota is charged even on a transient DB error, but they will recover when
+  // the period resets. A full compensation mechanism would require a
+  // decrementPeriodRequests store method and is left for a future iteration.
+  const created = [];
+
+  try {
+    for (const item of validatedItems) {
+      const req = await engine.enqueue({
+        provider: item.provider as ProviderName,
+        model: item.model,
+        params: item.params,
+        userId: caller.userId,
+        callbackUrl: item.callback_url,
+        webhookSecret: item.webhook_secret,
+      });
+
+      created.push({
+        id: req.id,
+        provider: req.provider,
+        model: req.model,
+        status: req.status,
+        createdAt: req.createdAt.toISOString(),
+      });
+    }
+  } catch (err) {
+    // Quota was consumed before the error; log and return 500 so the client
+    // knows to retry (not silently drop) the submission.
+    console.error("enqueue failed after quota consumed:", err);
+    return apiError("enqueue_failed", "Failed to enqueue request", 500);
   }
 
   // Include rate limit headers on successful responses too
