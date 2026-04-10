@@ -479,6 +479,30 @@ export function runStoreContractTests(
         const consumed = await store.consumePeriodRequests("test-user", 1, 0);
         expect(consumed).toBe(false);
       });
+
+      test("concurrent consume calls never exceed the limit", async () => {
+        store = await factory();
+        await store.upsertUserLimits("test-user", { maxRequestsPerHour: 5 });
+
+        // Fire 10 concurrent consume(1) calls against a limit of 5.
+        const results = await Promise.all(
+          Array.from({ length: 10 }, () =>
+            store.consumePeriodRequests("test-user", 1, 5),
+          ),
+        );
+
+        const successes = results.filter((r) => r === true).length;
+        const failures = results.filter((r) => r === false).length;
+
+        // Exactly 5 should succeed and 5 should fail.
+        expect(successes).toBe(5);
+        expect(failures).toBe(5);
+
+        // Counter must be exactly at the limit, never above.
+        const limits = await store.getUserLimits("test-user");
+        if (!limits) throw new Error("expected user limits to exist");
+        expect(limits.currentPeriodRequests).toBe(5);
+      });
     });
 
     describe("Analytics", () => {
