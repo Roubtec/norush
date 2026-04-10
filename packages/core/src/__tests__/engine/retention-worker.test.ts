@@ -16,7 +16,7 @@ import {
   type RetentionPolicy,
   type RetentionPolicyResolver,
 } from "../../engine/retention-worker.js";
-import type { NewRequest, Request, Result } from "../../types.js";
+import type { NewRequest, Request, Result, EventLogEntry } from "../../types.js";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -598,7 +598,7 @@ describe("RetentionWorker", () => {
       const results = (
         store as unknown as { results: Map<string, Result> }
       ).results;
-      const scrubbedResult = results.get(result.id);
+      const scrubbedResult = results.get(result.id) as Result;
       expect(scrubbedResult).toBeDefined();
       if (!scrubbedResult) return;
       expect(scrubbedResult.inputTokens).toBe(100);
