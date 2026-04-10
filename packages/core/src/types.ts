@@ -233,6 +233,33 @@ export interface UsageStats {
   totalBatches: number;
 }
 
+/** Cost and token breakdown for a single provider + model combination. */
+export interface CostBreakdownEntry {
+  provider: ProviderName;
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+  /** Estimated cost at batch (discounted) rates in USD. */
+  batchCostUsd: number;
+  /** Estimated cost at standard real-time rates in USD. */
+  standardCostUsd: number;
+  requestCount: number;
+}
+
+/** Extended usage statistics including cost breakdown and turnaround times. */
+export interface DetailedUsageStats extends UsageStats {
+  /** Cost breakdown grouped by provider and model. */
+  costBreakdown: CostBreakdownEntry[];
+  /** Average batch turnaround time in milliseconds (null if no completed batches). */
+  avgTurnaroundMs: number | null;
+  /** Total estimated cost at batch rates in USD. */
+  totalBatchCostUsd: number;
+  /** Total estimated cost at standard real-time rates in USD. */
+  totalStandardCostUsd: number;
+  /** Total savings (standard - batch) in USD. */
+  totalSavingsUsd: number;
+}
+
 // ---------------------------------------------------------------------------
 // Event log
 // ---------------------------------------------------------------------------

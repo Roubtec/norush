@@ -11,7 +11,9 @@ import type { JSONValue } from "postgres";
 import type { Store, ResultDeliveryUpdate } from "../interfaces/store.js";
 import type {
   Batch,
+  CostBreakdownEntry,
   DateRange,
+  DetailedUsageStats,
   EventLogEntry,
   NewBatch,
   NewEvent,
@@ -24,6 +26,7 @@ import type {
   UserLimits,
   UserLimitsInput,
 } from "../types.js";
+import { standardCost, batchCost } from "../pricing.js";
 
 // ---------------------------------------------------------------------------
 // Row ↔ domain mappers (snake_case → camelCase)
@@ -448,6 +451,87 @@ export class PostgresStore implements Store {
       totalInputTokens: (row.total_input_tokens as number) ?? 0,
       totalOutputTokens: (row.total_output_tokens as number) ?? 0,
       totalBatches: (row.total_batches as number) ?? 0,
+    };
+  }
+
+  async getDetailedStats(
+    userId: string,
+    period: DateRange,
+  ): Promise<DetailedUsageStats> {
+    // Run the basic stats query and the cost breakdown query in parallel.
+    const [basic, breakdownRows, turnaroundRows] = await Promise.all([
+      this.getStats(userId, period),
+
+      // Per-provider/model token aggregation.
+      this.sql`
+        SELECT
+          r.provider,
+          r.model,
+          COUNT(*)::int AS request_count,
+          COALESCE(SUM(res.input_tokens), 0)::int AS input_tokens,
+          COALESCE(SUM(res.output_tokens), 0)::int AS output_tokens
+        FROM requests r
+        LEFT JOIN results res ON res.request_id = r.id
+        WHERE r.user_id = ${userId}
+          AND r.created_at >= ${period.from}
+          AND r.created_at <= ${period.to}
+        GROUP BY r.provider, r.model
+        ORDER BY r.provider, r.model
+      `,
+
+      // Average batch turnaround time.
+      this.sql`
+        SELECT AVG(EXTRACT(EPOCH FROM (b.ended_at - b.submitted_at)) * 1000)::double precision AS avg_turnaround_ms
+        FROM batches b
+        WHERE b.submitted_at IS NOT NULL
+          AND b.ended_at IS NOT NULL
+          AND EXISTS (
+            SELECT 1 FROM requests r
+            WHERE r.batch_id = b.id
+              AND r.user_id = ${userId}
+              AND r.created_at >= ${period.from}
+              AND r.created_at <= ${period.to}
+          )
+      `,
+    ]);
+
+    const costBreakdown: CostBreakdownEntry[] = breakdownRows.map((row) => {
+      const provider = row.provider as string;
+      const model = row.model as string;
+      const inputTokens = (row.input_tokens as number) ?? 0;
+      const outputTokens = (row.output_tokens as number) ?? 0;
+      return {
+        provider: provider as CostBreakdownEntry["provider"],
+        model,
+        inputTokens,
+        outputTokens,
+        batchCostUsd: batchCost(provider, inputTokens, outputTokens),
+        standardCostUsd: standardCost(provider, inputTokens, outputTokens),
+        requestCount: (row.request_count as number) ?? 0,
+      };
+    });
+
+    const turnaroundRow = turnaroundRows[0] as Record<string, unknown>;
+    const avgTurnaroundMs = turnaroundRow.avg_turnaround_ms != null
+      ? Number(turnaroundRow.avg_turnaround_ms)
+      : null;
+
+    const totalStandardCostUsd = costBreakdown.reduce(
+      (s, e) => s + e.standardCostUsd,
+      0,
+    );
+    const totalBatchCostUsd = costBreakdown.reduce(
+      (s, e) => s + e.batchCostUsd,
+      0,
+    );
+
+    return {
+      ...basic,
+      costBreakdown,
+      avgTurnaroundMs,
+      totalBatchCostUsd,
+      totalStandardCostUsd,
+      totalSavingsUsd: totalStandardCostUsd - totalBatchCostUsd,
     };
   }
 
