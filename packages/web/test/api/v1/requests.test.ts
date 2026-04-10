@@ -16,6 +16,7 @@ const mockFlush = vi.fn();
 const mockGetUserLimits = vi.fn().mockResolvedValue(null);
 const mockGetSlidingWindow = vi.fn().mockResolvedValue({ total: 0, succeeded: 0, failed: 0 });
 const mockIncrementPeriodRequests = vi.fn().mockResolvedValue(undefined);
+const mockConsumePeriodRequests = vi.fn().mockResolvedValue(true);
 const mockResetPeriod = vi.fn().mockResolvedValue(undefined);
 
 vi.mock("$lib/server/norush", () => ({
@@ -25,6 +26,7 @@ vi.mock("$lib/server/norush", () => ({
     getUserLimits: mockGetUserLimits,
     getSlidingWindow: mockGetSlidingWindow,
     incrementPeriodRequests: mockIncrementPeriodRequests,
+    consumePeriodRequests: mockConsumePeriodRequests,
     resetPeriod: mockResetPeriod,
   }),
 }));

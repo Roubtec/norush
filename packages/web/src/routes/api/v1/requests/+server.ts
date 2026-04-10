@@ -165,6 +165,37 @@ export const POST: RequestHandler = async ({ request }) => {
     );
   }
 
+  // Atomically consume period request capacity before enqueuing.
+  // This eliminates the TOCTOU race where concurrent requests could all pass
+  // checkRateLimit() before any incrementPeriodRequests() call lands.
+  if (userLimits && limitCheck.effectiveLimit !== undefined) {
+    // If the period expired, reset counters first so the atomic consume
+    // operates against fresh counters.
+    if (limitCheck.periodExpired) {
+      await store.resetPeriod(caller.userId, nextPeriodReset());
+    }
+
+    const consumed = await store.consumePeriodRequests(
+      caller.userId,
+      validatedItems.length,
+      limitCheck.effectiveLimit,
+    );
+
+    if (!consumed) {
+      // Another concurrent request consumed the remaining capacity.
+      const headers = buildRateLimitHeaders(limitCheck);
+      return json(
+        {
+          error: {
+            code: "rate_limited",
+            message: "Rate limit exceeded: request_limit_exceeded",
+          },
+        },
+        { status: 429, headers },
+      );
+    }
+  }
+
   // Enqueue all requests
   const created = [];
 
@@ -184,22 +215,6 @@ export const POST: RequestHandler = async ({ request }) => {
       model: req.model,
       status: req.status,
       createdAt: req.createdAt.toISOString(),
-    });
-  }
-
-  // Increment period request counter for rate limiting.
-  // If the period expired, reset counters first so subsequent requests see the
-  // new period rather than the stale periodExpired=true state indefinitely.
-  if (userLimits) {
-    const updateCounters = async () => {
-      if (limitCheck.periodExpired) {
-        await store.resetPeriod(caller.userId, nextPeriodReset());
-      }
-      await store.incrementPeriodRequests(caller.userId, validatedItems.length);
-    };
-    // Fire-and-forget — don't block the response
-    void updateCounters().catch(() => {
-      // Non-critical: counter update failure shouldn't fail the request
     });
   }
 
