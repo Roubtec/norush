@@ -102,8 +102,9 @@ async function createCompletedRequest(
 
   // Re-fetch to get current state.
   const updatedReq = await store.getRequest(request.id);
+  if (!updatedReq) throw new Error("Request not found after setup");
   return {
-    request: updatedReq!,
+    request: updatedReq,
     result: (await store.getUndeliveredResults(100)).find(
       (r) => r.id === result.id,
     ) ?? result,
@@ -547,7 +548,7 @@ describe("RetentionWorker", () => {
       const now = new Date();
       const tenDaysAgo = new Date(now.getTime() - 10 * MS_PER_DAY);
 
-      const { request, result } = await createCompletedRequest(store, {
+      const { request } = await createCompletedRequest(store, {
         userId: "user_tombstone",
         createdAt: tenDaysAgo,
       });
@@ -562,16 +563,17 @@ describe("RetentionWorker", () => {
 
       const scrubbedReq = await store.getRequest(request.id);
       expect(scrubbedReq).not.toBeNull();
-      expect(scrubbedReq!.params).toMatchObject({ scrubbed: true });
-      expect(scrubbedReq!.params).toHaveProperty("scrubbed_at");
-      expect(scrubbedReq!.contentScrubbedAt).toBeInstanceOf(Date);
+      if (!scrubbedReq) return;
+      expect(scrubbedReq.params).toMatchObject({ scrubbed: true });
+      expect(scrubbedReq.params).toHaveProperty("scrubbed_at");
+      expect(scrubbedReq.contentScrubbedAt).toBeInstanceOf(Date);
 
       // Token counts and metadata should be preserved.
-      expect(scrubbedReq!.id).toBe(request.id);
-      expect(scrubbedReq!.userId).toBe("user_tombstone");
-      expect(scrubbedReq!.status).toBe("succeeded");
-      expect(scrubbedReq!.provider).toBe("claude");
-      expect(scrubbedReq!.model).toBe("claude-sonnet-4-6");
+      expect(scrubbedReq.id).toBe(request.id);
+      expect(scrubbedReq.userId).toBe("user_tombstone");
+      expect(scrubbedReq.status).toBe("succeeded");
+      expect(scrubbedReq.provider).toBe("claude");
+      expect(scrubbedReq.model).toBe("claude-sonnet-4-6");
     });
 
     it("preserves token counts after scrubbing", async () => {
@@ -598,10 +600,11 @@ describe("RetentionWorker", () => {
       ).results;
       const scrubbedResult = results.get(result.id);
       expect(scrubbedResult).toBeDefined();
-      expect(scrubbedResult!.inputTokens).toBe(100);
-      expect(scrubbedResult!.outputTokens).toBe(50);
-      expect(scrubbedResult!.response).toMatchObject({ scrubbed: true });
-      expect(scrubbedResult!.contentScrubbedAt).toBeInstanceOf(Date);
+      if (!scrubbedResult) return;
+      expect(scrubbedResult.inputTokens).toBe(100);
+      expect(scrubbedResult.outputTokens).toBe(50);
+      expect(scrubbedResult.response).toMatchObject({ scrubbed: true });
+      expect(scrubbedResult.contentScrubbedAt).toBeInstanceOf(Date);
     });
   });
 
@@ -643,7 +646,8 @@ describe("RetentionWorker", () => {
         (e) => e.entityId === request.id && e.event === "submitted",
       );
       expect(requestEvent).toBeDefined();
-      expect(requestEvent!.details).toMatchObject({ scrubbed: true });
+      if (!requestEvent) return;
+      expect(requestEvent.details).toMatchObject({ scrubbed: true });
     });
 
     it("does not scrub event log details for unscrubbed entities", async () => {
@@ -675,7 +679,8 @@ describe("RetentionWorker", () => {
         (e) => e.entityId === request.id && e.event === "submitted",
       );
       expect(requestEvent).toBeDefined();
-      expect(requestEvent!.details).toMatchObject({
+      if (!requestEvent) return;
+      expect(requestEvent.details).toMatchObject({
         provider: "claude",
         params: { sensitive: "data" },
       });
@@ -703,7 +708,7 @@ describe("RetentionWorker", () => {
         hardCapDays: 90,
       });
 
-      const result = await worker.sweep(now);
+      await worker.sweep(now);
 
       // Null details should not be counted as scrubbed.
       // The request and result are scrubbed, but the null-details event is not.
@@ -711,7 +716,9 @@ describe("RetentionWorker", () => {
       const nullEvent = events.find(
         (e) => e.entityId === request.id && e.event === "status_changed",
       );
-      expect(nullEvent!.details).toBeNull();
+      expect(nullEvent).toBeDefined();
+      if (!nullEvent) return;
+      expect(nullEvent.details).toBeNull();
     });
   });
 
@@ -812,9 +819,9 @@ describe("RetentionWorker", () => {
         createdAt: tenDaysAgo,
       });
 
-      let callCount = 0;
+      let _callCount = 0;
       const policyResolver: RetentionPolicyResolver = (userId) => {
-        callCount++;
+        _callCount++;
         if (userId === "user_error") {
           throw new Error("Policy lookup failed");
         }
@@ -842,6 +849,7 @@ describe("RetentionWorker", () => {
         getDistinctUserIdsWithUnscrubbedContent: vi
           .fn()
           .mockResolvedValue([]),
+        scrubEventLogsForScrubbedContent: vi.fn().mockResolvedValue(0),
       } as unknown as MemoryStore;
 
       const worker = new RetentionWorker({
@@ -884,11 +892,13 @@ describe("RetentionWorker", () => {
         hardCapDays: 90,
       });
 
-      const result = await worker.sweep(now);
+      await worker.sweep(now);
 
       const fetched = await store.getRequest(request.id);
-      expect(fetched!.contentScrubbedAt).toBeNull();
-      expect(fetched!.params).not.toMatchObject({ scrubbed: true });
+      expect(fetched).not.toBeNull();
+      if (!fetched) return;
+      expect(fetched.contentScrubbedAt).toBeNull();
+      expect(fetched.params).not.toMatchObject({ scrubbed: true });
     });
 
     it("does not scrub in-progress requests", async () => {
@@ -916,7 +926,9 @@ describe("RetentionWorker", () => {
       await worker.sweep(now);
 
       const fetched = await store.getRequest(request.id);
-      expect(fetched!.contentScrubbedAt).toBeNull();
+      expect(fetched).not.toBeNull();
+      if (!fetched) return;
+      expect(fetched.contentScrubbedAt).toBeNull();
     });
   });
 

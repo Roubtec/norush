@@ -433,6 +433,40 @@ export class MemoryStore implements Store {
     return count;
   }
 
+  async scrubEventLogsForScrubbedContent(): Promise<number> {
+    let count = 0;
+    const now = new Date();
+
+    // Collect all entity IDs (requests and results) with scrubbed content.
+    const scrubbedEntityIds = new Set<string>();
+
+    for (const r of this.requests.values()) {
+      if (r.contentScrubbedAt !== null) {
+        scrubbedEntityIds.add(r.id);
+      }
+    }
+
+    for (const res of this.results.values()) {
+      if (res.contentScrubbedAt !== null) {
+        scrubbedEntityIds.add(res.id);
+      }
+    }
+
+    // Scrub event log entries for any of those entities.
+    for (const event of this.events) {
+      if (
+        scrubbedEntityIds.has(event.entityId) &&
+        event.details !== null &&
+        !(event.details as Record<string, unknown>).scrubbed
+      ) {
+        event.details = { scrubbed: true, scrubbed_at: now.toISOString() };
+        count++;
+      }
+    }
+
+    return count;
+  }
+
   // -- Telemetry / analytics ------------------------------------------------
 
   async getStats(userId: string, period: DateRange): Promise<UsageStats> {

@@ -85,8 +85,11 @@ const MS_PER_DAY = 86_400_000;
 // ---------------------------------------------------------------------------
 
 /**
- * Parse a retention policy string into a number of days, or `0` for `on_ack`.
- * Returns `null` for invalid values.
+ * Parse a retention policy string into a number of days.
+ *
+ * Returns `0` for both `on_ack` and `0d` — both policies require at least one
+ * successful delivery attempt before scrubbing, making them equivalent.
+ * Returns `null` for unrecognised values.
  */
 export function parseRetentionPolicy(
   policy: string,
@@ -129,6 +132,8 @@ export class RetentionWorker {
   private readonly intervalMs: number;
   private readonly telemetry: TelemetryHook;
   private timer: ReturnType<typeof setInterval> | null = null;
+  /** Guard to prevent concurrent sweeps. */
+  private sweeping = false;
 
   constructor(options: RetentionWorkerOptions) {
     this.store = options.store;
@@ -151,6 +156,10 @@ export class RetentionWorker {
         });
       });
     }, this.intervalMs);
+    // Unref so the timer doesn't prevent process exit.
+    if (typeof this.timer === "object" && "unref" in this.timer) {
+      this.timer.unref();
+    }
   }
 
   /** Stop the periodic retention sweep loop. */
@@ -170,9 +179,26 @@ export class RetentionWorker {
    * 1. Enforce hard cap — scrub everything older than the operator's hard cap.
    * 2. Per-user policy scrubbing — for each user with unscrubbed content, apply
    *    their retention policy.
-   * 3. Event log scrubbing — scrub details on events whose parent was scrubbed.
+   * 3. Event log scrubbing — scrub details on all events whose parent entity
+   *    (request or result) has been scrubbed, covering both hard-cap and
+   *    per-user policy scrubbing from this and prior sweeps.
+   *
+   * Returns an empty result immediately if a sweep is already in progress.
    */
   async sweep(now: Date = new Date()): Promise<RetentionSweepResult> {
+    // Guard against concurrent sweeps (e.g. a slow sweep overlapping the timer).
+    if (this.sweeping) {
+      return {
+        totalScrubbed: 0,
+        hardCapScrubbed: 0,
+        policyScrubbed: 0,
+        eventLogScrubbed: 0,
+        errors: 0,
+      };
+    }
+
+    this.sweeping = true;
+
     const result: RetentionSweepResult = {
       totalScrubbed: 0,
       hardCapScrubbed: 0,
@@ -181,41 +207,57 @@ export class RetentionWorker {
       errors: 0,
     };
 
-    // Step 1: Hard cap enforcement.
     try {
-      const hardCapCutoff = new Date(
-        now.getTime() - this.hardCapDays * MS_PER_DAY,
-      );
-      const hardCapCount = await this.store.scrubExpiredContent(hardCapCutoff);
-      result.hardCapScrubbed = hardCapCount;
-      result.totalScrubbed += hardCapCount;
+      // Step 1: Hard cap enforcement.
+      try {
+        const hardCapCutoff = new Date(
+          now.getTime() - this.hardCapDays * MS_PER_DAY,
+        );
+        const hardCapCount = await this.store.scrubExpiredContent(hardCapCutoff);
+        result.hardCapScrubbed = hardCapCount;
+        result.totalScrubbed += hardCapCount;
 
-      if (hardCapCount > 0) {
-        this.telemetry.counter("retention.hard_cap_scrubbed", hardCapCount);
-        this.telemetry.event("retention_hard_cap", {
-          scrubbed: hardCapCount,
-          cutoff: hardCapCutoff.toISOString(),
+        if (hardCapCount > 0) {
+          this.telemetry.counter("retention.hard_cap_scrubbed", hardCapCount);
+          this.telemetry.event("retention_hard_cap", {
+            scrubbed: hardCapCount,
+            cutoff: hardCapCutoff.toISOString(),
+          });
+        }
+      } catch (err) {
+        result.errors++;
+        this.telemetry.event("retention_hard_cap_error", {
+          error: err instanceof Error ? err.message : String(err),
         });
       }
-    } catch (err) {
-      result.errors++;
-      this.telemetry.event("retention_hard_cap_error", {
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
 
-    // Step 2: Per-user policy scrubbing.
-    try {
-      const policyResult = await this.scrubByPolicy(now);
-      result.policyScrubbed = policyResult.scrubbed;
-      result.totalScrubbed += policyResult.scrubbed;
-      result.eventLogScrubbed = policyResult.eventLogScrubbed;
-      result.errors += policyResult.errors;
-    } catch (err) {
-      result.errors++;
-      this.telemetry.event("retention_policy_error", {
-        error: err instanceof Error ? err.message : String(err),
-      });
+      // Step 2: Per-user policy scrubbing.
+      try {
+        const policyResult = await this.scrubByPolicy(now);
+        result.policyScrubbed = policyResult.scrubbed;
+        result.totalScrubbed += policyResult.scrubbed;
+        result.errors += policyResult.errors;
+      } catch (err) {
+        result.errors++;
+        this.telemetry.event("retention_policy_error", {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+
+      // Step 3: Event log scrubbing — covers entities scrubbed by either the
+      // hard cap (step 1) or per-user policy (step 2), including any that were
+      // scrubbed in previous sweeps but whose event logs were not yet cleaned up.
+      try {
+        result.eventLogScrubbed =
+          await this.store.scrubEventLogsForScrubbedContent();
+      } catch (err) {
+        result.errors++;
+        this.telemetry.event("retention_event_log_error", {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    } finally {
+      this.sweeping = false;
     }
 
     if (result.totalScrubbed > 0 || result.eventLogScrubbed > 0) {
@@ -235,13 +277,14 @@ export class RetentionWorker {
    * Apply per-user retention policies.
    *
    * Fetches distinct user IDs with unscrubbed content, resolves each user's
-   * retention policy, and scrubs accordingly.
+   * retention policy, and scrubs content accordingly. Event log scrubbing is
+   * handled separately in sweep() step 3 so it covers hard-cap-scrubbed users
+   * too.
    */
   private async scrubByPolicy(
     now: Date,
-  ): Promise<{ scrubbed: number; eventLogScrubbed: number; errors: number }> {
+  ): Promise<{ scrubbed: number; errors: number }> {
     let scrubbed = 0;
-    let eventLogScrubbed = 0;
     let errors = 0;
 
     // Get distinct user IDs that have unscrubbed content.
@@ -264,13 +307,11 @@ export class RetentionWorker {
         }
 
         if (policyDays === 0) {
-          // on_ack: scrub delivered content immediately.
+          // on_ack / 0d: scrub delivered content (requires prior delivery attempt).
           const count = await this.store.scrubDeliveredContent(userId);
           scrubbed += count;
 
           if (count > 0) {
-            const elCount = await this.store.scrubEventLogForUser(userId);
-            eventLogScrubbed += elCount;
             this.telemetry.counter("retention.on_ack_scrubbed", count, {
               userId,
             });
@@ -284,8 +325,6 @@ export class RetentionWorker {
           scrubbed += count;
 
           if (count > 0) {
-            const elCount = await this.store.scrubEventLogForUser(userId);
-            eventLogScrubbed += elCount;
             this.telemetry.counter("retention.policy_scrubbed", count, {
               userId,
               policy,
@@ -301,6 +340,6 @@ export class RetentionWorker {
       }
     }
 
-    return { scrubbed, eventLogScrubbed, errors };
+    return { scrubbed, errors };
   }
 }

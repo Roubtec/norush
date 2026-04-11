@@ -505,6 +505,10 @@ export class PostgresStore implements Store {
       SELECT DISTINCT user_id FROM requests
       WHERE content_scrubbed_at IS NULL
         AND status IN ('succeeded', 'failed', 'failed_final')
+      UNION
+      SELECT DISTINCT req.user_id FROM results res
+      JOIN requests req ON req.id = res.request_id
+      WHERE res.content_scrubbed_at IS NULL
     `;
     return rows.map((row) => row.user_id as string);
   }
@@ -537,6 +541,33 @@ export class PostgresStore implements Store {
     `;
 
     return scrubbedRequestEvents.count;
+  }
+
+  async scrubEventLogsForScrubbedContent(): Promise<number> {
+    const tombstone = JSON.stringify({
+      scrubbed: true,
+      scrubbed_at: new Date().toISOString(),
+    });
+
+    // Scrub event log entries for any entity (request or result) that has
+    // already had its content scrubbed — regardless of which sweep caused it.
+    const scrubbed = await this.sql`
+      UPDATE event_log
+      SET details = ${tombstone}::jsonb
+      WHERE details IS NOT NULL
+        AND NOT (details ? 'scrubbed')
+        AND (
+          (entity_type = 'request' AND entity_id IN (
+            SELECT id FROM requests WHERE content_scrubbed_at IS NOT NULL
+          ))
+          OR
+          (entity_type = 'result' AND entity_id IN (
+            SELECT id FROM results WHERE content_scrubbed_at IS NOT NULL
+          ))
+        )
+    `;
+
+    return scrubbed.count;
   }
 
   // -- Telemetry / analytics ------------------------------------------------

@@ -490,6 +490,60 @@ export function runStoreContractTests(
         const count = await store.scrubEventLogForUser("alice");
         expect(count).toBeGreaterThanOrEqual(1);
       });
+
+      test("scrubEventLogsForScrubbedContent scrubs event details for all scrubbed entities", async () => {
+        store = await factory();
+
+        // Create two users each with a scrubbed request.
+        const reqAlice = await store.createRequest(newRequest({ userId: "alice" }));
+        await store.updateRequest(reqAlice.id, { status: "succeeded" });
+        await store.logEvent({
+          entityType: "request",
+          entityId: reqAlice.id,
+          event: "submitted",
+          details: { sensitive: "alice-data" },
+        });
+
+        const reqBob = await store.createRequest(newRequest({ userId: "bob" }));
+        await store.updateRequest(reqBob.id, { status: "succeeded" });
+        await store.logEvent({
+          entityType: "request",
+          entityId: reqBob.id,
+          event: "submitted",
+          details: { sensitive: "bob-data" },
+        });
+
+        // Scrub content for both users.
+        const future = new Date(Date.now() + 3600_000);
+        await store.scrubContentForUser("alice", future);
+        await store.scrubContentForUser("bob", future);
+
+        // scrubEventLogsForScrubbedContent should scrub both.
+        const count = await store.scrubEventLogsForScrubbedContent();
+        expect(count).toBeGreaterThanOrEqual(2);
+      });
+
+      test("scrubEventLogsForScrubbedContent is idempotent", async () => {
+        store = await factory();
+        const req = await store.createRequest(newRequest({ userId: "alice" }));
+        await store.updateRequest(req.id, { status: "succeeded" });
+        await store.logEvent({
+          entityType: "request",
+          entityId: req.id,
+          event: "submitted",
+          details: { sensitive: "data" },
+        });
+
+        const future = new Date(Date.now() + 3600_000);
+        await store.scrubContentForUser("alice", future);
+
+        const count1 = await store.scrubEventLogsForScrubbedContent();
+        expect(count1).toBeGreaterThanOrEqual(1);
+
+        // Second call should return 0 (already scrubbed).
+        const count2 = await store.scrubEventLogsForScrubbedContent();
+        expect(count2).toBe(0);
+      });
     });
 
     describe("Event log", () => {

@@ -126,6 +126,9 @@ export interface Store {
   /** Scrub event_log details for events whose parent entity belongs to a user and has been scrubbed. Returns count of scrubbed events. */
   scrubEventLogForUser(userId: string): Promise<number>;
 
+  /** Scrub event_log details for all events whose parent entity (request or result) has content_scrubbed_at set. Returns count of scrubbed events. */
+  scrubEventLogsForScrubbedContent(): Promise<number>;
+
   // -- Event log ------------------------------------------------------------
 
   /** Write an entry to the event log. */

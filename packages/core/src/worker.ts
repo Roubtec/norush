@@ -30,7 +30,11 @@ import { PostgresStore } from "./store/postgres.js";
 import { ConsoleTelemetry } from "./telemetry/console.js";
 import type { ProviderName } from "./types.js";
 import type { ProviderKeyConfig } from "./config/types.js";
-import type { RetentionPolicy } from "./engine/retention-worker.js";
+import {
+  parseRetentionPolicy,
+  DEFAULT_RETENTION_POLICY,
+  type RetentionPolicy,
+} from "./engine/retention-worker.js";
 
 // ---------------------------------------------------------------------------
 // Environment parsing
@@ -52,6 +56,28 @@ function optionalEnvInt(name: string, fallback: number): number {
     throw new Error(`Environment variable ${name} must be an integer, got: ${value}`);
   }
   return parsed;
+}
+
+function positiveEnvInt(name: string, fallback: number): number {
+  const value = optionalEnvInt(name, fallback);
+  if (value <= 0) {
+    throw new Error(`Environment variable ${name} must be a positive integer, got: ${value}`);
+  }
+  return value;
+}
+
+function parseRequiredRetentionPolicy(
+  name: string,
+  fallback: RetentionPolicy,
+): RetentionPolicy {
+  const raw = process.env[name] ?? fallback;
+  const parsed = parseRetentionPolicy(raw);
+  if (parsed === null) {
+    throw new Error(
+      `Invalid ${name}: '${raw}'. Expected 'on_ack' or 'Nd' (e.g. '7d', '30d').`,
+    );
+  }
+  return raw as RetentionPolicy;
 }
 
 // ---------------------------------------------------------------------------
@@ -107,9 +133,12 @@ async function main(): Promise<void> {
       tickIntervalMs: optionalEnvInt("NORUSH_DELIVERY_INTERVAL_MS", 5_000),
     },
     retention: {
-      defaultPolicy: (process.env.NORUSH_RETENTION_DEFAULT ?? "7d") as RetentionPolicy,
-      hardCapDays: optionalEnvInt("NORUSH_RETENTION_HARD_CAP_DAYS", 90),
-      intervalMs: optionalEnvInt("NORUSH_RETENTION_INTERVAL_MS", 3_600_000),
+      defaultPolicy: parseRequiredRetentionPolicy(
+        "NORUSH_RETENTION_DEFAULT",
+        DEFAULT_RETENTION_POLICY,
+      ),
+      hardCapDays: positiveEnvInt("NORUSH_RETENTION_HARD_CAP_DAYS", 90),
+      intervalMs: positiveEnvInt("NORUSH_RETENTION_INTERVAL_MS", 3_600_000),
     },
     telemetry,
   };
