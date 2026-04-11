@@ -8,6 +8,12 @@ import type { TelemetryHook } from "../interfaces/telemetry.js";
  * metric name gets a dedicated Counter or Histogram, created lazily
  * on first use. Tags become Prometheus labels.
  *
+ * `prom-client` is a peer dependency — install it alongside
+ * `@norush/core` when using this adapter:
+ *
+ *   npm install prom-client
+ *   import { PrometheusTelemetry } from "@norush/core/prometheus";
+ *
  * **Important:** Prometheus requires all label names to be declared
  * when a metric is first created. The label names from the first call
  * to `counter()` or `histogram()` for a given metric name become the

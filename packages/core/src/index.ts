@@ -241,8 +241,13 @@ export {
 
 export { NoopTelemetry } from "./telemetry/noop.js";
 export { ConsoleTelemetry } from "./telemetry/console.js";
-export { PrometheusTelemetry } from "./telemetry/prometheus.js";
-export { OpenTelemetryTelemetry } from "./telemetry/opentelemetry.js";
+
+// PrometheusTelemetry and OpenTelemetryTelemetry are available via subpath
+// imports to avoid pulling in optional peer dependencies for consumers who
+// don't use them:
+//
+//   import { PrometheusTelemetry } from "@norush/core/prometheus";
+//   import { OpenTelemetryTelemetry } from "@norush/core/opentelemetry";
 
 // ---------------------------------------------------------------------------
 // Engine entry point

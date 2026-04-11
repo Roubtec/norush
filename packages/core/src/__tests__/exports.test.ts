@@ -4,8 +4,6 @@ import {
   resolveConfig,
   NoopTelemetry,
   ConsoleTelemetry,
-  PrometheusTelemetry,
-  OpenTelemetryTelemetry,
   MemoryStore,
   PostgresStore,
   migrate,
@@ -124,12 +122,14 @@ describe("@norush/core exports", () => {
     expect(t).toBeInstanceOf(ConsoleTelemetry);
   });
 
-  it("exports PrometheusTelemetry class", () => {
+  it("exports PrometheusTelemetry via subpath import", async () => {
+    const { PrometheusTelemetry } = await import("../telemetry/prometheus.js");
     const t = new PrometheusTelemetry();
     expect(t).toBeInstanceOf(PrometheusTelemetry);
   });
 
-  it("exports OpenTelemetryTelemetry class", () => {
+  it("exports OpenTelemetryTelemetry via subpath import", async () => {
+    const { OpenTelemetryTelemetry } = await import("../telemetry/opentelemetry.js");
     const t = new OpenTelemetryTelemetry();
     expect(t).toBeInstanceOf(OpenTelemetryTelemetry);
   });

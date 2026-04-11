@@ -143,6 +143,31 @@ await engine.tick();
 - `standardCost(model, tokens)` / `batchCost(model, tokens)` -- Calculate costs.
 - `savings(model, tokens)` -- Calculate savings from batch processing.
 
+### Telemetry
+
+Built-in adapters: `NoopTelemetry` and `ConsoleTelemetry` (available from the main entry point).
+
+Optional adapters for production use are available via subpath imports to avoid
+pulling in their dependencies when you don't need them:
+
+```typescript
+// Prometheus — requires: npm install prom-client
+import { PrometheusTelemetry } from "@norush/core/prometheus";
+
+const telemetry = new PrometheusTelemetry();
+const engine = createNorush({ store, providers, telemetry });
+
+// Expose metrics at GET /metrics via telemetry.registry.metrics()
+```
+
+```typescript
+// OpenTelemetry — requires: npm install @opentelemetry/api
+import { OpenTelemetryTelemetry } from "@norush/core/opentelemetry";
+
+const telemetry = new OpenTelemetryTelemetry();
+const engine = createNorush({ store, providers, telemetry });
+```
+
 ### CLI
 
 The package ships a `norush-rotate-key` CLI for master key rotation:
