@@ -33,6 +33,12 @@ import {
   standardCost,
   batchCost,
   pricingSavings,
+  RetentionWorker,
+  parseRetentionPolicy,
+  computeCutoffDate,
+  DEFAULT_RETENTION_POLICY,
+  DEFAULT_HARD_CAP_DAYS,
+  DEFAULT_RETENTION_INTERVAL_MS,
 } from "../index.js";
 
 // Type-only imports to verify they are exported
@@ -91,6 +97,10 @@ import type {
   SlidingWindow,
   RateLimitResult,
   TokenRates,
+  RetentionPolicy,
+  RetentionPolicyResolver,
+  RetentionWorkerOptions,
+  RetentionSweepResult,
 } from "../index.js";
 
 describe("@norush/core exports", () => {
@@ -190,6 +200,16 @@ describe("@norush/core exports", () => {
     expect(typeof pricingSavings).toBe("function");
     expect(STANDARD_RATES).toBeDefined();
     expect(BATCH_DISCOUNT).toBe(0.5);
+  });
+
+  it("exports RetentionWorker class and helpers", () => {
+    expect(RetentionWorker).toBeDefined();
+    expect(typeof RetentionWorker).toBe("function");
+    expect(typeof parseRetentionPolicy).toBe("function");
+    expect(typeof computeCutoffDate).toBe("function");
+    expect(DEFAULT_RETENTION_POLICY).toBe("7d");
+    expect(DEFAULT_HARD_CAP_DAYS).toBe(90);
+    expect(DEFAULT_RETENTION_INTERVAL_MS).toBe(3_600_000);
   });
 
   // Type-level assertions — these verify that all type exports compile.
@@ -337,10 +357,26 @@ describe("@norush/core exports", () => {
     const _userLimitsInput: UserLimitsInput = { maxRequestsPerHour: 50 };
     const _slidingWindow: SlidingWindow = { total: 10, succeeded: 9, failed: 1 };
     const _rateLimitResult: RateLimitResult = { allowed: true };
+    const _retentionPolicy: RetentionPolicy = "7d";
+    const _retentionSweep: RetentionSweepResult = {
+      totalScrubbed: 0,
+      hardCapScrubbed: 0,
+      policyScrubbed: 0,
+      eventLogScrubbed: 0,
+      errors: 0,
+    };
+    const _retentionResolver: RetentionPolicyResolver = () => "7d";
+    const _retentionOpts: RetentionWorkerOptions = {
+      store: new MemoryStore(),
+    };
     expect(_userLimits).toBeDefined();
     expect(_userLimitsInput).toBeDefined();
     expect(_slidingWindow).toBeDefined();
     expect(_rateLimitResult).toBeDefined();
+    expect(_retentionPolicy).toBeDefined();
+    expect(_retentionSweep).toBeDefined();
+    expect(_retentionResolver).toBeDefined();
+    expect(_retentionOpts).toBeDefined();
 
     expect(_id).toBeDefined();
     expect(_batchId).toBeDefined();

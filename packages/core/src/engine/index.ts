@@ -47,3 +47,15 @@ export {
   type RepackagerOptions,
   type RepackageResult,
 } from "./repackager.js";
+export {
+  RetentionWorker,
+  parseRetentionPolicy,
+  computeCutoffDate,
+  DEFAULT_RETENTION_POLICY,
+  DEFAULT_HARD_CAP_DAYS,
+  DEFAULT_INTERVAL_MS as DEFAULT_RETENTION_INTERVAL_MS,
+  type RetentionPolicy,
+  type RetentionPolicyResolver,
+  type RetentionWorkerOptions,
+  type RetentionSweepResult,
+} from "./retention-worker.js";

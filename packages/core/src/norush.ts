@@ -21,6 +21,7 @@ import { StatusTracker, type StatusTrackerEventName } from "./engine/status-trac
 import { ResultIngester } from "./engine/result-ingester.js";
 import { DeliveryWorker, type DeliveryCallback, type DeliveryEventName } from "./engine/delivery-worker.js";
 import { Repackager } from "./engine/repackager.js";
+import { RetentionWorker, type RetentionPolicy, type RetentionPolicyResolver } from "./engine/retention-worker.js";
 import { ClaudeAdapter } from "./providers/claude.js";
 import { OpenAIBatchAdapter } from "./providers/openai-batch.js";
 
@@ -77,6 +78,18 @@ export interface NorushConfig {
   circuitBreaker?: {
     threshold?: number;
     cooldownMs?: number;
+  };
+
+  /** Retention worker configuration. */
+  retention?: {
+    /** Default retention policy. Default: '7d'. */
+    defaultPolicy?: RetentionPolicy;
+    /** Operator hard cap in days. Default: 90. */
+    hardCapDays?: number;
+    /** Sweep interval in milliseconds. Default: 3600000 (1 hour). */
+    intervalMs?: number;
+    /** Per-user policy resolver. */
+    policyResolver?: RetentionPolicyResolver;
   };
 
   /** Default polling strategy name (e.g., 'linear', 'eager'). Default: 'linear'. */
@@ -204,6 +217,15 @@ export function createNorush(options: NorushConfig): NorushEngine {
     telemetry,
   });
 
+  const retentionWorker = new RetentionWorker({
+    store,
+    defaultPolicy: options.retention?.defaultPolicy,
+    hardCapDays: options.retention?.hardCapDays,
+    intervalMs: options.retention?.intervalMs,
+    policyResolver: options.retention?.policyResolver,
+    telemetry,
+  });
+
   // 5. Wire event flow: tracker completion -> ingester -> repackager.
   //
   // Fire-and-forget: the event emitter calls handlers synchronously and never
@@ -276,22 +298,25 @@ export function createNorush(options: NorushConfig): NorushEngine {
     },
 
     async tick(): Promise<void> {
-      // Run one cycle of all loops: flush, poll, deliver.
+      // Run one cycle of all loops: flush, poll, deliver, retention.
       await queue.tick();
       await statusTracker.tick();
       await deliveryWorker.tick();
+      await retentionWorker.sweep();
     },
 
     start(): void {
       queue.start();
       statusTracker.start();
       deliveryWorker.start();
+      retentionWorker.start();
     },
 
     async stop(): Promise<void> {
       await queue.stop({ finalFlush: true });
       statusTracker.stop();
       deliveryWorker.stop();
+      retentionWorker.stop();
     },
 
     on(event: NorushEventName, handler: NorushEventHandler): void {

@@ -351,7 +351,8 @@ export function runStoreContractTests(
 
         const scrubbedReq = await store.getRequest(req.id);
         expect(scrubbedReq).not.toBeNull();
-        expect(scrubbedReq?.params).toEqual({ scrubbed: true });
+        expect(scrubbedReq?.params).toMatchObject({ scrubbed: true });
+        expect(scrubbedReq?.params).toHaveProperty("scrubbed_at");
         expect(scrubbedReq?.contentScrubbedAt).toBeInstanceOf(Date);
       });
 
@@ -382,10 +383,166 @@ export function runStoreContractTests(
         const fetched = await store.getRequest(req.id);
         expect(fetched).not.toBeNull();
         expect(fetched?.contentScrubbedAt).toBeNull();
-        expect(fetched?.params).not.toEqual({ scrubbed: true });
+        expect(fetched?.params).not.toMatchObject({ scrubbed: true });
 
         // count may be 0 (no results either).
         expect(count).toBe(0);
+      });
+
+      test("scrubContentForUser scrubs only that user's content", async () => {
+        store = await factory();
+        const req1 = await store.createRequest(newRequest({ userId: "alice" }));
+        const req2 = await store.createRequest(newRequest({ userId: "bob" }));
+        const batch = await store.createBatch(newBatch());
+        await store.updateRequest(req1.id, { status: "succeeded" });
+        await store.updateRequest(req2.id, { status: "succeeded" });
+        await store.createResult(newResult(req1.id, batch.id));
+        await store.createResult(newResult(req2.id, batch.id));
+
+        const future = new Date(Date.now() + 3600_000);
+        const count = await store.scrubContentForUser("alice", future);
+
+        expect(count).toBeGreaterThanOrEqual(1);
+
+        const aliceReq = await store.getRequest(req1.id);
+        expect(aliceReq?.params).toMatchObject({ scrubbed: true });
+
+        const bobReq = await store.getRequest(req2.id);
+        expect(bobReq?.contentScrubbedAt).toBeNull();
+        expect(bobReq?.params).not.toMatchObject({ scrubbed: true });
+      });
+
+      test("scrubContentForUser is idempotent", async () => {
+        store = await factory();
+        const req = await store.createRequest(newRequest({ userId: "alice" }));
+        const batch = await store.createBatch(newBatch());
+        await store.updateRequest(req.id, { status: "succeeded" });
+        await store.createResult(newResult(req.id, batch.id));
+
+        const future = new Date(Date.now() + 3600_000);
+        const count1 = await store.scrubContentForUser("alice", future);
+        expect(count1).toBeGreaterThanOrEqual(1);
+
+        const count2 = await store.scrubContentForUser("alice", future);
+        expect(count2).toBe(0);
+      });
+
+      test("scrubDeliveredContent scrubs only delivered results", async () => {
+        store = await factory();
+        const req1 = await store.createRequest(newRequest({ userId: "alice" }));
+        const req2 = await store.createRequest(newRequest({ userId: "alice" }));
+        const batch = await store.createBatch(newBatch());
+        await store.updateRequest(req1.id, { status: "succeeded" });
+        await store.updateRequest(req2.id, { status: "succeeded" });
+
+        const res1 = await store.createResult(newResult(req1.id, batch.id));
+        await store.createResult(newResult(req2.id, batch.id));
+
+        // Only deliver the first result.
+        await store.markDelivered(res1.id);
+
+        const count = await store.scrubDeliveredContent("alice");
+
+        // At least the delivered result should be scrubbed.
+        expect(count).toBeGreaterThanOrEqual(1);
+      });
+
+      test("getDistinctUserIdsWithUnscrubbedContent returns only users with unscrubbed content", async () => {
+        store = await factory();
+        const req1 = await store.createRequest(newRequest({ userId: "alice" }));
+        const req2 = await store.createRequest(newRequest({ userId: "bob" }));
+        const batch = await store.createBatch(newBatch());
+        await store.updateRequest(req1.id, { status: "succeeded" });
+        await store.updateRequest(req2.id, { status: "succeeded" });
+        await store.createResult(newResult(req1.id, batch.id));
+        await store.createResult(newResult(req2.id, batch.id));
+
+        let userIds = await store.getDistinctUserIdsWithUnscrubbedContent();
+        expect(userIds).toContain("alice");
+        expect(userIds).toContain("bob");
+
+        // Scrub alice's content.
+        const future = new Date(Date.now() + 3600_000);
+        await store.scrubContentForUser("alice", future);
+
+        userIds = await store.getDistinctUserIdsWithUnscrubbedContent();
+        expect(userIds).not.toContain("alice");
+        expect(userIds).toContain("bob");
+      });
+
+      test("scrubEventLogForUser scrubs event details for scrubbed entities", async () => {
+        store = await factory();
+        const req = await store.createRequest(newRequest({ userId: "alice" }));
+        await store.updateRequest(req.id, { status: "succeeded" });
+
+        await store.logEvent({
+          entityType: "request",
+          entityId: req.id,
+          event: "submitted",
+          details: { sensitive: "data" },
+        });
+
+        // Scrub alice's content first.
+        const future = new Date(Date.now() + 3600_000);
+        await store.scrubContentForUser("alice", future);
+
+        // Then scrub the event log.
+        const count = await store.scrubEventLogForUser("alice");
+        expect(count).toBeGreaterThanOrEqual(1);
+      });
+
+      test("scrubEventLogsForScrubbedContent scrubs event details for all scrubbed entities", async () => {
+        store = await factory();
+
+        // Create two users each with a scrubbed request.
+        const reqAlice = await store.createRequest(newRequest({ userId: "alice" }));
+        await store.updateRequest(reqAlice.id, { status: "succeeded" });
+        await store.logEvent({
+          entityType: "request",
+          entityId: reqAlice.id,
+          event: "submitted",
+          details: { sensitive: "alice-data" },
+        });
+
+        const reqBob = await store.createRequest(newRequest({ userId: "bob" }));
+        await store.updateRequest(reqBob.id, { status: "succeeded" });
+        await store.logEvent({
+          entityType: "request",
+          entityId: reqBob.id,
+          event: "submitted",
+          details: { sensitive: "bob-data" },
+        });
+
+        // Scrub content for both users.
+        const future = new Date(Date.now() + 3600_000);
+        await store.scrubContentForUser("alice", future);
+        await store.scrubContentForUser("bob", future);
+
+        // scrubEventLogsForScrubbedContent should scrub both.
+        const count = await store.scrubEventLogsForScrubbedContent();
+        expect(count).toBeGreaterThanOrEqual(2);
+      });
+
+      test("scrubEventLogsForScrubbedContent is idempotent", async () => {
+        store = await factory();
+        const req = await store.createRequest(newRequest({ userId: "alice" }));
+        await store.updateRequest(req.id, { status: "succeeded" });
+        await store.logEvent({
+          entityType: "request",
+          entityId: req.id,
+          event: "submitted",
+          details: { sensitive: "data" },
+        });
+
+        const future = new Date(Date.now() + 3600_000);
+        await store.scrubContentForUser("alice", future);
+
+        const count1 = await store.scrubEventLogsForScrubbedContent();
+        expect(count1).toBeGreaterThanOrEqual(1);
+
+        // Second call should return 0 (already scrubbed).
+        const count2 = await store.scrubEventLogsForScrubbedContent();
+        expect(count2).toBe(0);
       });
     });
 

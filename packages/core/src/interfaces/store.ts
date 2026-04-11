@@ -114,6 +114,21 @@ export interface Store {
   /** Remove prompt/response content from records older than `before`. Returns count of scrubbed records. */
   scrubExpiredContent(before: Date): Promise<number>;
 
+  /** Scrub content for a specific user's requests/results older than `before`. Returns count of scrubbed records. */
+  scrubContentForUser(userId: string, before: Date): Promise<number>;
+
+  /** Scrub content for delivered results belonging to a specific user (for on_ack policy). Returns count of scrubbed records. */
+  scrubDeliveredContent(userId: string): Promise<number>;
+
+  /** Get distinct user IDs that have unscrubbed content in requests or results. */
+  getDistinctUserIdsWithUnscrubbedContent(): Promise<string[]>;
+
+  /** Scrub event_log details for events whose parent entity belongs to a user and has been scrubbed. Returns count of scrubbed events. */
+  scrubEventLogForUser(userId: string): Promise<number>;
+
+  /** Scrub event_log details for all events whose parent entity (request or result) has content_scrubbed_at set. Returns count of scrubbed events. */
+  scrubEventLogsForScrubbedContent(): Promise<number>;
+
   // -- Event log ------------------------------------------------------------
 
   /** Write an entry to the event log. */
