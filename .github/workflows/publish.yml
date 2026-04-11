@@ -38,8 +38,6 @@ jobs:
 
       - name: Test
         run: pnpm -r run test
-        env:
-          DATABASE_URL: ""
 
       - name: Publish @norush/core
         working-directory: packages/core
