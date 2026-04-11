@@ -67,7 +67,7 @@ export async function rotateKeys(
     let reEncrypted = 0;
 
     while (true) {
-      const rows =
+      const rows: { id: string; api_key_encrypted: Buffer }[] =
         lastId === null
           ? await tx<{ id: string; api_key_encrypted: Buffer }[]>`
               SELECT id, api_key_encrypted
