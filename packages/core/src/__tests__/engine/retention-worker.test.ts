@@ -16,7 +16,7 @@ import {
   type RetentionPolicy,
   type RetentionPolicyResolver,
 } from "../../engine/retention-worker.js";
-import type { NewRequest, Request, Result, EventLogEntry } from "../../types.js";
+import type { NewRequest, Request, Result } from "../../types.js";
 
 // ---------------------------------------------------------------------------
 // Constants
