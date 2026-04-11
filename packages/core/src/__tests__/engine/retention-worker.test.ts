@@ -598,7 +598,7 @@ describe("RetentionWorker", () => {
       const results = (
         store as unknown as { results: Map<string, Result> }
       ).results;
-      const scrubbedResult = results.get(result.id) as Result;
+      const scrubbedResult = results.get(result.id);
       expect(scrubbedResult).toBeDefined();
       if (!scrubbedResult) return;
       expect(scrubbedResult.inputTokens).toBe(100);

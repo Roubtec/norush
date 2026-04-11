@@ -17,17 +17,16 @@ import { createNorush, MemoryStore } from "@norush/core";
 const engine = createNorush({
   store: new MemoryStore(),
   providers: {
-    anthropic: [{ apiKey: process.env.ANTHROPIC_API_KEY! }],
+    claude: [{ apiKey: process.env.ANTHROPIC_API_KEY! }],
   },
 });
 
 // Enqueue a request for deferred processing
 const request = await engine.enqueue({
   userId: "user-1",
-  provider: "anthropic",
-  model: "claude-sonnet-4-20250514",
-  body: {
-    model: "claude-sonnet-4-20250514",
+  provider: "claude",
+  model: "claude-sonnet-4-5-20250929",
+  params: {
     max_tokens: 1024,
     messages: [{ role: "user", content: "Summarize this article..." }],
   },
@@ -80,7 +79,7 @@ await migrate(sql);
 const engine = createNorush({
   store: new PostgresStore(sql),
   providers: {
-    anthropic: [{ apiKey: process.env.ANTHROPIC_API_KEY! }],
+    claude: [{ apiKey: process.env.ANTHROPIC_API_KEY! }],
   },
 });
 ```
