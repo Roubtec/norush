@@ -86,15 +86,10 @@ function mockSql(
           return Promise.resolve([]);
         };
 
-        try {
-          const result = await cb(txFn);
-          // Transaction committed — expose the buffered updates.
-          committedUpdates.push(...pendingUpdates);
-          return result;
-        } catch (err) {
-          // Transaction rolled back — discard pending updates.
-          throw err;
-        }
+        const result = await cb(txFn);
+        // Transaction committed — expose the buffered updates.
+        committedUpdates.push(...pendingUpdates);
+        return result;
       },
     },
   );

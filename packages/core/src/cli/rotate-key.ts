@@ -113,7 +113,7 @@ export async function rotateKeys(
         reEncrypted++;
       }
 
-      lastId = rows[rows.length - 1]!.id;
+      lastId = rows.at(-1)?.id ?? lastId;
     }
 
     return { reEncrypted, dryRun: opts.dryRun };
