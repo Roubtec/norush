@@ -2,12 +2,16 @@
  * Tests for the master key rotation CLI logic.
  *
  * Tests cover:
- * - Argument parsing (valid, missing args, dry-run)
+ * - Argument parsing (valid, missing args, unknown args, dry-run)
  * - Core rotation: re-encryption, dry-run, same-key rejection, wrong-key abort
- * - Transaction atomicity: partial failure rolls back all changes
+ * - Transaction atomicity: partial UPDATE failure rolls back all changes
  *
  * The rotation tests use a minimal mock of the postgres.js `sql` tagged
  * template interface, avoiding a live database dependency.
+ *
+ * The mock simulates real transaction rollback semantics: updates buffered
+ * inside `begin` are only exposed to the test if the callback resolves
+ * without throwing.
  */
 
 import { describe, it, expect } from "vitest";
@@ -28,48 +32,74 @@ function randomHexKey(): string {
  * Build a minimal mock of the postgres.js `sql` interface that supports
  * `sql.begin(callback)` and tagged template queries inside transactions.
  *
- * `rows` is the dataset returned by any SELECT query inside the transaction.
- * `updates` collects UPDATE calls for assertions.
+ * `rows` is the dataset returned by SELECT queries inside the transaction.
+ * The mock handles the batched pagination pattern: the first SELECT returns
+ * `rows`, subsequent SELECTs return `[]` (signalling end of batches).
+ *
+ * `updates` only exposes updates that were committed (i.e. the callback
+ * resolved without throwing), mirroring real transaction rollback semantics.
+ * If the callback throws, pending updates are discarded.
+ *
+ * `failOnNthUpdate` causes the Nth UPDATE to throw a simulated DB error,
+ * allowing tests to verify partial-failure rollback.
  */
 function mockSql(
   rows: Array<{ id: string; api_key_encrypted: Buffer }>,
-  options?: { failOnUpdate?: boolean },
+  options?: { failOnNthUpdate?: number },
 ) {
-  const updates: Array<{ id: string; blob: Buffer }> = [];
+  const committedUpdates: Array<{ id: string; blob: Buffer }> = [];
 
-  // The transaction query function (tagged template).
-  const txFn = (strings: TemplateStringsArray, ...values: unknown[]) => {
-    const query = strings.join("?");
-
-    if (query.includes("SELECT")) {
-      return Promise.resolve(rows);
-    }
-
-    if (query.includes("UPDATE")) {
-      if (options?.failOnUpdate) {
-        throw new Error("Simulated DB failure");
-      }
-      // Extract blob and id from the values.
-      // The tagged template for the UPDATE has: blob, id as values.
-      const [blob, id] = values as [Buffer, string];
-      updates.push({ id, blob });
-      return Promise.resolve([]);
-    }
-
-    return Promise.resolve([]);
-  };
-
-  // The top-level sql function with a begin method.
   const sql = Object.assign(
     () => Promise.resolve([]),
     {
-      begin: async <T>(cb: (tx: typeof txFn) => Promise<T>): Promise<T> => {
-        return cb(txFn as unknown as typeof txFn);
+      begin: async <T>(
+        cb: (tx: unknown) => Promise<T>,
+      ): Promise<T> => {
+        const pendingUpdates: Array<{ id: string; blob: Buffer }> = [];
+        let updateCount = 0;
+        let selectCount = 0;
+
+        const txFn = (strings: TemplateStringsArray, ...values: unknown[]) => {
+          const query = strings.join("?");
+
+          if (query.includes("SELECT")) {
+            selectCount++;
+            // First SELECT returns all rows; subsequent ones return [] to
+            // signal end of the cursor-based batch loop.
+            return Promise.resolve(selectCount === 1 ? rows : []);
+          }
+
+          if (query.includes("UPDATE")) {
+            updateCount++;
+            if (
+              options?.failOnNthUpdate !== undefined &&
+              updateCount === options.failOnNthUpdate
+            ) {
+              throw new Error("Simulated DB failure");
+            }
+            // Values in the UPDATE template: blob, id (in that order).
+            const [blob, id] = values as [Buffer, string];
+            pendingUpdates.push({ id, blob });
+            return Promise.resolve([]);
+          }
+
+          return Promise.resolve([]);
+        };
+
+        try {
+          const result = await cb(txFn);
+          // Transaction committed — expose the buffered updates.
+          committedUpdates.push(...pendingUpdates);
+          return result;
+        } catch (err) {
+          // Transaction rolled back — discard pending updates.
+          throw err;
+        }
       },
     },
   );
 
-  return { sql: sql as unknown as Parameters<typeof rotateKeys>[0], updates };
+  return { sql: sql as unknown as Parameters<typeof rotateKeys>[0], updates: committedUpdates };
 }
 
 // ---------------------------------------------------------------------------
@@ -109,6 +139,24 @@ describe("parseArgs", () => {
 
   it("throws when both keys are missing", () => {
     expect(() => parseArgs([])).toThrow("Missing required argument: --old-key");
+  });
+
+  it("throws when --old-key has no following value", () => {
+    expect(() => parseArgs(["--old-key"])).toThrow(
+      "Missing value for argument: --old-key",
+    );
+  });
+
+  it("throws when --new-key has no following value", () => {
+    expect(() => parseArgs(["--old-key", "aabb", "--new-key"])).toThrow(
+      "Missing value for argument: --new-key",
+    );
+  });
+
+  it("throws on unknown arguments", () => {
+    expect(() =>
+      parseArgs(["--old-key", "aabb", "--new-key", "ccdd", "--force"]),
+    ).toThrow("Unknown argument: --force");
   });
 });
 
@@ -213,7 +261,7 @@ describe("rotateKeys", () => {
       rotateKeys(sql, { oldKey, newKey, dryRun: false }),
     ).rejects.toThrow("Failed to decrypt key id=key-bad");
 
-    // No updates should have been issued (transaction rolled back).
+    // No updates should have been committed (transaction rolled back).
     expect(updates).toHaveLength(0);
   });
 
@@ -252,5 +300,31 @@ describe("rotateKeys", () => {
 
     expect(result.reEncrypted).toBe(1);
     expect(decrypt(updates[0].blob, newDerived)).toBe(plaintext);
+  });
+
+  it("rolls back all changes if a mid-rotation UPDATE fails", async () => {
+    const oldKey = randomHexKey();
+    const newKey = randomHexKey();
+    const oldDerived = await deriveKey(oldKey);
+
+    const plaintext1 = "sk-key-one";
+    const plaintext2 = "sk-key-two";
+    const { blob: blob1 } = encrypt(plaintext1, oldDerived);
+    const { blob: blob2 } = encrypt(plaintext2, oldDerived);
+
+    const rows = [
+      { id: "key-1", api_key_encrypted: blob1 },
+      { id: "key-2", api_key_encrypted: blob2 },
+    ];
+
+    // The 2nd UPDATE (key-2) will throw after key-1 has already been updated.
+    const { sql, updates } = mockSql(rows, { failOnNthUpdate: 2 });
+
+    await expect(
+      rotateKeys(sql, { oldKey, newKey, dryRun: false }),
+    ).rejects.toThrow("Simulated DB failure");
+
+    // No updates should be committed — the transaction was rolled back.
+    expect(updates).toHaveLength(0);
   });
 });

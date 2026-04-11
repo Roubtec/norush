@@ -4,13 +4,16 @@
  * Re-encrypts all `user_api_keys.api_key_encrypted` records from an old
  * master key to a new master key inside a single database transaction.
  *
+ * Each key may be either a 64-character hex string or a passphrase.
+ *
  * Usage (development):
- *   npx tsx packages/core/src/cli/rotate-key.ts --old-key <hex> --new-key <hex>
- *   npx tsx packages/core/src/cli/rotate-key.ts --old-key <hex> --new-key <hex> --dry-run
+ *   npx tsx packages/core/src/cli/rotate-key.ts --old-key <key> --new-key <key>
+ *   npx tsx packages/core/src/cli/rotate-key.ts --old-key <key> --new-key <key> --dry-run
  *
  * Requires DATABASE_URL environment variable.
  */
 
+import { basename } from "node:path";
 import type postgres from "postgres";
 import { deriveKey, encrypt, decrypt } from "../crypto/vault.js";
 
@@ -41,8 +44,11 @@ export interface RotateKeyResult {
  * In dry-run mode, decrypts every key to verify the old key is correct
  * but does not write anything.
  *
- * The entire operation runs inside a transaction: if any decryption fails,
- * the transaction is rolled back and an error is thrown.
+ * The entire operation runs inside a transaction: if any decryption or update
+ * fails, the transaction is rolled back and an error is thrown.
+ *
+ * Rows are processed in batches of 500 (ordered by id) to avoid loading the
+ * entire table into memory.
  */
 export async function rotateKeys(
   sql: postgres.Sql,
@@ -56,41 +62,58 @@ export async function rotateKeys(
   const newDerivedKey = await deriveKey(opts.newKey);
 
   return await sql.begin(async (tx) => {
-    // Fetch all encrypted API key rows.
-    const rows = await tx<{ id: string; api_key_encrypted: Buffer }[]>`
-      SELECT id, api_key_encrypted FROM user_api_keys
-    `;
-
-    if (rows.length === 0) {
-      return { reEncrypted: 0, dryRun: opts.dryRun };
-    }
-
+    const batchSize = 500;
+    let lastId: string | null = null;
     let reEncrypted = 0;
 
-    for (const row of rows) {
-      // Decrypt with the old key (validates it).
-      let plaintext: string;
-      try {
-        plaintext = decrypt(Buffer.from(row.api_key_encrypted), oldDerivedKey);
-      } catch {
-        throw new Error(
-          `Failed to decrypt key id=${row.id} with the provided old key. ` +
-            "Aborting rotation — no keys were modified.",
-        );
+    while (true) {
+      const rows =
+        lastId === null
+          ? await tx<{ id: string; api_key_encrypted: Buffer }[]>`
+              SELECT id, api_key_encrypted
+              FROM user_api_keys
+              ORDER BY id ASC
+              LIMIT ${batchSize}
+            `
+          : await tx<{ id: string; api_key_encrypted: Buffer }[]>`
+              SELECT id, api_key_encrypted
+              FROM user_api_keys
+              WHERE id > ${lastId}
+              ORDER BY id ASC
+              LIMIT ${batchSize}
+            `;
+
+      if (rows.length === 0) {
+        break;
       }
 
-      if (!opts.dryRun) {
-        // Re-encrypt with the new key and update the row.
-        const { blob } = encrypt(plaintext, newDerivedKey);
-        await tx`
-          UPDATE user_api_keys
-          SET api_key_encrypted = ${blob},
-              updated_at = now()
-          WHERE id = ${row.id}
-        `;
+      for (const row of rows) {
+        // Decrypt with the old key (validates it).
+        let plaintext: string;
+        try {
+          plaintext = decrypt(Buffer.from(row.api_key_encrypted), oldDerivedKey);
+        } catch {
+          throw new Error(
+            `Failed to decrypt key id=${row.id} with the provided old key. ` +
+              "Aborting rotation — no keys were modified.",
+          );
+        }
+
+        if (!opts.dryRun) {
+          // Re-encrypt with the new key and update the row.
+          const { blob } = encrypt(plaintext, newDerivedKey);
+          await tx`
+            UPDATE user_api_keys
+            SET api_key_encrypted = ${blob},
+                updated_at = now()
+            WHERE id = ${row.id}
+          `;
+        }
+
+        reEncrypted++;
       }
 
-      reEncrypted++;
+      lastId = rows[rows.length - 1]!.id;
     }
 
     return { reEncrypted, dryRun: opts.dryRun };
@@ -114,20 +137,28 @@ export function parseArgs(argv: string[]): ParsedArgs {
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
-    if (arg === "--old-key" && i + 1 < argv.length) {
+    if (arg === "--old-key") {
+      if (i + 1 >= argv.length) {
+        throw new Error("Missing value for argument: --old-key <key>");
+      }
       oldKey = argv[++i];
-    } else if (arg === "--new-key" && i + 1 < argv.length) {
+    } else if (arg === "--new-key") {
+      if (i + 1 >= argv.length) {
+        throw new Error("Missing value for argument: --new-key <key>");
+      }
       newKey = argv[++i];
     } else if (arg === "--dry-run") {
       dryRun = true;
+    } else {
+      throw new Error(`Unknown argument: ${arg}`);
     }
   }
 
   if (!oldKey) {
-    throw new Error("Missing required argument: --old-key <hex>");
+    throw new Error("Missing required argument: --old-key <key>");
   }
   if (!newKey) {
-    throw new Error("Missing required argument: --new-key <hex>");
+    throw new Error("Missing required argument: --new-key <key>");
   }
 
   return { oldKey, newKey, dryRun };
@@ -143,7 +174,7 @@ async function main(): Promise<void> {
     args = parseArgs(process.argv.slice(2));
   } catch (err) {
     console.error(
-      `Usage: rotate-key --old-key <hex> --new-key <hex> [--dry-run]\n`,
+      `Usage: rotate-key --old-key <key> --new-key <key> [--dry-run]\n`,
     );
     console.error((err as Error).message);
     process.exit(1);
@@ -188,12 +219,10 @@ async function main(): Promise<void> {
 }
 
 // Run when executed directly (not imported as a module).
-// In Node with ESM the `import.meta.url` matches `process.argv[1]` when
-// run as a script.  For tsx the argv comparison is the reliable check.
+// Uses path.basename so the check works on both Unix and Windows paths.
+const scriptName = process.argv[1] ? basename(process.argv[1]) : "";
 const isDirectRun =
-  process.argv[1] &&
-  (process.argv[1].endsWith("/rotate-key.ts") ||
-    process.argv[1].endsWith("/rotate-key.js"));
+  scriptName === "rotate-key.ts" || scriptName === "rotate-key.js";
 
 if (isDirectRun) {
   main();
