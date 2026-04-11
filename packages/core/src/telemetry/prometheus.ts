@@ -40,16 +40,17 @@ export class PrometheusTelemetry implements TelemetryHook {
   }
 
   counter(name: string, value: number, tags?: Record<string, string>): void {
-    let c = this.counters.get(name);
+    const sanitizedName = sanitize(name);
+    let c = this.counters.get(sanitizedName);
     if (!c) {
       const labelNames = tags ? Object.keys(tags).sort() : [];
       c = new Counter({
-        name: sanitize(name),
+        name: sanitizedName,
         help: `norush counter: ${name}`,
         labelNames,
         registers: [this.registry],
       });
-      this.counters.set(name, c);
+      this.counters.set(sanitizedName, c);
     }
     if (tags && Object.keys(tags).length > 0) {
       c.inc(tags, value);
@@ -59,16 +60,17 @@ export class PrometheusTelemetry implements TelemetryHook {
   }
 
   histogram(name: string, value: number, tags?: Record<string, string>): void {
-    let h = this.histograms.get(name);
+    const sanitizedName = sanitize(name);
+    let h = this.histograms.get(sanitizedName);
     if (!h) {
       const labelNames = tags ? Object.keys(tags).sort() : [];
       h = new Histogram({
-        name: sanitize(name),
+        name: sanitizedName,
         help: `norush histogram: ${name}`,
         labelNames,
         registers: [this.registry],
       });
-      this.histograms.set(name, h);
+      this.histograms.set(sanitizedName, h);
     }
     if (tags && Object.keys(tags).length > 0) {
       h.observe(tags, value);

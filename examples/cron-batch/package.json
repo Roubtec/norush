@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Example cron-triggered batch processing with norush.",
   "dependencies": {
-    "@norush/core": "latest",
+    "@norush/core": "workspace:*",
     "postgres": "^3.4.5"
   },
   "scripts": {

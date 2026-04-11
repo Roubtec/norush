@@ -55,7 +55,7 @@ jobs:
           PROVIDER: ${{ inputs.provider }}
           MODEL: ${{ inputs.model }}
         run: |
-          node -e "
+          node --input-type=module -e "
             import postgres from 'postgres';
             import { createNorush, PostgresStore, migrate, ConsoleTelemetry } from '@norush/core';
 

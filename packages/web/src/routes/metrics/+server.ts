@@ -4,11 +4,15 @@
  * Serves Prometheus-format metrics from the prom-client registry.
  *
  * The PrometheusTelemetry adapter (from @norush/core) registers
- * counters, histograms, and gauges into a prom-client Registry.
+ * counters and histograms into a prom-client Registry.
  * This route calls registry.metrics() and returns the text in
  * Prometheus exposition format.
  *
  * Configure your Prometheus scrape target to point at this endpoint.
+ *
+ * Security: this endpoint is unauthenticated by default. In production,
+ * place it behind an internal-only network or add a bearer-token check
+ * to prevent exposing metric label values to untrusted clients.
  */
 
 import type { RequestHandler } from "./$types";

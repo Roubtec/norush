@@ -8,8 +8,8 @@ import type { TelemetryHook } from "../interfaces/telemetry.js";
  * Compatible with any OTLP-capable backend (Datadog, Grafana Cloud,
  * New Relic, etc.) through the OpenTelemetry SDK exporters.
  *
- * `@opentelemetry/api` is a peer dependency — install it alongside
- * `@norush/core` when using this adapter:
+ * `@opentelemetry/api` is an optional peer dependency. Install it
+ * alongside `@norush/core` when using this adapter:
  *
  *   npm install @opentelemetry/api
  *   import { OpenTelemetryTelemetry } from "@norush/core/opentelemetry";

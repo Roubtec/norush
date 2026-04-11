@@ -43,7 +43,7 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
-          node -e "
+          node --input-type=module -e "
             import postgres from 'postgres';
             import { createNorush, PostgresStore, migrate, ConsoleTelemetry } from '@norush/core';
 
