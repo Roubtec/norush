@@ -60,9 +60,11 @@ export async function setupTestDatabase(): Promise<{
   // Run migrations within this schema.
   await migrate(sql);
 
-  // Create the prerequisite user and API key for FK constraints.
+  // Create the prerequisite users and API key for FK constraints.
+  // 'test-user' is the default userId used across most contract tests.
+  // 'alice' and 'bob' are used by retention contract tests (multi-user scenarios).
   await sql`
-    INSERT INTO users (id) VALUES ('test-user')
+    INSERT INTO users (id) VALUES ('test-user'), ('alice'), ('bob')
     ON CONFLICT DO NOTHING
   `;
   await sql`

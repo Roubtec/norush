@@ -401,16 +401,16 @@ export class PostgresStore implements Store {
   // -- Retention ------------------------------------------------------------
 
   async scrubExpiredContent(before: Date): Promise<number> {
-    const tombstone = JSON.stringify({
+    const tombstone = this.sql.json({
       scrubbed: true,
       scrubbed_at: new Date().toISOString(),
-    });
+    } as JSONValue);
 
     // Scrub requests: replace params with tombstone for completed requests
     // whose content hasn't been scrubbed yet.
     const scrubbedRequests = await this.sql`
       UPDATE requests
-      SET params = ${tombstone}::jsonb,
+      SET params = ${tombstone},
           content_scrubbed_at = now(),
           updated_at = now()
       WHERE content_scrubbed_at IS NULL
@@ -421,7 +421,7 @@ export class PostgresStore implements Store {
     // Scrub results: replace response with tombstone.
     const scrubbedResults = await this.sql`
       UPDATE results
-      SET response = ${tombstone}::jsonb,
+      SET response = ${tombstone},
           content_scrubbed_at = now()
       WHERE content_scrubbed_at IS NULL
         AND created_at < ${before}
@@ -431,15 +431,15 @@ export class PostgresStore implements Store {
   }
 
   async scrubContentForUser(userId: string, before: Date): Promise<number> {
-    const tombstone = JSON.stringify({
+    const tombstone = this.sql.json({
       scrubbed: true,
       scrubbed_at: new Date().toISOString(),
-    });
+    } as JSONValue);
 
     // Scrub requests for this user.
     const scrubbedRequests = await this.sql`
       UPDATE requests
-      SET params = ${tombstone}::jsonb,
+      SET params = ${tombstone},
           content_scrubbed_at = now(),
           updated_at = now()
       WHERE user_id = ${userId}
@@ -451,7 +451,7 @@ export class PostgresStore implements Store {
     // Scrub results linked to this user's requests.
     const scrubbedResults = await this.sql`
       UPDATE results
-      SET response = ${tombstone}::jsonb,
+      SET response = ${tombstone},
           content_scrubbed_at = now()
       WHERE content_scrubbed_at IS NULL
         AND created_at < ${before}
@@ -464,15 +464,15 @@ export class PostgresStore implements Store {
   }
 
   async scrubDeliveredContent(userId: string): Promise<number> {
-    const tombstone = JSON.stringify({
+    const tombstone = this.sql.json({
       scrubbed: true,
       scrubbed_at: new Date().toISOString(),
-    });
+    } as JSONValue);
 
     // Scrub results that have been delivered for this user's requests.
     const scrubbedResults = await this.sql`
       UPDATE results
-      SET response = ${tombstone}::jsonb,
+      SET response = ${tombstone},
           content_scrubbed_at = now()
       WHERE content_scrubbed_at IS NULL
         AND delivery_status = 'delivered'
@@ -484,7 +484,7 @@ export class PostgresStore implements Store {
     // Scrub the corresponding requests.
     const scrubbedRequests = await this.sql`
       UPDATE requests
-      SET params = ${tombstone}::jsonb,
+      SET params = ${tombstone},
           content_scrubbed_at = now(),
           updated_at = now()
       WHERE user_id = ${userId}
@@ -514,16 +514,16 @@ export class PostgresStore implements Store {
   }
 
   async scrubEventLogForUser(userId: string): Promise<number> {
-    const tombstone = JSON.stringify({
+    const tombstone = this.sql.json({
       scrubbed: true,
       scrubbed_at: new Date().toISOString(),
-    });
+    } as JSONValue);
 
     // Scrub event log entries for requests belonging to this user that
     // have been scrubbed.
     const scrubbedRequestEvents = await this.sql`
       UPDATE event_log
-      SET details = ${tombstone}::jsonb
+      SET details = ${tombstone}
       WHERE details IS NOT NULL
         AND NOT (details ? 'scrubbed')
         AND (
@@ -544,16 +544,16 @@ export class PostgresStore implements Store {
   }
 
   async scrubEventLogsForScrubbedContent(): Promise<number> {
-    const tombstone = JSON.stringify({
+    const tombstone = this.sql.json({
       scrubbed: true,
       scrubbed_at: new Date().toISOString(),
-    });
+    } as JSONValue);
 
     // Scrub event log entries for any entity (request or result) that has
     // already had its content scrubbed — regardless of which sweep caused it.
     const scrubbed = await this.sql`
       UPDATE event_log
-      SET details = ${tombstone}::jsonb
+      SET details = ${tombstone}
       WHERE details IS NOT NULL
         AND NOT (details ? 'scrubbed')
         AND (
