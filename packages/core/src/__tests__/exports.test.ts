@@ -122,6 +122,18 @@ describe("@norush/core exports", () => {
     expect(t).toBeInstanceOf(ConsoleTelemetry);
   });
 
+  it("exports PrometheusTelemetry via subpath import", async () => {
+    const { PrometheusTelemetry } = await import("../telemetry/prometheus.js");
+    const t = new PrometheusTelemetry();
+    expect(t).toBeInstanceOf(PrometheusTelemetry);
+  });
+
+  it("exports OpenTelemetryTelemetry via subpath import", async () => {
+    const { OpenTelemetryTelemetry } = await import("../telemetry/opentelemetry.js");
+    const t = new OpenTelemetryTelemetry();
+    expect(t).toBeInstanceOf(OpenTelemetryTelemetry);
+  });
+
   it("exports MemoryStore class", () => {
     const s = new MemoryStore();
     expect(s).toBeInstanceOf(MemoryStore);

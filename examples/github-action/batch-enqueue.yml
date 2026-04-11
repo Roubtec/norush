@@ -1,0 +1,91 @@
+# Example GitHub Actions workflow: enqueue batch requests
+#
+# Demonstrates enqueuing requests via workflow_dispatch (manual trigger)
+# or on a schedule. Useful for periodic summarization, analysis, etc.
+#
+# Copy this file to .github/workflows/batch-enqueue.yml in your repository.
+
+name: Enqueue Batch
+
+on:
+  workflow_dispatch:
+    inputs:
+      prompt:
+        description: "Prompt to send to the LLM"
+        required: true
+        default: "Summarise today's top news in technology."
+      provider:
+        description: "Provider (claude or openai)"
+        required: true
+        default: "claude"
+      model:
+        description: "Model name"
+        required: true
+        default: "claude-sonnet-4-6"
+
+jobs:
+  enqueue:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm --filter @norush/core run build
+
+      - name: Enqueue request
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          PROMPT: ${{ inputs.prompt }}
+          PROVIDER: ${{ inputs.provider }}
+          MODEL: ${{ inputs.model }}
+        run: |
+          node --input-type=module -e "
+            import postgres from 'postgres';
+            import { createNorush, PostgresStore, migrate, ConsoleTelemetry } from '@norush/core';
+
+            const sql = postgres(process.env.DATABASE_URL);
+            try {
+              await migrate(sql);
+              const store = new PostgresStore(sql);
+              const providers = {};
+              if (process.env.ANTHROPIC_API_KEY) providers.claude = [{ apiKey: process.env.ANTHROPIC_API_KEY }];
+              if (process.env.OPENAI_API_KEY) providers.openai = [{ apiKey: process.env.OPENAI_API_KEY }];
+              const engine = createNorush({ store, providers, telemetry: new ConsoleTelemetry() });
+
+              const request = await engine.enqueue({
+                provider: process.env.PROVIDER,
+                model: process.env.MODEL,
+                params: {
+                  messages: [{ role: 'user', content: process.env.PROMPT }],
+                  max_tokens: 2048,
+                },
+              });
+
+              console.log('Enqueued request:', request.id);
+              console.log('Provider:', process.env.PROVIDER);
+              console.log('Model:', process.env.MODEL);
+              console.log('Prompt:', process.env.PROMPT);
+
+              // Flush immediately so the batch is submitted
+              await engine.flush();
+              console.log('Queue flushed.');
+            } finally {
+              await sql.end();
+            }
+          "
