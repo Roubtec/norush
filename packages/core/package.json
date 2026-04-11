@@ -1,8 +1,9 @@
 {
   "name": "@norush/core",
   "version": "0.0.0",
-  "private": true,
+  "description": "Deferred LLM batch execution engine — trade immediacy for 50% cost savings via Anthropic and OpenAI batch APIs.",
   "type": "module",
+  "license": "MIT",
   "engines": {
     "node": ">=24"
   },
@@ -12,10 +13,47 @@
       "import": "./dist/index.js"
     }
   },
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "bin": {
+    "norush-rotate-key": "./dist/cli/rotate-key.js"
+  },
+  "files": [
+    "dist",
+    "migrations",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js"
+      }
+    },
+    "types": "./dist/index.d.ts"
+  },
+  "keywords": [
+    "llm",
+    "batch",
+    "deferred",
+    "anthropic",
+    "claude",
+    "openai",
+    "ai",
+    "api"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/norush-ai/norush",
+    "directory": "packages/core"
+  },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc -p tsconfig.build.json",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "tsc -p tsconfig.build.json"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.86.1",
