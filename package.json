@@ -11,6 +11,7 @@
     "test": "pnpm -r run test",
     "lint": "eslint .",
     "typecheck": "pnpm -r run typecheck",
+    "dev:start": "docker compose up --build -d",
     "dev:up": "docker compose up --build",
     "dev:down": "docker compose down",
     "db:up": "docker compose up -d postgres",
@@ -24,6 +25,8 @@
     "vitest": "^3.2.4"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["esbuild"]
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
   }
 }
