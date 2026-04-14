@@ -17,7 +17,7 @@
 </script>
 
 <svelte:head>
-  <title>Login - norush.chat</title>
+  <title>Login - norush chat</title>
 </svelte:head>
 
 <section class="login">

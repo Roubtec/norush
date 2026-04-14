@@ -87,20 +87,26 @@
   /** Request limit utilization percentage. */
   let requestUtilization = $derived(
     limits?.maxRequestsPerHour != null && limits.maxRequestsPerHour > 0
-      ? Math.min((limits.currentPeriodRequests / limits.maxRequestsPerHour) * 100, 100)
+      ? Math.min(
+          (limits.currentPeriodRequests / limits.maxRequestsPerHour) * 100,
+          100,
+        )
       : null,
   );
 
   /** Token limit utilization percentage. */
   let tokenUtilization = $derived(
     limits?.maxTokensPerPeriod != null && limits.maxTokensPerPeriod > 0
-      ? Math.min((limits.currentPeriodTokens / limits.maxTokensPerPeriod) * 100, 100)
+      ? Math.min(
+          (limits.currentPeriodTokens / limits.maxTokensPerPeriod) * 100,
+          100,
+        )
       : null,
   );
 </script>
 
 <svelte:head>
-  <title>Dashboard - norush.chat</title>
+  <title>Dashboard - norush chat</title>
 </svelte:head>
 
 <section class="dashboard">
@@ -139,7 +145,9 @@
     <StatsCard
       label="Tokens Used"
       value={fmtTokens(stats.totalInputTokens + stats.totalOutputTokens)}
-      detail="{fmtTokens(stats.totalInputTokens)} in / {fmtTokens(stats.totalOutputTokens)} out"
+      detail="{fmtTokens(stats.totalInputTokens)} in / {fmtTokens(
+        stats.totalOutputTokens,
+      )} out"
     />
     <StatsCard
       label="Batch Cost"
@@ -149,7 +157,9 @@
     <StatsCard
       label="Savings"
       value={fmtUsd(stats.totalSavingsUsd)}
-      detail={stats.totalStandardCostUsd > 0 ? '50% batch discount' : 'No usage yet'}
+      detail={stats.totalStandardCostUsd > 0
+        ? "50% batch discount"
+        : "No usage yet"}
     />
     <StatsCard
       label="Avg Turnaround"
@@ -209,7 +219,10 @@
   <!-- Empty state -->
   {#if stats.totalRequests === 0 && !data.loadError}
     <div class="empty-state">
-      <p>No activity in this period. Submit some requests to see your usage stats here.</p>
+      <p>
+        No activity in this period. Submit some requests to see your usage stats
+        here.
+      </p>
     </div>
   {/if}
 </section>
@@ -255,7 +268,9 @@
     color: var(--color-text-muted);
     text-decoration: none;
     white-space: nowrap;
-    transition: background 0.15s, color 0.15s;
+    transition:
+      background 0.15s,
+      color 0.15s;
   }
 
   .period-btn:hover {

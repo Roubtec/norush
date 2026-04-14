@@ -1,5 +1,5 @@
 <svelte:head>
-  <title>norush.chat</title>
+  <title>norush chat</title>
   <meta name="description" content="Deferred LLM batch processing" />
 </svelte:head>
 

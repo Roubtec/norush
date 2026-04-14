@@ -43,7 +43,7 @@ A TypeScript library that manages deferred LLM request processing:
 - **Broker model** — Delivers results to your webhooks. Chain further work
   by submitting new requests through the norush API.
 
-### Deferred Chat (`norush.chat`)
+### Deferred Chat (`norush.roubtec.com`)
 
 A web application built on the core library:
 

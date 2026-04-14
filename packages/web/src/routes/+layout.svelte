@@ -16,7 +16,7 @@
   </main>
 
   <footer>
-    <p>norush.chat &mdash; Deferred LLM batch processing</p>
+    <p>norush chat &mdash; Deferred LLM batch processing</p>
   </footer>
 </div>
 

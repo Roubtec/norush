@@ -25,7 +25,7 @@
 </script>
 
 <svelte:head>
-  <title>API Keys - norush.chat</title>
+  <title>API Keys - norush chat</title>
 </svelte:head>
 
 <section class="settings">
@@ -42,9 +42,7 @@
 
   <!-- Success message -->
   {#if form?.success}
-    <div class="alert alert-success">
-      API key updated successfully.
-    </div>
+    <div class="alert alert-success">API key updated successfully.</div>
   {/if}
 
   <!-- General form error (shown for both add and delete actions) -->

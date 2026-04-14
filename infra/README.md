@@ -11,20 +11,20 @@ The approach is manual (Azure CLI / portal) for now; Bicep or Terraform can be a
 
 ## Architecture
 
-```
+```txt
                     Internet
                        |
                        v
-            +-----------------------+
-            |  Azure Container Apps |
-            |    Environment        |
-            |                       |
-            |  +-------+  +------+ |
-            |  |  web  |  |worker| |
-            |  | :3000 |  | (bg) | |
-            |  +---+---+  +--+---+ |
-            |      |          |     |
-            +------+----------+-----+
+            +------------------------+
+            |  Azure Container Apps  |
+            |    Environment         |
+            |                        |
+            |  +-------+  +------+   |
+            |  |  web  |  |worker|   |
+            |  | :3000 |  | (bg) |   |
+            |  +---+---+  +--+---+   |
+            |      |          |      |
+            +------+----------+------+
                    |          |
                    v          v
             +-------------------------+
@@ -39,6 +39,7 @@ The approach is manual (Azure CLI / portal) for now; Bicep or Terraform can be a
 ```
 
 Both containers run the same Docker image with different entrypoints:
+
 - **web**: `node packages/web/build/index.js` (default CMD) -- SvelteKit app with API routes.
 - **worker**: `node packages/core/dist/worker.js` -- background polling, batching, and delivery.
 
@@ -126,13 +127,13 @@ az postgres flexible-server parameter set \
 
 Build the connection string:
 
-```
+```txt
 DATABASE_URL=postgresql://<admin-user>:<password>@<server-name>.postgres.database.azure.com:5432/<db-name>?sslmode=require
 ```
 
 Example:
 
-```
+```txt
 DATABASE_URL=postgresql://norush:YOUR_PASSWORD@norush-db.postgres.database.azure.com:5432/norush?sslmode=require
 ```
 
@@ -167,7 +168,7 @@ az containerapp create \
     "NORUSH_MASTER_KEY=secretref:master-key" \
     "WORKOS_API_KEY=secretref:workos-api-key" \
     "WORKOS_CLIENT_ID=secretref:workos-client-id" \
-    "ORIGIN=https://norush.chat" \
+    "ORIGIN=https://norush.roubtec.com" \
     "NODE_ENV=production" \
   --secrets \
     "database-url=YOUR_DATABASE_URL" \
@@ -203,6 +204,7 @@ az containerapp create \
 ```
 
 Key differences from the web container:
+
 - `--ingress disabled` -- worker has no HTTP traffic.
 - `--min-replicas 1` -- worker must always be running (polling/delivery loops).
 - `--max-replicas 1` -- only one worker instance to avoid duplicate processing.
@@ -239,21 +241,21 @@ az containerapp logs show \
 
 Configure these secrets in GitHub (Settings > Secrets and variables > Actions):
 
-| Secret | Description | Example |
-|--------|-------------|---------|
-| `AZURE_CREDENTIALS` | Service principal JSON from `az ad sp create-for-rbac` | `{"clientId":"...","clientSecret":"...","subscriptionId":"...","tenantId":"..."}` |
-| `ACR_LOGIN_SERVER` | ACR login server hostname | `norushacr.azurecr.io` |
-| `ACR_USERNAME` | ACR admin username | `norushacr` |
-| `ACR_PASSWORD` | ACR admin password | (from `az acr credential show`) |
-| `AZURE_RESOURCE_GROUP` | Resource group name | `norush-prod` |
-| `AZURE_CONTAINER_APP_WEB` | Web Container App name | `norush-web` |
-| `AZURE_CONTAINER_APP_WORKER` | Worker Container App name | `norush-worker` |
+| Secret                       | Description                                            | Example                                                                           |
+|------------------------------|--------------------------------------------------------|-----------------------------------------------------------------------------------|
+| `AZURE_CREDENTIALS`          | Service principal JSON from `az ad sp create-for-rbac` | `{"clientId":"...","clientSecret":"...","subscriptionId":"...","tenantId":"..."}` |
+| `ACR_LOGIN_SERVER`           | ACR login server hostname                              | `norushacr.azurecr.io`                                                            |
+| `ACR_USERNAME`               | ACR admin username                                     | `norushacr`                                                                       |
+| `ACR_PASSWORD`               | ACR admin password                                     | (from `az acr credential show`)                                                   |
+| `AZURE_RESOURCE_GROUP`       | Resource group name                                    | `norush-prod`                                                                     |
+| `AZURE_CONTAINER_APP_WEB`    | Web Container App name                                 | `norush-web`                                                                      |
+| `AZURE_CONTAINER_APP_WORKER` | Worker Container App name                              | `norush-worker`                                                                   |
 
 Also configure as a repository variable (Settings > Secrets and variables > Actions > Variables):
 
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `DEPLOY_URL` | Production base URL (for health check) | `https://norush.chat` |
+| Variable     | Description                            | Example                      |
+|--------------|----------------------------------------|------------------------------|
+| `DEPLOY_URL` | Production base URL (for health check) | `https://norush.roubtec.com` |
 
 ### Creating the Service Principal
 
@@ -268,7 +270,7 @@ az ad sp create-for-rbac \
 # Copy the entire JSON output as the AZURE_CREDENTIALS secret
 ```
 
-## Custom Domain (norush.chat)
+## Custom Domain (norush.roubtec.com)
 
 Once the web container is running:
 
@@ -277,7 +279,7 @@ Once the web container is running:
 az containerapp hostname add \
   --resource-group "$RESOURCE_GROUP" \
   --name "$WEB_APP_NAME" \
-  --hostname "norush.chat"
+  --hostname "norush.roubtec.com"
 
 # Azure will provide a TXT record for domain verification.
 # Add the TXT record to your DNS, then bind the managed certificate:
@@ -285,17 +287,17 @@ az containerapp hostname add \
 az containerapp hostname bind \
   --resource-group "$RESOURCE_GROUP" \
   --name "$WEB_APP_NAME" \
-  --hostname "norush.chat" \
+  --hostname "norush.roubtec.com" \
   --environment "$CONTAINER_ENV" \
   --validation-method CNAME
 ```
 
 DNS records needed:
 
-| Type | Name | Value |
-|------|------|-------|
-| CNAME | `norush.chat` | `<web-app-fqdn>` (from `az containerapp show`) |
-| TXT | `asuid.norush.chat` | Domain verification token (from Azure) |
+| Type  | Name                       | Value                                          |
+|-------|----------------------------|------------------------------------------------|
+| CNAME | `norush.roubtec.com`       | `<web-app-fqdn>` (from `az containerapp show`) |
+| TXT   | `asuid.norush.roubtec.com` | Domain verification token (from Azure)         |
 
 Azure Container Apps provides a free managed TLS certificate once the domain is verified.
 
@@ -370,13 +372,13 @@ az containerapp update \
 
 Using the Azure Container Apps consumption plan:
 
-| Resource | SKU | Estimated Monthly Cost |
-|----------|-----|----------------------|
-| Container Apps (web, scale-to-zero) | Consumption | ~$5-15 (pay per use) |
-| Container Apps (worker, always-on) | Consumption, 0.5 vCPU / 1 GiB | ~$30 |
-| PostgreSQL Flexible Server | Burstable B1ms | ~$15 |
-| Container Registry | Basic | ~$5 |
-| **Total** | | **~$55-65/month** |
+| Resource                            | SKU                           | Estimated Monthly Cost |
+|-------------------------------------|-------------------------------|------------------------|
+| Container Apps (web, scale-to-zero) | Consumption                   | ~$5-15 (pay per use)   |
+| Container Apps (worker, always-on)  | Consumption, 0.5 vCPU / 1 GiB | ~$30                   |
+| PostgreSQL Flexible Server          | Burstable B1ms                | ~$15                   |
+| Container Registry                  | Basic                         | ~$5                    |
+| **Total**                           |                               | **~$55-65/month**      |
 
 These are rough estimates for low-traffic usage.
 The web container scales to zero when idle, keeping costs minimal during development.

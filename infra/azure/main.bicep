@@ -64,7 +64,7 @@ param workosApiKey string = ''
 @description('WorkOS client ID (optional, for authentication).')
 param workosClientId string = ''
 
-@description('Public origin URL (e.g. https://norush.chat).')
+@description('Public origin URL (e.g. https://norush.roubtec.com).')
 param origin string = ''
 
 @description('Web container CPU cores.')

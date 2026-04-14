@@ -56,7 +56,12 @@
   let totalSavings = $derived(
     messages.reduce(
       (sum, m) =>
-        sum + calculateSavings(m.provider, m.result?.inputTokens, m.result?.outputTokens),
+        sum +
+        calculateSavings(
+          m.provider,
+          m.result?.inputTokens,
+          m.result?.outputTokens,
+        ),
       0,
     ),
   );
@@ -76,8 +81,9 @@
 
     if (!res.ok) {
       const errorMsg =
-        body.errors?.map((/** @type {{ message: string }} */ e) => e.message).join(". ") ??
-        "Failed to submit message";
+        body.errors
+          ?.map((/** @type {{ message: string }} */ e) => e.message)
+          .join(". ") ?? "Failed to submit message";
       throw new Error(errorMsg);
     }
 
@@ -99,7 +105,9 @@
   /** Poll for new results and update the message list. */
   async function pollResults() {
     try {
-      const res = await fetch(`/api/results?since=${encodeURIComponent(lastPollAt)}`);
+      const res = await fetch(
+        `/api/results?since=${encodeURIComponent(lastPollAt)}`,
+      );
       if (!res.ok) return;
 
       const body = await res.json();
@@ -139,14 +147,17 @@
 </script>
 
 <svelte:head>
-  <title>Chat - norush.chat</title>
+  <title>Chat - norush chat</title>
 </svelte:head>
 
 <section class="chat-page">
   <div class="chat-header">
     <h1>Chat</h1>
     {#if totalSavings > 0}
-      <span class="total-savings" title="Total estimated savings from batch processing">
+      <span
+        class="total-savings"
+        title="Total estimated savings from batch processing"
+      >
         Total saved: ~${totalSavings.toFixed(2)}
       </span>
     {/if}
