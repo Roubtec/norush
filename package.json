@@ -11,9 +11,10 @@
     "test": "pnpm -r run test",
     "lint": "eslint .",
     "typecheck": "pnpm -r run typecheck",
-    "dev": "docker compose up --build",
+    "dev:up": "docker compose up --build",
+    "dev:down": "docker compose down",
     "db:up": "docker compose up -d postgres",
-    "db:down": "docker compose down"
+    "db:down": "docker compose stop postgres"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

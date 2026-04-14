@@ -110,9 +110,10 @@ pnpm install
 | `pnpm test`      | Run all tests (Vitest)                       |
 | `pnpm lint`      | Lint all packages (ESLint)                   |
 | `pnpm typecheck` | Type-check all packages (TypeScript strict)  |
-| `pnpm dev`       | Build and start the full stack via Docker    |
+| `pnpm dev:up`    | Build and start the full stack via Docker    |
+| `pnpm dev:down`  | Stop and remove all compose services         |
 | `pnpm db:up`     | Start local PostgreSQL 17 via Docker Compose |
-| `pnpm db:down`   | Stop and remove all compose services         |
+| `pnpm db:down`   | Stop local PostgreSQL (preserves data)       |
 
 ### Local database
 
