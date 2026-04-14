@@ -24,9 +24,10 @@
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "bin": {
-    "norush-rotate-key": "./dist/cli/rotate-key.js"
+    "norush-rotate-key": "./bin/norush-rotate-key.js"
   },
   "files": [
+    "bin",
     "dist",
     "migrations",
     "README.md",

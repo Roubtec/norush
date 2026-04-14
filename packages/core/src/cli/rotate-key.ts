@@ -169,7 +169,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
 // CLI entry point
 // ---------------------------------------------------------------------------
 
-async function main(): Promise<void> {
+export async function main(): Promise<void> {
   let args: ParsedArgs;
   try {
     args = parseArgs(process.argv.slice(2));
@@ -226,5 +226,5 @@ const isDirectRun =
   scriptName === "rotate-key.ts" || scriptName === "rotate-key.js";
 
 if (isDirectRun) {
-  main();
+  void main();
 }
