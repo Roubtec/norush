@@ -35,7 +35,11 @@ COPY packages/core/package.json packages/core/package.json
 COPY packages/web/package.json packages/web/package.json
 
 # Install all dependencies (including devDependencies needed for the build).
-RUN pnpm install --frozen-lockfile --config.node-linker=hoisted
+# The cache mount persists pnpm's content-addressable store across builds, so
+# even when this layer is invalidated (e.g. lockfile change) only new/changed
+# packages are downloaded — the rest are reused from the local store.
+RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
+    pnpm install --frozen-lockfile --config.node-linker=hoisted
 
 # ---------------------------------------------------------------------------
 # Stage 2 — build: compile TypeScript and SvelteKit
