@@ -110,8 +110,9 @@ pnpm install
 | `pnpm test`      | Run all tests (Vitest)                       |
 | `pnpm lint`      | Lint all packages (ESLint)                   |
 | `pnpm typecheck` | Type-check all packages (TypeScript strict)  |
+| `pnpm dev`       | Build and start the full stack via Docker    |
 | `pnpm db:up`     | Start local PostgreSQL 17 via Docker Compose |
-| `pnpm db:down`   | Stop local PostgreSQL                        |
+| `pnpm db:down`   | Stop and remove all compose services         |
 
 ### Local database
 
@@ -136,10 +137,16 @@ docker compose down
 The web server is available at `http://localhost:3000`.
 Provider API keys and other secrets can be set via environment variables or a `.env` file:
 
+Copy [`.env.example`](./.env.example) to `.env` and fill in the values you need.
+The most important ones for a first run:
+
 ```env
 NORUSH_MASTER_KEY=your-secret-key
 ANTHROPIC_API_KEY=sk-ant-...
 OPENAI_API_KEY=sk-...
+
+# Skip WorkOS login in development (NEVER set in production):
+NORUSH_DEV_AUTH_BYPASS=1
 ```
 
 ### Development (without Docker)

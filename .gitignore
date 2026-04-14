@@ -4,6 +4,7 @@ build/
 .svelte-kit/
 .env
 .env.*
+!.env.example
 *.db
 *.db-journal
 .DS_Store

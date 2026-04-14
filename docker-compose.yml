@@ -27,9 +27,19 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgres://postgres:dev@postgres:5432/norush
+      # DATABASE_URL default points at the `postgres` service on the compose
+      # network. Override in .env only if you know the container can reach it
+      # (e.g. `localhost` from within a container resolves to the container
+      # itself, not the host DB — use `host.docker.internal` on Mac/Windows).
+      DATABASE_URL: ${DATABASE_URL:-postgres://postgres:dev@postgres:5432/norush}
       NORUSH_MASTER_KEY: ${NORUSH_MASTER_KEY:-dev-master-key-change-me}
       ORIGIN: ${ORIGIN:-http://localhost:3000}
+      NODE_ENV: ${NODE_ENV:-development}
+      NORUSH_DEV_AUTH_BYPASS: ${NORUSH_DEV_AUTH_BYPASS:-}
+      WORKOS_API_KEY: ${WORKOS_API_KEY:-}
+      WORKOS_CLIENT_ID: ${WORKOS_CLIENT_ID:-}
+      WORKOS_COOKIE_PASSWORD: ${WORKOS_COOKIE_PASSWORD:-}
+      WORKOS_REDIRECT_URI: ${WORKOS_REDIRECT_URI:-}
 
   worker:
     image: norush
@@ -40,7 +50,7 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgres://postgres:dev@postgres:5432/norush
+      DATABASE_URL: ${DATABASE_URL:-postgres://postgres:dev@postgres:5432/norush}
       NORUSH_MASTER_KEY: ${NORUSH_MASTER_KEY:-dev-master-key-change-me}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}

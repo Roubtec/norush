@@ -37,6 +37,9 @@ Tier 3: User settings (database)
 | `OPENAI_API_KEY`    | No               | --            | OpenAI API key (enables OpenAI adapter).     |
 | `WORKOS_API_KEY`    | No               | --            | WorkOS API key for authentication.           |
 | `WORKOS_CLIENT_ID`  | No               | --            | WorkOS client ID for authentication.         |
+| `WORKOS_COOKIE_PASSWORD` | No          | --            | 32+ char secret for sealing session cookies. |
+| `WORKOS_REDIRECT_URI`    | No          | --            | OAuth callback URL for AuthKit.              |
+| `NORUSH_DEV_AUTH_BYPASS` | No          | --            | Set to `1` to skip WorkOS in development; ignored when `NODE_ENV=production`. |
 | `NODE_ENV`          | No               | `development` | Node environment.                            |
 | `ORIGIN`            | No               | --            | Public origin URL for CORS and redirects.    |
 

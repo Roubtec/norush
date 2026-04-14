@@ -11,7 +11,8 @@
     "test": "pnpm -r run test",
     "lint": "eslint .",
     "typecheck": "pnpm -r run typecheck",
-    "db:up": "docker compose up -d",
+    "dev": "docker compose up --build",
+    "db:up": "docker compose up -d postgres",
     "db:down": "docker compose down"
   },
   "devDependencies": {
