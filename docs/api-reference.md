@@ -18,33 +18,33 @@ Wires together all components: RequestQueue, BatchManager, StatusTracker, Result
 
 The public engine interface returned by `createNorush()`.
 
-| Method | Description |
-|--------|-------------|
-| `enqueue(request: NewRequest): Promise<Request>` | Queue a request for deferred processing. |
-| `flush(): Promise<void>` | Force-flush the queue, forming and submitting batches. |
-| `tick(): Promise<void>` | Run one cycle of all loops (flush, poll, deliver, retention). For serverless/cron. |
-| `start(): void` | Start all interval loops. For long-running processes. |
-| `stop(): Promise<void>` | Stop all loops and perform a final flush. |
-| `on(event, handler): void` | Register an event handler. |
-| `off(event, handler): void` | Remove an event handler. |
-| `addDeliveryCallback(cb): void` | Register a delivery callback. |
-| `removeDeliveryCallback(cb): void` | Remove a delivery callback. |
-| `config: ResolvedConfig` | The resolved configuration (read-only). |
+| Method                                           | Description                                                                        |
+|--------------------------------------------------|------------------------------------------------------------------------------------|
+| `enqueue(request: NewRequest): Promise<Request>` | Queue a request for deferred processing.                                           |
+| `flush(): Promise<void>`                         | Force-flush the queue, forming and submitting batches.                             |
+| `tick(): Promise<void>`                          | Run one cycle of all loops (flush, poll, deliver, retention). For serverless/cron. |
+| `start(): void`                                  | Start all interval loops. For long-running processes.                              |
+| `stop(): Promise<void>`                          | Stop all loops and perform a final flush.                                          |
+| `on(event, handler): void`                       | Register an event handler.                                                         |
+| `off(event, handler): void`                      | Remove an event handler.                                                           |
+| `addDeliveryCallback(cb): void`                  | Register a delivery callback.                                                      |
+| `removeDeliveryCallback(cb): void`               | Remove a delivery callback.                                                        |
+| `config: ResolvedConfig`                         | The resolved configuration (read-only).                                            |
 
 ### `NorushConfig`
 
 Configuration object for `createNorush()`:
 
-| Property | Type | Required | Description |
-|----------|------|----------|-------------|
-| `store` | `Store` | Yes | Storage backend (MemoryStore or PostgresStore). |
-| `providers` | `Map<string, Provider>` or `Record` | Yes | Provider adapters or key configs. |
-| `batching` | `object` | No | Batching overrides (maxRequests, maxBytes, flushIntervalMs). |
-| `polling` | `object` | No | Polling overrides (intervalMs, maxRetries). |
-| `delivery` | `object` | No | Delivery overrides (tickIntervalMs, maxDeliveryAttempts, batchSize). |
-| `retention` | `object` | No | Retention config (defaultPolicy, hardCapDays, intervalMs). |
-| `circuitBreaker` | `object` | No | Circuit breaker config (threshold, cooldownMs). |
-| `telemetry` | `TelemetryHook` | No | Telemetry adapter. Defaults to NoopTelemetry. |
+| Property         | Type                                | Required | Description                                                          |
+|------------------|-------------------------------------|----------|----------------------------------------------------------------------|
+| `store`          | `Store`                             | Yes      | Storage backend (MemoryStore or PostgresStore).                      |
+| `providers`      | `Map<string, Provider>` or `Record` | Yes      | Provider adapters or key configs.                                    |
+| `batching`       | `object`                            | No       | Batching overrides (maxRequests, maxBytes, flushIntervalMs).         |
+| `polling`        | `object`                            | No       | Polling overrides (intervalMs, maxRetries).                          |
+| `delivery`       | `object`                            | No       | Delivery overrides (tickIntervalMs, maxDeliveryAttempts, batchSize). |
+| `retention`      | `object`                            | No       | Retention config (defaultPolicy, hardCapDays, intervalMs).           |
+| `circuitBreaker` | `object`                            | No       | Circuit breaker config (threshold, cooldownMs).                      |
+| `telemetry`      | `TelemetryHook`                     | No       | Telemetry adapter. Defaults to NoopTelemetry.                        |
 
 ## Data Types
 
@@ -324,17 +324,17 @@ const eager = new EagerStrategy();
 
 These are exported for advanced use cases where you need to compose the engine yourself:
 
-| Component | Description |
-|-----------|-------------|
-| `RequestQueue` | Buffers and flushes requests into batches. |
-| `BatchManager` | Submits batches to provider adapters. |
-| `StatusTracker` | Polls batch statuses and emits events. |
-| `ResultIngester` | Fetches and persists results from completed batches. |
-| `DeliveryWorker` | Delivers results to callbacks and webhooks. |
-| `Repackager` | Re-queues failed/expired requests for retry. |
+| Component         | Description                                          |
+|-------------------|------------------------------------------------------|
+| `RequestQueue`    | Buffers and flushes requests into batches.           |
+| `BatchManager`    | Submits batches to provider adapters.                |
+| `StatusTracker`   | Polls batch statuses and emits events.               |
+| `ResultIngester`  | Fetches and persists results from completed batches. |
+| `DeliveryWorker`  | Delivers results to callbacks and webhooks.          |
+| `Repackager`      | Re-queues failed/expired requests for retry.         |
 | `RetentionWorker` | Scrubs expired data according to retention policies. |
-| `CircuitBreaker` | Protects against cascading provider failures. |
-| `OrphanRecovery` | Recovers batches stuck in intermediate states. |
+| `CircuitBreaker`  | Protects against cascading provider failures.        |
+| `OrphanRecovery`  | Recovers batches stuck in intermediate states.       |
 
 ## Utility Functions
 
@@ -387,18 +387,18 @@ const saved = pricingSavings(rates, 1000, 500);
 
 The engine emits events for lifecycle transitions:
 
-| Event | Emitted when |
-|-------|-------------|
-| `batch:submitted` | A batch is submitted to the provider. |
-| `batch:processing` | Provider confirms the batch is being processed. |
-| `batch:completed` | All results are available. |
-| `batch:expired` | The batch timed out. |
-| `batch:error` | A provider error occurred. |
-| `batch:failed` | The batch permanently failed. |
-| `circuit_breaker:tripped` | The circuit breaker opened. |
-| `delivery:success` | A result was successfully delivered. |
-| `delivery:failure` | A delivery attempt failed. |
-| `delivery:exhausted` | All delivery attempts exhausted. |
+| Event                     | Emitted when                                    |
+|---------------------------|-------------------------------------------------|
+| `batch:submitted`         | A batch is submitted to the provider.           |
+| `batch:processing`        | Provider confirms the batch is being processed. |
+| `batch:completed`         | All results are available.                      |
+| `batch:expired`           | The batch timed out.                            |
+| `batch:error`             | A provider error occurred.                      |
+| `batch:failed`            | The batch permanently failed.                   |
+| `circuit_breaker:tripped` | The circuit breaker opened.                     |
+| `delivery:success`        | A result was successfully delivered.            |
+| `delivery:failure`        | A delivery attempt failed.                      |
+| `delivery:exhausted`      | All delivery attempts exhausted.                |
 
 ```typescript
 engine.on("batch:completed", (data) => {

@@ -5,7 +5,7 @@ It manages the full lifecycle of batch API requests across multiple providers.
 
 ## System Overview
 
-```
+```txt
   Client (API / Chat UI)
          |
          v
@@ -57,6 +57,7 @@ It manages the full lifecycle of batch API requests across multiple providers.
 ### RequestQueue
 
 Buffers incoming requests and flushes them into batches when thresholds are met:
+
 - Maximum request count reached.
 - Maximum byte size reached.
 - Flush interval timer fires.
@@ -72,6 +73,7 @@ Uses the `KeyResolver` interface for multi-tenant key selection.
 ### StatusTracker
 
 Runs a polling loop that checks batch statuses and emits lifecycle events:
+
 - `batch:submitted` -> `batch:processing` -> `batch:completed`
 - `batch:expired` (timed out)
 - `batch:failed` (permanent failure)
@@ -103,6 +105,7 @@ Supports per-user policies (clamped to the operator hard cap).
 
 Protects against cascading provider failures.
 Tracks consecutive failures per provider and enters three states:
+
 - **Closed** (normal): all requests flow through.
 - **Open** (tripped): requests are rejected.
 - **Half-open** (recovery): a single probe request is allowed.
@@ -116,11 +119,11 @@ Runs on startup or periodically to handle process crashes.
 
 Each provider adapter implements the `Provider` interface:
 
-| Adapter | Provider | Mechanism |
-|---------|----------|-----------|
-| `ClaudeAdapter` | Anthropic | JSON body submission via Message Batches API |
-| `OpenAIBatchAdapter` | OpenAI | JSONL file upload via Batch API |
-| `OpenAIFlexAdapter` | OpenAI | Synchronous requests with `service_tier: "flex"` |
+| Adapter              | Provider  | Mechanism                                        |
+|----------------------|-----------|--------------------------------------------------|
+| `ClaudeAdapter`      | Anthropic | JSON body submission via Message Batches API     |
+| `OpenAIBatchAdapter` | OpenAI    | JSONL file upload via Batch API                  |
+| `OpenAIFlexAdapter`  | OpenAI    | Synchronous requests with `service_tier: "flex"` |
 
 All adapters normalize their provider's status flow to norush's `BatchStatus` enum.
 
@@ -129,10 +132,10 @@ All adapters normalize their provider's status flow to norush's `BatchStatus` en
 The `Store` interface abstracts persistence.
 Two implementations are provided:
 
-| Store | Use case |
-|-------|----------|
-| `MemoryStore` | Testing and development. Data is lost on exit. |
-| `PostgresStore` | Production. Crash-safe, survives restarts. |
+| Store           | Use case                                       |
+|-----------------|------------------------------------------------|
+| `MemoryStore`   | Testing and development. Data is lost on exit. |
+| `PostgresStore` | Production. Crash-safe, survives restarts.     |
 
 Both the web server and the worker process connect to the same PostgreSQL database.
 They communicate exclusively through the database -- there is no inter-process messaging.
@@ -144,13 +147,13 @@ Schema migrations are managed by `migrate()` and run automatically on worker sta
 All engine components instrument through the `TelemetryHook` interface.
 Metrics are categorized as:
 
-| Category | Metrics | Purpose |
-|----------|---------|---------|
-| Volume | `requests_queued`, `batches_submitted`, `results_ingested`, `deliveries_attempted` | Throughput |
-| Latency | `batch_turnaround_ms`, `delivery_latency_ms` | Performance |
-| Errors | `submission_failures`, `delivery_failures`, `circuit_breaker_trips`, `orphan_recoveries` | Reliability |
-| Cost | `input_tokens_total`, `output_tokens_total` (per-model, per-user) | Billing analytics |
-| Size | `batch_request_count`, `request_param_bytes`, `response_bytes` | Capacity planning |
+| Category | Metrics                                                                                  | Purpose           |
+|----------|------------------------------------------------------------------------------------------|-------------------|
+| Volume   | `requests_queued`, `batches_submitted`, `results_ingested`, `deliveries_attempted`       | Throughput        |
+| Latency  | `batch_turnaround_ms`, `delivery_latency_ms`                                             | Performance       |
+| Errors   | `submission_failures`, `delivery_failures`, `circuit_breaker_trips`, `orphan_recoveries` | Reliability       |
+| Cost     | `input_tokens_total`, `output_tokens_total` (per-model, per-user)                        | Billing analytics |
+| Size     | `batch_request_count`, `request_param_bytes`, `response_bytes`                           | Capacity planning |
 
 Four adapters are available:
 
@@ -170,25 +173,25 @@ The `resolveConfig()` function merges tiers with clamping so that user preferenc
 
 In production, norush runs as two containers sharing a PostgreSQL database:
 
-```
+```txt
             Internet
                |
                v
-    +-----------------------+
-    |  Azure Container Apps |
-    |    Environment        |
-    |                       |
-    |  +-------+  +------+ |
-    |  |  web  |  |worker| |
-    |  | :3000 |  | (bg) | |
-    |  +---+---+  +--+---+ |
-    |      |          |     |
-    +------+----------+-----+
+    +------------------------+
+    |  Azure Container Apps  |
+    |    Environment         |
+    |                        |
+    |  +-------+  +------+   |
+    |  |  web  |  |worker|   |
+    |  | :3000 |  | (bg) |   |
+    |  +---+---+  +--+---+   |
+    |      |          |      |
+    +------+----------+------+
            |          |
            v          v
-    +-------------------------+
-    | PostgreSQL Flex Server  |
-    +-------------------------+
+    +------------------------+
+    | PostgreSQL Flex Server |
+    +------------------------+
 ```
 
 - **Web container**: SvelteKit app serving the chat UI, API routes, and `/metrics` endpoint.

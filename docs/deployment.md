@@ -35,6 +35,7 @@ docker compose up --build
 ```
 
 This starts:
+
 - PostgreSQL 17 on port 5432
 - Web server on port 3000
 - Background worker
@@ -47,6 +48,7 @@ See [infra/README.md](../infra/README.md) for step-by-step Azure CLI setup.
 ### Infrastructure as Code (Bicep)
 
 The `infra/azure/main.bicep` template provisions:
+
 - Azure Container Apps environment
 - Web container app (scale-to-zero)
 - Worker container app (always-on, single replica)
@@ -101,7 +103,7 @@ Required GitHub secrets:
 
 ### Steps
 
-1. Clone the repository and install dependencies:
+#### 1. Clone the repository and install dependencies:
 
 ```bash
 git clone https://github.com/norush-ai/norush.git
@@ -110,7 +112,7 @@ pnpm install
 pnpm build
 ```
 
-2. Set environment variables:
+#### 2. Set environment variables:
 
 ```bash
 export DATABASE_URL=postgres://user:pass@localhost:5432/norush
@@ -118,13 +120,13 @@ export NORUSH_MASTER_KEY=$(openssl rand -base64 32)
 export ANTHROPIC_API_KEY=sk-ant-...
 ```
 
-3. Start the web server:
+#### 3. Start the web server:
 
 ```bash
 node packages/web/dist/index.js
 ```
 
-4. Start the worker (separate process):
+#### 4. Start the worker (separate process):
 
 ```bash
 node packages/core/dist/worker.js
@@ -176,7 +178,7 @@ WantedBy=multi-user.target
 
 ### Prometheus
 
-1. Configure `PrometheusTelemetry` in your engine:
+#### 1. Configure `PrometheusTelemetry` in your engine:
 
 ```typescript
 import { PrometheusTelemetry } from "@norush/core";
@@ -191,9 +193,9 @@ const engine = createNorush({
 });
 ```
 
-2. The web application exposes `GET /metrics` which returns Prometheus exposition format text.
+#### 2. The web application exposes `GET /metrics` which returns Prometheus exposition format text.
 
-3. Add a scrape config to `prometheus.yml`:
+#### 3. Add a scrape config to `prometheus.yml`:
 
 ```yaml
 scrape_configs:
@@ -212,7 +214,7 @@ scrape_configs:
 npm install @opentelemetry/sdk-metrics @opentelemetry/exporter-metrics-otlp-http
 ```
 
-2. Configure the SDK before creating the engine:
+1. Configure the SDK before creating the engine:
 
 ```typescript
 import { MeterProvider, PeriodicExportingMetricReader } from "@opentelemetry/sdk-metrics";
@@ -238,6 +240,7 @@ This works with any OTLP-compatible backend: Datadog, Grafana Cloud, New Relic, 
 ## Health Checks
 
 The web application exposes `GET /api/health` which returns:
+
 - `200 OK` with `{"status": "ok", "database": "connected"}` when healthy.
 - `503 Service Unavailable` when the database is unreachable.
 

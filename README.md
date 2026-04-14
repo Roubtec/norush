@@ -55,7 +55,7 @@ A web application built on the core library:
 
 ## How It Works
 
-```
+```txt
 You write prompts
        │
        ▼
@@ -73,13 +73,13 @@ You write prompts
 
 Underneath, norush maps to each provider's native batch API:
 
-| | Anthropic (Claude) | OpenAI |
-|---|---|---|
-| API | Message Batches | Batch API |
-| Discount | 50% | 50% |
-| Max batch | 100K requests | 50K requests |
-| Typical completion | <1 hour | <24 hours |
-| Format | JSON body | JSONL file upload |
+|                    | Anthropic (Claude) | OpenAI            |
+|--------------------|--------------------|-------------------|
+| API                | Message Batches    | Batch API         |
+| Discount           | 50%                | 50%               |
+| Max batch          | 100K requests      | 50K requests      |
+| Typical completion | <1 hour            | <24 hours         |
+| Format             | JSON body          | JSONL file upload |
 
 ## Development
 
@@ -97,21 +97,21 @@ pnpm install
 
 ### Workspace packages
 
-| Package | Description |
-|---|---|
+| Package        | Description                   |
+|----------------|-------------------------------|
 | `@norush/core` | Core batch-processing library |
-| `@norush/web` | Deferred chat web application |
+| `@norush/web`  | Deferred chat web application |
 
 ### Scripts
 
-| Command | Description |
-|---|---|
-| `pnpm build` | Compile all packages |
-| `pnpm test` | Run all tests (Vitest) |
-| `pnpm lint` | Lint all packages (ESLint) |
-| `pnpm typecheck` | Type-check all packages (TypeScript strict) |
-| `pnpm db:up` | Start local PostgreSQL 17 via Docker Compose |
-| `pnpm db:down` | Stop local PostgreSQL |
+| Command          | Description                                  |
+|------------------|----------------------------------------------|
+| `pnpm build`     | Compile all packages                         |
+| `pnpm test`      | Run all tests (Vitest)                       |
+| `pnpm lint`      | Lint all packages (ESLint)                   |
+| `pnpm typecheck` | Type-check all packages (TypeScript strict)  |
+| `pnpm db:up`     | Start local PostgreSQL 17 via Docker Compose |
+| `pnpm db:down`   | Stop local PostgreSQL                        |
 
 ### Local database
 
@@ -162,6 +162,7 @@ norush deploys to Azure Container Apps via GitHub Actions.
 On merge to `main`, the deploy workflow builds the Docker image, pushes it to Azure Container Registry, and updates both the web and worker containers.
 
 See [infra/README.md](./infra/README.md) for full Azure setup instructions, including:
+
 - Resource provisioning (Container Apps, PostgreSQL, ACR)
 - GitHub repository secrets configuration
 - Custom domain setup
@@ -171,11 +172,11 @@ See [infra/README.md](./infra/README.md) for full Azure setup instructions, incl
 
 norush ships four telemetry adapters:
 
-| Adapter | Description |
-|---------|-------------|
-| `NoopTelemetry` | Default. Silently discards all metrics. |
-| `ConsoleTelemetry` | Logs to stdout with `[norush]` prefix. |
-| `PrometheusTelemetry` | Maps to `prom-client` counters and histograms. |
+| Adapter                  | Description                                            |
+|--------------------------|--------------------------------------------------------|
+| `NoopTelemetry`          | Default. Silently discards all metrics.                |
+| `ConsoleTelemetry`       | Logs to stdout with `[norush]` prefix.                 |
+| `PrometheusTelemetry`    | Maps to `prom-client` counters and histograms.         |
 | `OpenTelemetryTelemetry` | Maps to `@opentelemetry/api` meters (OTLP-compatible). |
 
 The web application exposes `GET /metrics` for Prometheus scraping.
