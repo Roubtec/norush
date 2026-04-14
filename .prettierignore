@@ -1,0 +1,13 @@
+# Build output and cache
+dist/
+.svelte-kit/
+
+# pnpm cache and lockfile
+node_modules/
+pnpm-lock.yaml
+
+# Auto-generated changelogs
+**/CHANGELOG.md
+
+# Database migrations — preserve exact formatting
+**/migrations/
