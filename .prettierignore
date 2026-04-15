@@ -6,6 +6,10 @@ dist/
 node_modules/
 pnpm-lock.yaml
 
+# Markdown — markdownlint owns formatting here; avoid pipe-style conflicts
+*.md
+*.mdx
+
 # Auto-generated changelogs
 **/CHANGELOG.md
 

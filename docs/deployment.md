@@ -208,13 +208,13 @@ scrape_configs:
 
 ### OpenTelemetry
 
-1. Install the OpenTelemetry SDK and an exporter:
+#### 1. Install the OpenTelemetry SDK and an exporter:
 
 ```bash
 npm install @opentelemetry/sdk-metrics @opentelemetry/exporter-metrics-otlp-http
 ```
 
-1. Configure the SDK before creating the engine:
+#### 2. Configure the SDK before creating the engine:
 
 ```typescript
 import { MeterProvider, PeriodicExportingMetricReader } from "@opentelemetry/sdk-metrics";

@@ -7,10 +7,10 @@
  *    authenticates every request as a synthetic dev user.
  */
 
-import type { Handle } from "@sveltejs/kit";
-import { getSql } from "$lib/server/norush";
-import { validateSession, SESSION_COOKIE } from "$lib/server/auth";
-import { provisionUser } from "$lib/server/user";
+import type { Handle } from '@sveltejs/kit';
+import { getSql } from '$lib/server/norush';
+import { validateSession, SESSION_COOKIE } from '$lib/server/auth';
+import { provisionUser } from '$lib/server/user';
 
 let dbInitialized = false;
 let nextInitializationAttemptAt = 0;
@@ -19,15 +19,15 @@ const INITIALIZATION_RETRY_DELAY_MS = 60_000;
 // Dev-only auth bypass. Hard-gated on NODE_ENV so a misconfigured production
 // deploy cannot silently grant unauthenticated access.
 const DEV_AUTH_BYPASS =
-  process.env.NORUSH_DEV_AUTH_BYPASS === "1" &&
-  process.env.NODE_ENV !== "production";
+  process.env.NORUSH_DEV_AUTH_BYPASS === '1' &&
+  (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test');
 
 const DEV_USER = {
-  id: "dev-user",
-  email: "dev@localhost",
-  firstName: "Dev",
-  lastName: "User",
-  sessionId: "dev-session",
+  id: 'dev-user',
+  email: 'dev@localhost',
+  firstName: 'Dev',
+  lastName: 'User',
+  sessionId: 'dev-session',
 } as const;
 
 let devAuthWarned = false;
@@ -37,31 +37,27 @@ export const handle: Handle = async ({ event, resolve }) => {
   // -- Database init (once, with retry backoff) -----------------------------
   const now = Date.now();
 
-  if (
-    !dbInitialized &&
-    process.env.DATABASE_URL &&
-    now >= nextInitializationAttemptAt
-  ) {
+  if (!dbInitialized && process.env.DATABASE_URL && now >= nextInitializationAttemptAt) {
     try {
       const db = getSql();
       await db`SELECT 1`;
       dbInitialized = true;
-      console.log("[norush] Database connection verified");
+      console.log('[norush] Database connection verified');
     } catch (err) {
       nextInitializationAttemptAt = Date.now() + INITIALIZATION_RETRY_DELAY_MS;
-      console.error("[norush] Database connection failed, retrying in 60s:", err);
+      console.error('[norush] Database connection failed, retrying in 60s:', err);
     }
   }
 
   // -- Session validation --------------------------------------------------
   // Skip auth for API routes that use token-based auth instead of session cookies.
-  const publicPrefixes = ["/api/v1/"];
+  const publicPrefixes = ['/api/v1/'];
   const isPublic = publicPrefixes.some((p) => event.url.pathname.startsWith(p));
 
   if (DEV_AUTH_BYPASS) {
     if (!devAuthWarned) {
       console.warn(
-        "[norush] NORUSH_DEV_AUTH_BYPASS=1 — all requests authenticated as " +
+        '[norush] NORUSH_DEV_AUTH_BYPASS=1 — all requests authenticated as ' +
           "'dev-user'. Do NOT use in production.",
       );
       devAuthWarned = true;
@@ -80,7 +76,7 @@ export const handle: Handle = async ({ event, resolve }) => {
         });
         devUserProvisioned = true;
       } catch (err) {
-        console.error("[norush] Dev user provisioning failed:", err);
+        console.error('[norush] Dev user provisioning failed:', err);
       }
     }
   } else if (!isPublic) {
@@ -103,11 +99,11 @@ export const handle: Handle = async ({ event, resolve }) => {
         } else {
           // Invalid or expired session — clear the stale cookie to avoid
           // repeated WorkOS calls on every subsequent request.
-          event.cookies.delete(SESSION_COOKIE, { path: "/" });
+          event.cookies.delete(SESSION_COOKIE, { path: '/' });
         }
       } catch {
         // Malformed cookie — clear it so the user isn't stuck in a loop.
-        event.cookies.delete(SESSION_COOKIE, { path: "/" });
+        event.cookies.delete(SESSION_COOKIE, { path: '/' });
       }
     }
   }

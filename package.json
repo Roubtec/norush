@@ -11,6 +11,7 @@
     "test": "pnpm -r run test",
     "lint": "eslint .",
     "typecheck": "pnpm -r run typecheck",
+    "format": "prettier --write . --log-level warn",
     "dev:start": "docker compose up -d",
     "dev:up": "docker compose up --build",
     "dev:down": "docker compose down",
@@ -22,6 +23,7 @@
     "eslint": "^10.2.0",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.58.1",
+    "prettier": "^3.8.3",
     "vitest": "^3.2.4"
   },
   "pnpm": {
