@@ -78,13 +78,18 @@ const server = createServer(async (req, res) => {
     // Payload shape: { norush_id, status, response, input_tokens, output_tokens, model, provider }
     try {
       const payload = JSON.parse(body);
-      console.log('Received norush result:');
-      console.log('  norush ID:', payload.norush_id);
-      console.log('  Status:', payload.status);
-      console.log('  Provider:', payload.provider, payload.model);
-      if (payload.response) {
-        console.log('  Response:', JSON.stringify(payload.response).slice(0, 200));
-      }
+      console.log(
+        JSON.stringify({
+          msg: 'Received norush result',
+          norush_id: payload.norush_id,
+          status: payload.status,
+          provider: payload.provider,
+          model: payload.model,
+          response_preview: payload.response
+            ? JSON.stringify(payload.response).slice(0, 200)
+            : undefined,
+        }),
+      );
 
       // --- Your processing logic here ---
       // e.g., save to database, trigger downstream job, send notification

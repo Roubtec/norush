@@ -77,10 +77,7 @@ jobs:
                 },
               });
 
-              console.log('Enqueued request:', request.id);
-              console.log('Provider:', process.env.PROVIDER);
-              console.log('Model:', process.env.MODEL);
-              console.log('Prompt:', process.env.PROMPT);
+              console.log(JSON.stringify({ msg: 'Enqueued request', id: request.id, provider: process.env.PROVIDER, model: process.env.MODEL, prompt: process.env.PROMPT }));
 
               // Flush immediately so the batch is submitted
               await engine.flush();
