@@ -42,10 +42,13 @@ beforeEach(() => {
  * Simulates the (app) +layout.server.ts load function behavior.
  * Throws a redirect (as SvelteKit does) if user is not in locals.
  */
-function simulateProtectedLayoutLoad(locals: App.Locals) {
+function simulateProtectedLayoutLoad(locals: App.Locals, requestedPath = '/') {
   if (!locals.user) {
-    // SvelteKit redirect() throws a Redirect object
-    throw { status: 302, location: '/login' };
+    const target =
+      requestedPath && requestedPath !== '/'
+        ? `/login?next=${encodeURIComponent(requestedPath)}`
+        : '/login';
+    throw { status: 302, location: target };
   }
 
   return {
@@ -212,14 +215,14 @@ describe('protected route redirect logic', () => {
     expect(mockAuthenticateWithSessionCookie).not.toHaveBeenCalled();
   });
 
-  it('end-to-end: unauthenticated user on protected route gets redirected', async () => {
+  it('end-to-end: unauthenticated user on protected route gets redirected with next=', async () => {
     const locals = await simulateHook('/dashboard', undefined);
 
     expect(locals.user).toBeUndefined();
-    expect(() => simulateProtectedLayoutLoad(locals)).toThrow(
+    expect(() => simulateProtectedLayoutLoad(locals, '/dashboard')).toThrow(
       expect.objectContaining({
         status: 302,
-        location: '/login',
+        location: '/login?next=%2Fdashboard',
       }),
     );
   });
