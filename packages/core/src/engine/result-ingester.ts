@@ -14,12 +14,12 @@
  *   4. Recomputes batch-level succeeded/failed counters from request statuses (idempotent).
  */
 
-import type { Store } from "../interfaces/store.js";
-import type { Provider } from "../interfaces/provider.js";
-import type { TelemetryHook } from "../interfaces/telemetry.js";
-import type { Batch, NorushResult, ProviderBatchRef } from "../types.js";
-import { NoopTelemetry } from "../telemetry/noop.js";
-import { batchCost } from "../pricing.js";
+import type { Store } from '../interfaces/store.js';
+import type { Provider } from '../interfaces/provider.js';
+import type { TelemetryHook } from '../interfaces/telemetry.js';
+import type { Batch, NorushResult, ProviderBatchRef } from '../types.js';
+import { NoopTelemetry } from '../telemetry/noop.js';
+import { batchCost } from '../pricing.js';
 
 // ---------------------------------------------------------------------------
 // Options
@@ -92,9 +92,7 @@ export class ResultIngester {
 
     const adapter = this.resolveAdapter(batch.provider, batch.apiKeyId);
     if (!adapter) {
-      result.errors.push(
-        `No provider adapter found for ${batch.provider}::${batch.apiKeyId}`,
-      );
+      result.errors.push(`No provider adapter found for ${batch.provider}::${batch.apiKeyId}`);
       return result;
     }
 
@@ -108,7 +106,7 @@ export class ResultIngester {
     );
 
     for await (const norushResult of adapter.fetchResults(ref)) {
-      const newStatus = norushResult.success ? "succeeded" : "failed";
+      const newStatus = norushResult.success ? 'succeeded' : 'failed';
       try {
         // Persist result to store immediately (crash-safe).
         await this.store.createResult({
@@ -126,11 +124,7 @@ export class ResultIngester {
         });
 
         // Increment token and spend counters (best-effort).
-        await this.updateUsageCounters(
-          norushResult,
-          batch.provider,
-          userIdByRequestId,
-        );
+        await this.updateUsageCounters(norushResult, batch.provider, userIdByRequestId);
 
         if (norushResult.success) {
           result.succeeded++;
@@ -140,8 +134,7 @@ export class ResultIngester {
 
         result.ingested++;
       } catch (error) {
-        const message =
-          error instanceof Error ? error.message : String(error);
+        const message = error instanceof Error ? error.message : String(error);
 
         // Check for duplicate (request_id uniqueness constraint).
         if (isDuplicateError(message)) {
@@ -161,14 +154,10 @@ export class ResultIngester {
           // this run ensures tokens/spend are still recorded. The risk of
           // double-counting (if counters were already updated before the crash)
           // is accepted until idempotent per-request counter tracking is added.
-          await this.updateUsageCounters(
-            norushResult,
-            batch.provider,
-            userIdByRequestId,
-          );
+          await this.updateUsageCounters(norushResult, batch.provider, userIdByRequestId);
 
           result.duplicates++;
-          this.telemetry.event("result_duplicate_skipped", {
+          this.telemetry.event('result_duplicate_skipped', {
             requestId: norushResult.requestId,
             batchId: batch.id,
           });
@@ -176,7 +165,7 @@ export class ResultIngester {
           result.errors.push(
             `Failed to ingest result for request ${norushResult.requestId}: ${message}`,
           );
-          this.telemetry.event("result_ingestion_error", {
+          this.telemetry.event('result_ingestion_error', {
             requestId: norushResult.requestId,
             batchId: batch.id,
             error: message,
@@ -189,30 +178,28 @@ export class ResultIngester {
     // final numbers converge correctly even after a mid-ingestion crash and
     // restart (idempotent regardless of how many results were duplicates).
     const batchRequests = await this.store.getRequestsByBatchId(batch.id);
-    const succeededCount = batchRequests.filter(
-      (r) => r.status === "succeeded",
-    ).length;
+    const succeededCount = batchRequests.filter((r) => r.status === 'succeeded').length;
     const failedCount = batchRequests.filter(
-      (r) => r.status === "failed" || r.status === "failed_final",
+      (r) => r.status === 'failed' || r.status === 'failed_final',
     ).length;
     await this.store.updateBatch(batch.id, {
       succeededCount,
       failedCount,
     });
 
-    this.telemetry.counter("results_ingested", result.ingested, {
+    this.telemetry.counter('results_ingested', result.ingested, {
       provider: batch.provider,
       batchId: batch.id,
     });
 
     if (result.failed > 0) {
-      this.telemetry.counter("results_failed", result.failed, {
+      this.telemetry.counter('results_failed', result.failed, {
         provider: batch.provider,
         batchId: batch.id,
       });
     }
 
-    this.telemetry.event("ingestion_complete", {
+    this.telemetry.event('ingestion_complete', {
       batchId: batch.id,
       ingested: result.ingested,
       succeeded: result.succeeded,
@@ -258,16 +245,16 @@ export class ResultIngester {
       try {
         const request = await this.store.getRequest(norushResult.requestId);
         if (!request) {
-          this.telemetry.event("usage_counter_skip", {
+          this.telemetry.event('usage_counter_skip', {
             requestId: norushResult.requestId,
-            reason: "request_not_found",
+            reason: 'request_not_found',
           });
           return;
         }
         userId = request.userId;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        this.telemetry.event("usage_counter_error", {
+        this.telemetry.event('usage_counter_error', {
           requestId: norushResult.requestId,
           error: message,
         });
@@ -282,42 +269,40 @@ export class ResultIngester {
     // prevent the other from being recorded.
     const [tokenResult, spendResult] = await Promise.allSettled([
       this.store.incrementPeriodTokens(userId, totalTokens),
-      shouldIncrementSpend
-        ? this.store.incrementSpend(userId, costUsd)
-        : Promise.resolve(),
+      shouldIncrementSpend ? this.store.incrementSpend(userId, costUsd) : Promise.resolve(),
     ]);
 
-    if (tokenResult.status === "rejected") {
+    if (tokenResult.status === 'rejected') {
       const message =
         tokenResult.reason instanceof Error
           ? tokenResult.reason.message
           : String(tokenResult.reason);
-      this.telemetry.event("usage_counter_error", {
+      this.telemetry.event('usage_counter_error', {
         requestId: norushResult.requestId,
         userId,
-        counter: "period_tokens",
+        counter: 'period_tokens',
         error: message,
       });
     }
 
-    if (shouldIncrementSpend && spendResult.status === "rejected") {
+    if (shouldIncrementSpend && spendResult.status === 'rejected') {
       const message =
         spendResult.reason instanceof Error
           ? spendResult.reason.message
           : String(spendResult.reason);
-      this.telemetry.event("usage_counter_error", {
+      this.telemetry.event('usage_counter_error', {
         requestId: norushResult.requestId,
         userId,
-        counter: "spend",
+        counter: 'spend',
         error: message,
       });
     }
 
     if (
-      tokenResult.status === "fulfilled" &&
-      (!shouldIncrementSpend || spendResult.status === "fulfilled")
+      tokenResult.status === 'fulfilled' &&
+      (!shouldIncrementSpend || spendResult.status === 'fulfilled')
     ) {
-      this.telemetry.event("usage_counters_updated", {
+      this.telemetry.event('usage_counters_updated', {
         requestId: norushResult.requestId,
         userId,
         totalTokens,
@@ -330,14 +315,8 @@ export class ResultIngester {
   // Provider adapter resolution
   // -------------------------------------------------------------------------
 
-  private resolveAdapter(
-    provider: string,
-    apiKeyId: string,
-  ): Provider | undefined {
-    return (
-      this.providers.get(`${provider}::${apiKeyId}`) ??
-      this.providers.get(provider)
-    );
+  private resolveAdapter(provider: string, apiKeyId: string): Provider | undefined {
+    return this.providers.get(`${provider}::${apiKeyId}`) ?? this.providers.get(provider);
   }
 }
 
@@ -353,9 +332,9 @@ export class ResultIngester {
 function isDuplicateError(message: string): boolean {
   const lower = message.toLowerCase();
   return (
-    lower.includes("duplicate") ||
-    lower.includes("unique constraint") ||
-    lower.includes("unique_violation") ||
-    lower.includes("already exists")
+    lower.includes('duplicate') ||
+    lower.includes('unique constraint') ||
+    lower.includes('unique_violation') ||
+    lower.includes('already exists')
   );
 }

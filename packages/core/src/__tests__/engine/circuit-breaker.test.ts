@@ -1,18 +1,17 @@
-import { describe, expect, it, vi } from "vitest";
-import {
-  CircuitBreaker,
-  type CircuitBreakerState,
-} from "../../engine/circuit-breaker.js";
+import { describe, expect, it, vi } from 'vitest';
+import { CircuitBreaker, type CircuitBreakerState } from '../../engine/circuit-breaker.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-function createBreaker(overrides: {
-  threshold?: number;
-  cooldownMs?: number;
-  now?: () => number;
-} = {}) {
+function createBreaker(
+  overrides: {
+    threshold?: number;
+    cooldownMs?: number;
+    now?: () => number;
+  } = {},
+) {
   const telemetry = {
     counter: vi.fn(),
     histogram: vi.fn(),
@@ -33,19 +32,19 @@ function createBreaker(overrides: {
 // Tests
 // ---------------------------------------------------------------------------
 
-describe("CircuitBreaker", () => {
+describe('CircuitBreaker', () => {
   // -----------------------------------------------------------------------
   // Initial state
   // -----------------------------------------------------------------------
 
-  describe("initial state", () => {
-    it("starts in closed state", () => {
+  describe('initial state', () => {
+    it('starts in closed state', () => {
       const { cb } = createBreaker();
-      expect(cb.state).toBe("closed");
+      expect(cb.state).toBe('closed');
       expect(cb.consecutiveFailures).toBe(0);
     });
 
-    it("allows submissions when closed", () => {
+    it('allows submissions when closed', () => {
       const { cb } = createBreaker();
       expect(cb.canSubmit()).toBe(true);
     });
@@ -55,48 +54,48 @@ describe("CircuitBreaker", () => {
   // Tripping (closed -> open)
   // -----------------------------------------------------------------------
 
-  describe("tripping", () => {
-    it("stays closed when failures are below threshold", () => {
+  describe('tripping', () => {
+    it('stays closed when failures are below threshold', () => {
       const { cb } = createBreaker({ threshold: 3 });
 
       cb.recordFailure();
       cb.recordFailure();
 
-      expect(cb.state).toBe("closed");
+      expect(cb.state).toBe('closed');
       expect(cb.canSubmit()).toBe(true);
       expect(cb.consecutiveFailures).toBe(2);
     });
 
-    it("trips to open after reaching threshold", () => {
+    it('trips to open after reaching threshold', () => {
       const { cb, telemetry } = createBreaker({ threshold: 3 });
 
       cb.recordFailure();
       cb.recordFailure();
       cb.recordFailure();
 
-      expect(cb.state).toBe("open");
+      expect(cb.state).toBe('open');
       expect(cb.canSubmit()).toBe(false);
       expect(telemetry.event).toHaveBeenCalledWith(
-        "circuit_breaker:tripped",
+        'circuit_breaker:tripped',
         expect.objectContaining({ consecutiveFailures: 3 }),
       );
     });
 
-    it("rejects submissions when open", () => {
+    it('rejects submissions when open', () => {
       const { cb } = createBreaker({ threshold: 1 });
 
       cb.recordFailure();
       expect(cb.canSubmit()).toBe(false);
     });
 
-    it("uses default threshold of 5 when not specified", () => {
+    it('uses default threshold of 5 when not specified', () => {
       const cb = new CircuitBreaker();
 
       for (let i = 0; i < 4; i++) cb.recordFailure();
-      expect(cb.state).toBe("closed");
+      expect(cb.state).toBe('closed');
 
       cb.recordFailure();
-      expect(cb.state).toBe("open");
+      expect(cb.state).toBe('open');
     });
   });
 
@@ -104,8 +103,8 @@ describe("CircuitBreaker", () => {
   // Success resets
   // -----------------------------------------------------------------------
 
-  describe("success resets", () => {
-    it("resets consecutive failures on success", () => {
+  describe('success resets', () => {
+    it('resets consecutive failures on success', () => {
       const { cb } = createBreaker({ threshold: 5 });
 
       cb.recordFailure();
@@ -114,10 +113,10 @@ describe("CircuitBreaker", () => {
 
       cb.recordSuccess();
       expect(cb.consecutiveFailures).toBe(0);
-      expect(cb.state).toBe("closed");
+      expect(cb.state).toBe('closed');
     });
 
-    it("does not trip if success resets the count", () => {
+    it('does not trip if success resets the count', () => {
       const { cb } = createBreaker({ threshold: 3 });
 
       cb.recordFailure();
@@ -126,7 +125,7 @@ describe("CircuitBreaker", () => {
       cb.recordFailure();
       cb.recordFailure();
 
-      expect(cb.state).toBe("closed");
+      expect(cb.state).toBe('closed');
       expect(cb.consecutiveFailures).toBe(2);
     });
   });
@@ -135,8 +134,8 @@ describe("CircuitBreaker", () => {
   // Cooldown (open -> half_open)
   // -----------------------------------------------------------------------
 
-  describe("cooldown", () => {
-    it("transitions to half_open after cooldown elapses", () => {
+  describe('cooldown', () => {
+    it('transitions to half_open after cooldown elapses', () => {
       let currentTime = 1000;
       const { cb } = createBreaker({
         threshold: 1,
@@ -145,20 +144,20 @@ describe("CircuitBreaker", () => {
       });
 
       cb.recordFailure(); // trips at t=1000
-      expect(cb.state).toBe("open");
+      expect(cb.state).toBe('open');
 
       // Before cooldown
       currentTime = 5999;
-      expect(cb.state).toBe("open");
+      expect(cb.state).toBe('open');
       expect(cb.canSubmit()).toBe(false);
 
       // After cooldown
       currentTime = 6000;
-      expect(cb.state).toBe("half_open");
+      expect(cb.state).toBe('half_open');
       expect(cb.canSubmit()).toBe(true);
     });
 
-    it("allows one probe in half_open state", () => {
+    it('allows one probe in half_open state', () => {
       let currentTime = 0;
       const { cb } = createBreaker({
         threshold: 1,
@@ -172,7 +171,7 @@ describe("CircuitBreaker", () => {
       expect(cb.canSubmit()).toBe(true); // half_open allows probe
     });
 
-    it("rejects subsequent canSubmit() calls in half_open until probe resolves", () => {
+    it('rejects subsequent canSubmit() calls in half_open until probe resolves', () => {
       let currentTime = 0;
       const { cb } = createBreaker({
         threshold: 1,
@@ -183,11 +182,11 @@ describe("CircuitBreaker", () => {
       cb.recordFailure();
       currentTime = 100;
 
-      expect(cb.canSubmit()).toBe(true);  // first call — probe granted
+      expect(cb.canSubmit()).toBe(true); // first call — probe granted
       expect(cb.canSubmit()).toBe(false); // second call — probe already in flight
     });
 
-    it("resets probe slot after recordSuccess()", () => {
+    it('resets probe slot after recordSuccess()', () => {
       let currentTime = 0;
       const { cb } = createBreaker({
         threshold: 1,
@@ -199,12 +198,12 @@ describe("CircuitBreaker", () => {
       currentTime = 100;
 
       expect(cb.canSubmit()).toBe(true); // probe granted
-      cb.recordSuccess();                // probe resolved -> closed
-      expect(cb.state).toBe("closed");
+      cb.recordSuccess(); // probe resolved -> closed
+      expect(cb.state).toBe('closed');
       expect(cb.canSubmit()).toBe(true); // back to normal
     });
 
-    it("resets probe slot after recordFailure() (probe re-trips breaker)", () => {
+    it('resets probe slot after recordFailure() (probe re-trips breaker)', () => {
       let currentTime = 0;
       const { cb } = createBreaker({
         threshold: 1,
@@ -217,9 +216,9 @@ describe("CircuitBreaker", () => {
 
       expect(cb.canSubmit()).toBe(true); // probe granted
       expect(cb.canSubmit()).toBe(false); // still in flight
-      cb.recordFailure();                // probe failed -> open again
+      cb.recordFailure(); // probe failed -> open again
 
-      expect(cb.state).toBe("open");
+      expect(cb.state).toBe('open');
       expect(cb.canSubmit()).toBe(false);
 
       // After another full cooldown, a fresh probe is available.
@@ -232,8 +231,8 @@ describe("CircuitBreaker", () => {
   // Probe success (half_open -> closed)
   // -----------------------------------------------------------------------
 
-  describe("probe success", () => {
-    it("transitions to closed on probe success", () => {
+  describe('probe success', () => {
+    it('transitions to closed on probe success', () => {
       let currentTime = 0;
       const { cb, telemetry } = createBreaker({
         threshold: 1,
@@ -242,15 +241,15 @@ describe("CircuitBreaker", () => {
       });
 
       cb.recordFailure(); // -> open
-      currentTime = 100;   // -> half_open (on next state check)
+      currentTime = 100; // -> half_open (on next state check)
 
       cb.recordSuccess(); // probe succeeded -> closed
 
-      expect(cb.state).toBe("closed");
+      expect(cb.state).toBe('closed');
       expect(cb.consecutiveFailures).toBe(0);
       expect(telemetry.event).toHaveBeenCalledWith(
-        "circuit_breaker:closed",
-        expect.objectContaining({ reason: "probe_succeeded" }),
+        'circuit_breaker:closed',
+        expect.objectContaining({ reason: 'probe_succeeded' }),
       );
     });
   });
@@ -259,8 +258,8 @@ describe("CircuitBreaker", () => {
   // Probe failure (half_open -> open)
   // -----------------------------------------------------------------------
 
-  describe("probe failure", () => {
-    it("transitions back to open on probe failure", () => {
+  describe('probe failure', () => {
+    it('transitions back to open on probe failure', () => {
       let currentTime = 0;
       const { cb, telemetry } = createBreaker({
         threshold: 1,
@@ -269,24 +268,24 @@ describe("CircuitBreaker", () => {
       });
 
       cb.recordFailure(); // -> open at t=0
-      currentTime = 100;   // cooldown elapsed
+      currentTime = 100; // cooldown elapsed
 
       // Access state to trigger half_open transition.
-      expect(cb.state).toBe("half_open");
+      expect(cb.state).toBe('half_open');
 
       cb.recordFailure(); // probe failed -> open again
 
-      expect(cb.state).toBe("open");
+      expect(cb.state).toBe('open');
       expect(cb.canSubmit()).toBe(false);
 
       // Should have emitted tripped again.
       const trippedCalls = telemetry.event.mock.calls.filter(
-        (c: unknown[]) => c[0] === "circuit_breaker:tripped",
+        (c: unknown[]) => c[0] === 'circuit_breaker:tripped',
       );
       expect(trippedCalls.length).toBe(2); // once for initial trip, once for probe failure
     });
 
-    it("requires another full cooldown after probe failure", () => {
+    it('requires another full cooldown after probe failure', () => {
       let currentTime = 0;
       const { cb } = createBreaker({
         threshold: 1,
@@ -295,19 +294,19 @@ describe("CircuitBreaker", () => {
       });
 
       cb.recordFailure(); // -> open at t=0
-      currentTime = 100;   // -> half_open
-      expect(cb.state).toBe("half_open");
+      currentTime = 100; // -> half_open
+      expect(cb.state).toBe('half_open');
 
       cb.recordFailure(); // -> open at t=100
-      expect(cb.state).toBe("open");
+      expect(cb.state).toBe('open');
 
       // Still in cooldown (only 50ms after re-trip)
       currentTime = 150;
-      expect(cb.state).toBe("open");
+      expect(cb.state).toBe('open');
 
       // Full cooldown from re-trip
       currentTime = 200;
-      expect(cb.state).toBe("half_open");
+      expect(cb.state).toBe('half_open');
     });
   });
 
@@ -315,19 +314,19 @@ describe("CircuitBreaker", () => {
   // Manual reset
   // -----------------------------------------------------------------------
 
-  describe("reset", () => {
-    it("resets to closed state", () => {
+  describe('reset', () => {
+    it('resets to closed state', () => {
       const { cb, telemetry } = createBreaker({ threshold: 1 });
 
       cb.recordFailure(); // -> open
-      expect(cb.state).toBe("open");
+      expect(cb.state).toBe('open');
 
       cb.reset();
 
-      expect(cb.state).toBe("closed");
+      expect(cb.state).toBe('closed');
       expect(cb.consecutiveFailures).toBe(0);
       expect(cb.canSubmit()).toBe(true);
-      expect(telemetry.event).toHaveBeenCalledWith("circuit_breaker:reset");
+      expect(telemetry.event).toHaveBeenCalledWith('circuit_breaker:reset');
     });
   });
 
@@ -335,8 +334,8 @@ describe("CircuitBreaker", () => {
   // Snapshot
   // -----------------------------------------------------------------------
 
-  describe("snapshot", () => {
-    it("returns current state", () => {
+  describe('snapshot', () => {
+    it('returns current state', () => {
       const currentTime = 1000;
       const { cb } = createBreaker({
         threshold: 2,
@@ -346,7 +345,7 @@ describe("CircuitBreaker", () => {
 
       let snap = cb.snapshot();
       expect(snap).toEqual({
-        state: "closed",
+        state: 'closed',
         consecutiveFailures: 0,
         lastFailureAt: null,
         lastTrippedAt: null,
@@ -356,11 +355,11 @@ describe("CircuitBreaker", () => {
       snap = cb.snapshot();
       expect(snap.consecutiveFailures).toBe(1);
       expect(snap.lastFailureAt).toBe(1000);
-      expect(snap.state).toBe("closed");
+      expect(snap.state).toBe('closed');
 
       cb.recordFailure(); // trips
       snap = cb.snapshot();
-      expect(snap.state).toBe("open");
+      expect(snap.state).toBe('open');
       expect(snap.consecutiveFailures).toBe(2);
       expect(snap.lastTrippedAt).toBe(1000);
     });
@@ -370,8 +369,8 @@ describe("CircuitBreaker", () => {
   // Full cycle
   // -----------------------------------------------------------------------
 
-  describe("full cycle", () => {
-    it("closed -> open -> half_open -> closed", () => {
+  describe('full cycle', () => {
+    it('closed -> open -> half_open -> closed', () => {
       let currentTime = 0;
       const { cb } = createBreaker({
         threshold: 2,
@@ -392,10 +391,10 @@ describe("CircuitBreaker", () => {
       cb.recordSuccess();
       states.push(cb.state); // closed
 
-      expect(states).toEqual(["closed", "open", "half_open", "closed"]);
+      expect(states).toEqual(['closed', 'open', 'half_open', 'closed']);
     });
 
-    it("closed -> open -> half_open -> open (probe fails) -> half_open -> closed", () => {
+    it('closed -> open -> half_open -> open (probe fails) -> half_open -> closed', () => {
       let currentTime = 0;
       const { cb } = createBreaker({
         threshold: 2,
@@ -405,19 +404,19 @@ describe("CircuitBreaker", () => {
 
       cb.recordFailure();
       cb.recordFailure(); // -> open
-      expect(cb.state).toBe("open");
+      expect(cb.state).toBe('open');
 
-      currentTime = 100;    // -> half_open
-      expect(cb.state).toBe("half_open");
+      currentTime = 100; // -> half_open
+      expect(cb.state).toBe('half_open');
 
-      cb.recordFailure();   // probe fails -> open
-      expect(cb.state).toBe("open");
+      cb.recordFailure(); // probe fails -> open
+      expect(cb.state).toBe('open');
 
-      currentTime = 200;    // -> half_open again
-      expect(cb.state).toBe("half_open");
+      currentTime = 200; // -> half_open again
+      expect(cb.state).toBe('half_open');
 
-      cb.recordSuccess();   // probe succeeds -> closed
-      expect(cb.state).toBe("closed");
+      cb.recordSuccess(); // probe succeeds -> closed
+      expect(cb.state).toBe('closed');
     });
   });
 });

@@ -4,7 +4,7 @@
  * Tests manual flush trigger, authentication, and response format.
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -12,15 +12,15 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const mockFlush = vi.fn();
 
-vi.mock("$lib/server/norush", () => ({
+vi.mock('$lib/server/norush', () => ({
   getSql: () => mockSql,
   getEngine: () => Promise.resolve({ flush: mockFlush }),
 }));
 
-vi.mock("$lib/server/api-auth", () => ({
+vi.mock('$lib/server/api-auth', () => ({
   authenticateApiRequest: (_sql: unknown, authHeader: string | null) => {
-    if (authHeader === "Bearer valid_token") {
-      return Promise.resolve({ userId: "user_01", tokenId: "tok_01" });
+    if (authHeader === 'Bearer valid_token') {
+      return Promise.resolve({ userId: 'user_01', tokenId: 'tok_01' });
     }
     return Promise.resolve(null);
   },
@@ -33,7 +33,7 @@ vi.mock("$lib/server/api-auth", () => ({
 const mockSql = new Proxy(
   (() => {
     /* noop */
-  }) as unknown as import("postgres").Sql,
+  }) as unknown as import('postgres').Sql,
   {
     apply: () => {
       return Promise.resolve(Object.assign([], { count: 0 }));
@@ -45,29 +45,29 @@ const mockSql = new Proxy(
 // Import handler
 // ---------------------------------------------------------------------------
 
-import { POST } from "../../../src/routes/api/v1/flush/+server";
+import { POST } from '../../../src/routes/api/v1/flush/+server';
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-function makeEvent(authHeader = "Bearer valid_token") {
-  const url = new URL("http://localhost/api/v1/flush");
+function makeEvent(authHeader = 'Bearer valid_token') {
+  const url = new URL('http://localhost/api/v1/flush');
 
   return {
     request: new Request(url.toString(), {
-      method: "POST",
+      method: 'POST',
       headers: authHeader ? { authorization: authHeader } : {},
     }),
     url,
     locals: {},
     params: {},
     cookies: {} as never,
-    getClientAddress: () => "127.0.0.1",
+    getClientAddress: () => '127.0.0.1',
     isDataRequest: false,
     isSubRequest: false,
     platform: undefined,
-    route: { id: "/api/v1/flush" },
+    route: { id: '/api/v1/flush' },
     fetch: globalThis.fetch,
     setHeaders: vi.fn(),
   };
@@ -86,27 +86,27 @@ beforeEach(() => {
 // Tests
 // ---------------------------------------------------------------------------
 
-describe("POST /api/v1/flush", () => {
-  it("rejects unauthenticated requests", async () => {
-    const event = makeEvent("");
+describe('POST /api/v1/flush', () => {
+  it('rejects unauthenticated requests', async () => {
+    const event = makeEvent('');
     const response = await POST(event as never);
     expect(response.status).toBe(401);
     const data = await response.json();
-    expect(data.error.code).toBe("unauthorized");
+    expect(data.error.code).toBe('unauthorized');
   });
 
-  it("triggers a flush and returns success", async () => {
+  it('triggers a flush and returns success', async () => {
     const event = makeEvent();
     const response = await POST(event as never);
     expect(response.status).toBe(200);
 
     const data = await response.json();
-    expect(data.message).toBe("Flush triggered successfully");
+    expect(data.message).toBe('Flush triggered successfully');
     expect(data.flushedAt).toBeDefined();
     expect(mockFlush).toHaveBeenCalledOnce();
   });
 
-  it("returns ISO timestamp in flushedAt", async () => {
+  it('returns ISO timestamp in flushedAt', async () => {
     const event = makeEvent();
     const response = await POST(event as never);
     const data = await response.json();

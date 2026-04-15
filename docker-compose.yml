@@ -4,14 +4,14 @@ services:
     container_name: norush-db
     restart: unless-stopped
     ports:
-      - "5432:5432"
+      - '5432:5432'
     environment:
       POSTGRES_DB: norush
       POSTGRES_PASSWORD: dev
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
       interval: 5s
       timeout: 3s
       retries: 5
@@ -22,7 +22,7 @@ services:
     container_name: norush-web
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - '3000:3000'
     depends_on:
       postgres:
         condition: service_healthy
@@ -45,7 +45,7 @@ services:
     image: norush
     container_name: norush-worker
     restart: unless-stopped
-    command: ["node", "packages/core/dist/worker.js"]
+    command: ['node', 'packages/core/dist/worker.js']
     depends_on:
       postgres:
         condition: service_healthy

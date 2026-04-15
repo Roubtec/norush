@@ -14,11 +14,11 @@
  * (typically the Batch Manager's `flush()` method).
  */
 
-import type { Store } from "../interfaces/store.js";
-import type { TelemetryHook } from "../interfaces/telemetry.js";
-import type { BatchingConfig } from "../config/types.js";
-import type { NewRequest, Request } from "../types.js";
-import { NoopTelemetry } from "../telemetry/noop.js";
+import type { Store } from '../interfaces/store.js';
+import type { TelemetryHook } from '../interfaces/telemetry.js';
+import type { BatchingConfig } from '../config/types.js';
+import type { NewRequest, Request } from '../types.js';
+import { NoopTelemetry } from '../telemetry/noop.js';
 
 // ---------------------------------------------------------------------------
 // Options
@@ -74,7 +74,7 @@ export class RequestQueue {
    */
   async enqueue(request: NewRequest): Promise<Request> {
     const record = await this.store.createRequest(request);
-    this.telemetry.counter("requests_queued", 1, {
+    this.telemetry.counter('requests_queued', 1, {
       provider: record.provider,
       model: record.model,
     });
@@ -117,7 +117,7 @@ export class RequestQueue {
       });
     }, this.batching.flushIntervalMs);
     // Unref so the timer doesn't prevent process exit.
-    if (typeof this.flushTimer === "object" && "unref" in this.flushTimer) {
+    if (typeof this.flushTimer === 'object' && 'unref' in this.flushTimer) {
       this.flushTimer.unref();
     }
   }

@@ -4,10 +4,10 @@
  * Authentication: Bearer token in Authorization header.
  */
 
-import { json } from "@sveltejs/kit";
-import type { RequestHandler } from "./$types";
-import { getSql } from "$lib/server/norush";
-import { authenticateApiRequest } from "$lib/server/api-auth";
+import { json } from '@sveltejs/kit';
+import type { RequestHandler } from './$types';
+import { getSql } from '$lib/server/norush';
+import { authenticateApiRequest } from '$lib/server/api-auth';
 
 // ---------------------------------------------------------------------------
 // Error helpers
@@ -23,9 +23,9 @@ function apiError(code: string, message: string, status: number) {
 
 export const GET: RequestHandler = async ({ params, request }) => {
   const sql = getSql();
-  const caller = await authenticateApiRequest(sql, request.headers.get("authorization"));
+  const caller = await authenticateApiRequest(sql, request.headers.get('authorization'));
   if (!caller) {
-    return apiError("unauthorized", "Invalid or missing API token", 401);
+    return apiError('unauthorized', 'Invalid or missing API token', 401);
   }
 
   const { id } = params;
@@ -49,7 +49,7 @@ export const GET: RequestHandler = async ({ params, request }) => {
   `;
 
   if (rows.length === 0) {
-    return apiError("not_found", "Request not found", 404);
+    return apiError('not_found', 'Request not found', 404);
   }
 
   const row = rows[0];

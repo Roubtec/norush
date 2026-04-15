@@ -5,13 +5,13 @@
  * Otherwise, generate the WorkOS authorization URL.
  */
 
-import { redirect } from "@sveltejs/kit";
-import type { PageServerLoad } from "./$types";
+import { redirect } from '@sveltejs/kit';
+import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ locals }) => {
   // Already logged in — go to app.
   if (locals.user) {
-    redirect(302, "/");
+    redirect(302, '/');
   }
 
   // Generate the WorkOS authorization URL. If env vars are missing,
@@ -20,7 +20,7 @@ export const load: PageServerLoad = async ({ locals }) => {
   try {
     // Dynamic import to avoid throwing at module load time when env vars
     // are not set (e.g. during build or dev without WorkOS config).
-    const { getAuthorizationUrl } = await import("$lib/server/auth");
+    const { getAuthorizationUrl } = await import('$lib/server/auth');
     authUrl = getAuthorizationUrl();
   } catch {
     // WorkOS not configured — the page will show a fallback message.

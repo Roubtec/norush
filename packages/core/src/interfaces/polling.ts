@@ -1,4 +1,4 @@
-import type { PollContext } from "../types.js";
+import type { PollContext } from '../types.js';
 
 /**
  * Polling strategy interface.

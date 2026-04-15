@@ -10,7 +10,7 @@ name: Batch Tick
 on:
   schedule:
     # Run every 5 minutes (adjust as needed)
-    - cron: "*/5 * * * *"
+    - cron: '*/5 * * * *'
   workflow_dispatch:
     # Allow manual triggering from the Actions tab
 
@@ -28,7 +28,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "24"
+          node-version: '24'
           cache: pnpm
 
       - name: Install dependencies

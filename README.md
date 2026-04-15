@@ -74,7 +74,7 @@ You write prompts
 Underneath, norush maps to each provider's native batch API:
 
 |                    | Anthropic (Claude) | OpenAI            |
-|--------------------|--------------------|-------------------|
+| ------------------ | ------------------ | ----------------- |
 | API                | Message Batches    | Batch API         |
 | Discount           | 50%                | 50%               |
 | Max batch          | 100K requests      | 50K requests      |
@@ -98,14 +98,14 @@ pnpm install
 ### Workspace packages
 
 | Package        | Description                   |
-|----------------|-------------------------------|
+| -------------- | ----------------------------- |
 | `@norush/core` | Core batch-processing library |
 | `@norush/web`  | Deferred chat web application |
 
 ### Scripts
 
 | Command          | Description                                  |
-|------------------|----------------------------------------------|
+| ---------------- | -------------------------------------------- |
 | `pnpm build`     | Compile all packages                         |
 | `pnpm test`      | Run all tests (Vitest)                       |
 | `pnpm lint`      | Lint all packages (ESLint)                   |
@@ -181,7 +181,7 @@ See [infra/README.md](./infra/README.md) for full Azure setup instructions, incl
 norush ships four telemetry adapters:
 
 | Adapter                  | Description                                            |
-|--------------------------|--------------------------------------------------------|
+| ------------------------ | ------------------------------------------------------ |
 | `NoopTelemetry`          | Default. Silently discards all metrics.                |
 | `ConsoleTelemetry`       | Logs to stdout with `[norush]` prefix.                 |
 | `PrometheusTelemetry`    | Maps to `prom-client` counters and histograms.         |

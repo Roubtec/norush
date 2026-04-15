@@ -22,7 +22,7 @@ import type {
   PollingConfig,
   ResolvedConfig,
   UserConfig,
-} from "./types.js";
+} from './types.js';
 
 // ---------------------------------------------------------------------------
 // Library defaults (baseline when neither operator nor user specifies)
@@ -101,8 +101,7 @@ export function resolveConfig(
   // User preference is clamped to operator's maximum.
   // Falls back to operator default, then library default.
   const operatorMaxRetention = operator.maxRetentionDays;
-  const operatorDefaultRetention =
-    operator.defaultRetentionDays ?? DEFAULT_RETENTION_DAYS;
+  const operatorDefaultRetention = operator.defaultRetentionDays ?? DEFAULT_RETENTION_DAYS;
   const userRetention = user.retentionDays ?? operatorDefaultRetention;
   const retentionDays =
     operatorMaxRetention !== undefined

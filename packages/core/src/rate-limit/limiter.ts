@@ -13,12 +13,8 @@
  * - The hard_spend_limit_usd is cumulative and never resets per-period.
  */
 
-import type {
-  RateLimitResult,
-  SlidingWindow,
-  UserLimits,
-} from "../types.js";
-import { computeHealth, computeEffectiveLimit } from "./health.js";
+import type { RateLimitResult, SlidingWindow, UserLimits } from '../types.js';
+import { computeHealth, computeEffectiveLimit } from './health.js';
 
 /**
  * Default sliding window duration in milliseconds (1 hour).
@@ -60,13 +56,10 @@ export function checkRateLimit(
   const health = computeHealth(window);
 
   // Check hard spend limit first — this is cumulative and never resets.
-  if (
-    limits.hardSpendLimitUsd !== null &&
-    limits.currentSpendUsd >= limits.hardSpendLimitUsd
-  ) {
+  if (limits.hardSpendLimitUsd !== null && limits.currentSpendUsd >= limits.hardSpendLimitUsd) {
     return {
       allowed: false,
-      reason: "hard_spend_limit_exceeded",
+      reason: 'hard_spend_limit_exceeded',
       health,
       effectiveLimit: 0,
     };
@@ -81,21 +74,16 @@ export function checkRateLimit(
   // Check request limit with health factor applied.
   // Use currentRequests + count to account for bulk submissions.
   if (limits.maxRequestsPerHour !== null) {
-    const effectiveLimit = computeEffectiveLimit(
-      limits.maxRequestsPerHour,
-      health,
-    );
+    const effectiveLimit = computeEffectiveLimit(limits.maxRequestsPerHour, health);
 
     if (currentRequests + count > effectiveLimit) {
       const retryAfterSeconds = periodExpired
         ? 0
-        : Math.ceil(
-            (limits.periodResetAt.getTime() - now.getTime()) / 1000,
-          );
+        : Math.ceil((limits.periodResetAt.getTime() - now.getTime()) / 1000);
 
       return {
         allowed: false,
-        reason: "request_limit_exceeded",
+        reason: 'request_limit_exceeded',
         retryAfterSeconds: Math.max(retryAfterSeconds, 1),
         health,
         effectiveLimit,
@@ -108,13 +96,11 @@ export function checkRateLimit(
   if (limits.maxTokensPerPeriod !== null && currentTokens >= limits.maxTokensPerPeriod) {
     const retryAfterSeconds = periodExpired
       ? 0
-      : Math.ceil(
-          (limits.periodResetAt.getTime() - now.getTime()) / 1000,
-        );
+      : Math.ceil((limits.periodResetAt.getTime() - now.getTime()) / 1000);
 
     return {
       allowed: false,
-      reason: "token_limit_exceeded",
+      reason: 'token_limit_exceeded',
       retryAfterSeconds: Math.max(retryAfterSeconds, 1),
       health,
       // tokenLimit (not effectiveLimit) so clients know the unit is tokens,
@@ -125,9 +111,10 @@ export function checkRateLimit(
   }
 
   // Compute effective limit for the response header, even when allowed.
-  const effectiveLimit = limits.maxRequestsPerHour !== null
-    ? computeEffectiveLimit(limits.maxRequestsPerHour, health)
-    : undefined;
+  const effectiveLimit =
+    limits.maxRequestsPerHour !== null
+      ? computeEffectiveLimit(limits.maxRequestsPerHour, health)
+      : undefined;
 
   return { allowed: true, health, effectiveLimit, periodExpired };
 }
@@ -146,25 +133,23 @@ export function checkRateLimit(
  *   X-Norush-Token-Limit     — token limit in effect (tokens/period); only
  *                              present on token_limit_exceeded rejections
  */
-export function buildRateLimitHeaders(
-  result: RateLimitResult,
-): Record<string, string> {
+export function buildRateLimitHeaders(result: RateLimitResult): Record<string, string> {
   const headers: Record<string, string> = {};
 
   if (result.retryAfterSeconds !== undefined) {
-    headers["Retry-After"] = String(result.retryAfterSeconds);
+    headers['Retry-After'] = String(result.retryAfterSeconds);
   }
 
   if (result.health) {
-    headers["X-Norush-Health"] = result.health.reason;
+    headers['X-Norush-Health'] = result.health.reason;
   }
 
   if (result.effectiveLimit !== undefined) {
-    headers["X-Norush-Effective-Limit"] = String(result.effectiveLimit);
+    headers['X-Norush-Effective-Limit'] = String(result.effectiveLimit);
   }
 
   if (result.tokenLimit !== undefined) {
-    headers["X-Norush-Token-Limit"] = String(result.tokenLimit);
+    headers['X-Norush-Token-Limit'] = String(result.tokenLimit);
   }
 
   return headers;

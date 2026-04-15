@@ -34,7 +34,7 @@ top of it.
 ### 2.1 Anthropic Message Batches API
 
 | Property            | Value                                                |
-|---------------------|------------------------------------------------------|
+| ------------------- | ---------------------------------------------------- |
 | Discount            | **50%** off standard pricing                         |
 | Max batch size      | 100,000 requests or 256 MB                           |
 | Completion window   | Most <1h, hard limit 24h                             |
@@ -55,7 +55,7 @@ Key details:
 ### 2.2 OpenAI Batch API
 
 | Property            | Value                                                                                                  |
-|---------------------|--------------------------------------------------------------------------------------------------------|
+| ------------------- | ------------------------------------------------------------------------------------------------------ |
 | Discount            | **50%** off standard pricing                                                                           |
 | Max batch size      | 50,000 requests or 200 MB                                                                              |
 | Completion window   | 24h guaranteed                                                                                         |
@@ -77,7 +77,7 @@ Key details:
 ### 2.3 OpenAI Flex Processing
 
 | Property  | Value                                                            |
-|-----------|------------------------------------------------------------------|
+| --------- | ---------------------------------------------------------------- |
 | Discount  | Batch-tier pricing (50%)                                         |
 | Mechanism | **Synchronous** — add `"service_tier": "flex"` to normal request |
 | Latency   | Slower, may return 429 if resources unavailable                  |
@@ -89,7 +89,7 @@ offer it as a fallback mode when the caller wants cheaper-but-still-realtime.
 ### 2.4 Comparison Matrix
 
 | Feature        | Claude Batches       | OpenAI Batches    | OpenAI Flex      |
-|----------------|----------------------|-------------------|------------------|
+| -------------- | -------------------- | ----------------- | ---------------- |
 | Async          | Yes                  | Yes               | No (sync, slow)  |
 | Discount       | 50%                  | 50%               | ~50%             |
 | Submission     | JSON body            | JSONL file upload | Inline param     |
@@ -187,12 +187,12 @@ internal `setInterval` (for long-running processes) or an external cron calling
 // --- Provider adapter ---
 
 interface Provider {
-  submitBatch(requests: NorushRequest[]): Promise<ProviderBatchRef>
-  checkStatus(ref: ProviderBatchRef): Promise<BatchStatus>
+  submitBatch(requests: NorushRequest[]): Promise<ProviderBatchRef>;
+  checkStatus(ref: ProviderBatchRef): Promise<BatchStatus>;
   // AsyncIterable allows Claude to yield results as individual requests complete (early streaming),
   // while OpenAI yields all results at once after the batch finishes — same interface, different timing.
-  fetchResults(ref: ProviderBatchRef): AsyncIterable<NorushResult>
-  cancelBatch(ref: ProviderBatchRef): Promise<void>
+  fetchResults(ref: ProviderBatchRef): AsyncIterable<NorushResult>;
+  cancelBatch(ref: ProviderBatchRef): Promise<void>;
 }
 
 // --- Persistence ---
@@ -274,13 +274,13 @@ const norush = createNorush({
   },
   store: new PostgresStore(process.env.DATABASE_URL),
   batching: {
-    maxRequests: 1000,       // flush when queue reaches this
-    maxBytes: 50_000_000,    // flush at 50MB
+    maxRequests: 1000, // flush when queue reaches this
+    maxBytes: 50_000_000, // flush at 50MB
     flushIntervalMs: 300_000, // auto-flush every 5 min
   },
   polling: {
-    intervalMs: 60_000,      // check batch status every 60s
-    maxRetries: 3,           // retry expired batches up to 3 times
+    intervalMs: 60_000, // check batch status every 60s
+    maxRetries: 3, // retry expired batches up to 3 times
   },
 });
 ```
@@ -443,7 +443,7 @@ docker run -d --name norush-db -p 5432:5432 \
 ### 4.3 Store Adapters
 
 | Adapter         | Use case                      | Notes                                                                                                         |
-|-----------------|-------------------------------|---------------------------------------------------------------------------------------------------------------|
+| --------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------- |
 | `MemoryStore`   | Unit tests; ephemeral scripts | No persistence; fastest; no external deps. **Not crash-safe** — if the process dies, in-flight state is lost. |
 | `PostgresStore` | Dev, CI, staging, production  | Uses `postgres.js` (Porsager); connection string via `DATABASE_URL`                                           |
 
@@ -562,7 +562,7 @@ grace period and attempt cap keep this bounded.
 Each request within a batch has its own status:
 
 | Request outcome             | Action                                        |
-|-----------------------------|-----------------------------------------------|
+| --------------------------- | --------------------------------------------- |
 | `succeeded`                 | Ingest result, queue for delivery             |
 | `errored` (provider error)  | Mark `failed`, eligible for repackaging       |
 | `expired` (batch timed out) | Mark `expired`, eligible for repackaging      |
@@ -644,7 +644,7 @@ Per-batch strategy assignment, defaulting to a global strategy.
 **Built-in presets:**
 
 | Preset           | Behavior                                            | Best for                                   |
-|------------------|-----------------------------------------------------|--------------------------------------------|
+| ---------------- | --------------------------------------------------- | ------------------------------------------ |
 | `linear`         | Fixed interval (default 60s)                        | Simple, predictable                        |
 | `backoff`        | Exponential: 30s → 60s → 120s → ... capped at 10min | Cost-sensitive, large batches              |
 | `deadline-aware` | Slow early, accelerates as `expiresAt` approaches   | Freshness without early waste              |
@@ -673,7 +673,7 @@ needed, SSE is the lighter upgrade path.
 #### Guardrails
 
 | Guardrail                   | Scope     | Default       | Purpose                                                 |
-|-----------------------------|-----------|---------------|---------------------------------------------------------|
+| --------------------------- | --------- | ------------- | ------------------------------------------------------- |
 | `max_submission_attempts`   | Per batch | 3             | Cap retries of orphaned batches (each may cost money)   |
 | `max_provider_retries`      | Per batch | 5             | Cap retries of provider-rejected/expired batches (free) |
 | `max_requests_per_period`   | Per user  | Configurable  | Spend cap: max requests per rolling window              |
@@ -735,8 +735,8 @@ function computeHealth(window: SlidingWindow): HealthScore {
 
   if (successRate >= 0.9) return { factor: 1.0, reason: 'healthy' };
   if (successRate >= 0.5) return { factor: 0.5, reason: 'partial_failures' };
-  if (successRate > 0)    return { factor: 0.25, reason: 'mostly_failing' };
-  return                           { factor: 0.1, reason: 'critical' };
+  if (successRate > 0) return { factor: 0.25, reason: 'mostly_failing' };
+  return { factor: 0.1, reason: 'critical' };
 }
 ```
 
@@ -744,7 +744,7 @@ function computeHealth(window: SlidingWindow): HealthScore {
 succeeded, partially failed, fully failed. Updated on each batch completion.
 
 | Health             | Factor | Behavior                                   |
-|--------------------|--------|--------------------------------------------|
+| ------------------ | ------ | ------------------------------------------ |
 | `healthy`          | 1.0    | Full rate. Normal operation.               |
 | `partial_failures` | 0.5    | Half rate. Likely hitting provider quota.  |
 | `mostly_failing`   | 0.25   | Quarter rate. Likely exhausted API budget. |
@@ -818,7 +818,7 @@ norush stores prompt/response pairs that may contain sensitive data. Retention
 policy controls how long content is kept after delivery (or terminal state).
 
 | Policy   | Behavior                                                                               |
-|----------|----------------------------------------------------------------------------------------|
+| -------- | -------------------------------------------------------------------------------------- |
 | `on_ack` | Scrub immediately after webhook 2xx ACK. **Encouraged for API/broker consumers.**      |
 | `1d`     | Scrub 1 day after delivery / terminal state.                                           |
 | `7d`     | Scrub after 7 days. **Default for `@norush/core` library.**                            |
@@ -895,7 +895,7 @@ clamping. Tested with unit tests.
 Define hooks and metric interfaces now. Wire up implementations later.
 
 | Category | Metrics                                                                                  | Purpose           |
-|----------|------------------------------------------------------------------------------------------|-------------------|
+| -------- | ---------------------------------------------------------------------------------------- | ----------------- |
 | Volume   | `requests_queued`, `batches_submitted`, `results_ingested`, `deliveries_attempted`       | Throughput        |
 | Latency  | `batch_turnaround_ms`, `delivery_latency_ms`                                             | Performance       |
 | Errors   | `submission_failures`, `delivery_failures`, `circuit_breaker_trips`, `orphan_recoveries` | Reliability       |
@@ -931,7 +931,7 @@ WorkOS AuthKit for norush.roubtec.com:
 ### 7.1 Stack Summary
 
 | Decision        | Choice                            | Rationale                                                 |
-|-----------------|-----------------------------------|-----------------------------------------------------------|
+| --------------- | --------------------------------- | --------------------------------------------------------- |
 | Language        | TypeScript                        | Server + edge; largest LLM-tooling ecosystem              |
 | Runtime         | Node.js >=24                      | Active LTS (Krypton); poll loops + web servers            |
 | Database        | PostgreSQL 17 everywhere          | Full dev/prod parity; JSONB, TIMESTAMPTZ, partial indexes |
@@ -982,11 +982,11 @@ ENTRYPOINT ["node", "packages/web/dist/server.js"]
 
 - name: worker
   image: norush:latest
-  command: ["node", "packages/core/dist/worker.js"]
+  command: ['node', 'packages/core/dist/worker.js']
 ```
 
 | Container | Entrypoint                     | Responsibilities                                          |
-|-----------|--------------------------------|-----------------------------------------------------------|
+| --------- | ------------------------------ | --------------------------------------------------------- |
 | `web`     | `packages/web/dist/server.js`  | SvelteKit app, API routes, WorkOS auth, chat UI           |
 | `worker`  | `packages/core/dist/worker.js` | Batch submission, polling, ingestion, delivery, retention |
 

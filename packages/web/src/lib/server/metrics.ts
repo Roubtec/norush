@@ -5,7 +5,7 @@
  * adapters against the same registry that powers GET /metrics.
  */
 
-import { Registry } from "prom-client";
+import { Registry } from 'prom-client';
 
 /**
  * Shared prom-client registry.

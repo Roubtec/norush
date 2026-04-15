@@ -12,7 +12,7 @@ npm install @norush/core
 ## Quick Start
 
 ```typescript
-import { createNorush, MemoryStore } from "@norush/core";
+import { createNorush, MemoryStore } from '@norush/core';
 
 const engine = createNorush({
   store: new MemoryStore(),
@@ -23,18 +23,18 @@ const engine = createNorush({
 
 // Enqueue a request for deferred processing
 const request = await engine.enqueue({
-  userId: "user-1",
-  provider: "claude",
-  model: "claude-sonnet-4-5-20250929",
+  userId: 'user-1',
+  provider: 'claude',
+  model: 'claude-sonnet-4-5-20250929',
   params: {
     max_tokens: 1024,
-    messages: [{ role: "user", content: "Summarize this article..." }],
+    messages: [{ role: 'user', content: 'Summarize this article...' }],
   },
 });
 
 // Register a delivery callback to receive results
 engine.addDeliveryCallback(async (result) => {
-  console.log("Result received:", result);
+  console.log('Result received:', result);
 });
 
 // Start the engine (runs flush, poll, and deliver loops)
@@ -57,11 +57,11 @@ The engine manages the full lifecycle: batching, submission, polling, crash reco
 
 ## Supported Providers
 
-| Provider | Adapter | Batch API | Discount |
-|---|---|---|---|
-| Anthropic (Claude) | `ClaudeAdapter` | Message Batches | 50% |
-| OpenAI | `OpenAIBatchAdapter` | Batch API | 50% |
-| OpenAI (Flex) | `OpenAIFlexAdapter` | Flex Processing | 50% |
+| Provider           | Adapter              | Batch API       | Discount |
+| ------------------ | -------------------- | --------------- | -------- |
+| Anthropic (Claude) | `ClaudeAdapter`      | Message Batches | 50%      |
+| OpenAI             | `OpenAIBatchAdapter` | Batch API       | 50%      |
+| OpenAI (Flex)      | `OpenAIFlexAdapter`  | Flex Processing | 50%      |
 
 ## Storage
 
@@ -70,8 +70,8 @@ The engine manages the full lifecycle: batching, submission, polling, crash reco
   Use `migrate(sql)` to apply the required database schema.
 
 ```typescript
-import { createNorush, PostgresStore, migrate } from "@norush/core";
-import postgres from "postgres";
+import { createNorush, PostgresStore, migrate } from '@norush/core';
+import postgres from 'postgres';
 
 const sql = postgres(process.env.DATABASE_URL!);
 await migrate(sql);
@@ -152,7 +152,7 @@ pulling in their dependencies when you don't need them:
 
 ```typescript
 // Prometheus — requires: npm install prom-client
-import { PrometheusTelemetry } from "@norush/core/prometheus";
+import { PrometheusTelemetry } from '@norush/core/prometheus';
 
 const telemetry = new PrometheusTelemetry();
 const engine = createNorush({ store, providers, telemetry });
@@ -162,7 +162,7 @@ const engine = createNorush({ store, providers, telemetry });
 
 ```typescript
 // OpenTelemetry — requires: npm install @opentelemetry/api
-import { OpenTelemetryTelemetry } from "@norush/core/opentelemetry";
+import { OpenTelemetryTelemetry } from '@norush/core/opentelemetry';
 
 const telemetry = new OpenTelemetryTelemetry();
 const engine = createNorush({ store, providers, telemetry });

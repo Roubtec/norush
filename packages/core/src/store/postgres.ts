@@ -5,10 +5,10 @@
  * impossible. Connection via `DATABASE_URL` environment variable.
  */
 
-import { ulid } from "ulidx";
-import type postgres from "postgres";
-import type { JSONValue } from "postgres";
-import type { Store, ResultDeliveryUpdate } from "../interfaces/store.js";
+import { ulid } from 'ulidx';
+import type postgres from 'postgres';
+import type { JSONValue } from 'postgres';
+import type { Store, ResultDeliveryUpdate } from '../interfaces/store.js';
 import type {
   Batch,
   CostBreakdownEntry,
@@ -25,8 +25,8 @@ import type {
   UsageStats,
   UserLimits,
   UserLimitsInput,
-} from "../types.js";
-import { standardCost, batchCost } from "../pricing.js";
+} from '../types.js';
+import { standardCost, batchCost } from '../pricing.js';
 
 // ---------------------------------------------------------------------------
 // Row ↔ domain mappers (snake_case → camelCase)
@@ -36,19 +36,17 @@ function toRequest(row: Record<string, unknown>): Request {
   return {
     id: row.id as string,
     externalId: (row.external_id as string) ?? null,
-    provider: row.provider as Request["provider"],
+    provider: row.provider as Request['provider'],
     model: row.model as string,
     params: row.params as Record<string, unknown>,
-    status: row.status as Request["status"],
+    status: row.status as Request['status'],
     batchId: (row.batch_id as string) ?? null,
     userId: row.user_id as string,
     callbackUrl: (row.callback_url as string) ?? null,
     webhookSecret: (row.webhook_secret as string) ?? null,
     retryCount: row.retry_count as number,
     maxRetries: row.max_retries as number,
-    contentScrubbedAt: row.content_scrubbed_at
-      ? new Date(row.content_scrubbed_at as string)
-      : null,
+    contentScrubbedAt: row.content_scrubbed_at ? new Date(row.content_scrubbed_at as string) : null,
     createdAt: new Date(row.created_at as string),
     updatedAt: new Date(row.updated_at as string),
   };
@@ -57,11 +55,11 @@ function toRequest(row: Record<string, unknown>): Request {
 function toBatch(row: Record<string, unknown>): Batch {
   return {
     id: row.id as string,
-    provider: row.provider as Batch["provider"],
+    provider: row.provider as Batch['provider'],
     providerBatchId: (row.provider_batch_id as string) ?? null,
     apiKeyId: row.api_key_id as string,
     apiKeyLabel: (row.api_key_label as string) ?? null,
-    status: row.status as Batch["status"],
+    status: row.status as Batch['status'],
     requestCount: row.request_count as number,
     succeededCount: row.succeeded_count as number,
     failedCount: row.failed_count as number,
@@ -70,9 +68,7 @@ function toBatch(row: Record<string, unknown>): Batch {
     providerRetries: row.provider_retries as number,
     maxProviderRetries: row.max_provider_retries as number,
     pollingStrategy: (row.polling_strategy as string) ?? null,
-    submittedAt: row.submitted_at
-      ? new Date(row.submitted_at as string)
-      : null,
+    submittedAt: row.submitted_at ? new Date(row.submitted_at as string) : null,
     endedAt: row.ended_at ? new Date(row.ended_at as string) : null,
     createdAt: new Date(row.created_at as string),
     updatedAt: new Date(row.updated_at as string),
@@ -88,19 +84,13 @@ function toResult(row: Record<string, unknown>): Result {
     stopReason: (row.stop_reason as string) ?? null,
     inputTokens: (row.input_tokens as number) ?? null,
     outputTokens: (row.output_tokens as number) ?? null,
-    deliveryStatus: row.delivery_status as Result["deliveryStatus"],
+    deliveryStatus: row.delivery_status as Result['deliveryStatus'],
     deliveryAttempts: row.delivery_attempts as number,
     maxDeliveryAttempts: row.max_delivery_attempts as number,
     lastDeliveryError: (row.last_delivery_error as string) ?? null,
-    nextDeliveryAt: row.next_delivery_at
-      ? new Date(row.next_delivery_at as string)
-      : null,
-    deliveredAt: row.delivered_at
-      ? new Date(row.delivered_at as string)
-      : null,
-    contentScrubbedAt: row.content_scrubbed_at
-      ? new Date(row.content_scrubbed_at as string)
-      : null,
+    nextDeliveryAt: row.next_delivery_at ? new Date(row.next_delivery_at as string) : null,
+    deliveredAt: row.delivered_at ? new Date(row.delivered_at as string) : null,
+    contentScrubbedAt: row.content_scrubbed_at ? new Date(row.content_scrubbed_at as string) : null,
     createdAt: new Date(row.created_at as string),
   };
 }
@@ -137,32 +127,24 @@ export class PostgresStore implements Store {
     const rows = await this.sql`
       SELECT * FROM requests WHERE id = ${id}
     `;
-    return rows.length > 0
-      ? toRequest(rows[0] as Record<string, unknown>)
-      : null;
+    return rows.length > 0 ? toRequest(rows[0] as Record<string, unknown>) : null;
   }
 
   async updateRequest(id: string, updates: Partial<Request>): Promise<void> {
     // Build SET clause from provided updates, mapping camelCase to snake_case.
     const sets: Record<string, unknown> = { updated_at: new Date() };
 
-    if (updates.externalId !== undefined)
-      sets.external_id = updates.externalId;
+    if (updates.externalId !== undefined) sets.external_id = updates.externalId;
     if (updates.provider !== undefined) sets.provider = updates.provider;
     if (updates.model !== undefined) sets.model = updates.model;
-    if (updates.params !== undefined)
-      sets.params = this.sql.json(updates.params as JSONValue);
+    if (updates.params !== undefined) sets.params = this.sql.json(updates.params as JSONValue);
     if (updates.status !== undefined) sets.status = updates.status;
     if (updates.batchId !== undefined) sets.batch_id = updates.batchId;
     if (updates.userId !== undefined) sets.user_id = updates.userId;
-    if (updates.callbackUrl !== undefined)
-      sets.callback_url = updates.callbackUrl;
-    if (updates.webhookSecret !== undefined)
-      sets.webhook_secret = updates.webhookSecret;
-    if (updates.retryCount !== undefined)
-      sets.retry_count = updates.retryCount;
-    if (updates.maxRetries !== undefined)
-      sets.max_retries = updates.maxRetries;
+    if (updates.callbackUrl !== undefined) sets.callback_url = updates.callbackUrl;
+    if (updates.webhookSecret !== undefined) sets.webhook_secret = updates.webhookSecret;
+    if (updates.retryCount !== undefined) sets.retry_count = updates.retryCount;
+    if (updates.maxRetries !== undefined) sets.max_retries = updates.maxRetries;
     if (updates.contentScrubbedAt !== undefined)
       sets.content_scrubbed_at = updates.contentScrubbedAt;
 
@@ -182,11 +164,7 @@ export class PostgresStore implements Store {
     return rows.map((r) => toRequest(r as Record<string, unknown>));
   }
 
-  async assignBatchToRequests(
-    ids: string[],
-    batchId: string,
-    status: "batched",
-  ): Promise<void> {
+  async assignBatchToRequests(ids: string[], batchId: string, status: 'batched'): Promise<void> {
     if (ids.length === 0) return;
     await this.sql`
       UPDATE requests
@@ -237,39 +215,29 @@ export class PostgresStore implements Store {
     const rows = await this.sql`
       SELECT * FROM batches WHERE id = ${id}
     `;
-    return rows.length > 0
-      ? toBatch(rows[0] as Record<string, unknown>)
-      : null;
+    return rows.length > 0 ? toBatch(rows[0] as Record<string, unknown>) : null;
   }
 
   async updateBatch(id: string, updates: Partial<Batch>): Promise<void> {
     const sets: Record<string, unknown> = { updated_at: new Date() };
 
     if (updates.provider !== undefined) sets.provider = updates.provider;
-    if (updates.providerBatchId !== undefined)
-      sets.provider_batch_id = updates.providerBatchId;
+    if (updates.providerBatchId !== undefined) sets.provider_batch_id = updates.providerBatchId;
     if (updates.apiKeyId !== undefined) sets.api_key_id = updates.apiKeyId;
-    if (updates.apiKeyLabel !== undefined)
-      sets.api_key_label = updates.apiKeyLabel;
+    if (updates.apiKeyLabel !== undefined) sets.api_key_label = updates.apiKeyLabel;
     if (updates.status !== undefined) sets.status = updates.status;
-    if (updates.requestCount !== undefined)
-      sets.request_count = updates.requestCount;
-    if (updates.succeededCount !== undefined)
-      sets.succeeded_count = updates.succeededCount;
-    if (updates.failedCount !== undefined)
-      sets.failed_count = updates.failedCount;
+    if (updates.requestCount !== undefined) sets.request_count = updates.requestCount;
+    if (updates.succeededCount !== undefined) sets.succeeded_count = updates.succeededCount;
+    if (updates.failedCount !== undefined) sets.failed_count = updates.failedCount;
     if (updates.submissionAttempts !== undefined)
       sets.submission_attempts = updates.submissionAttempts;
     if (updates.maxSubmissionAttempts !== undefined)
       sets.max_submission_attempts = updates.maxSubmissionAttempts;
-    if (updates.providerRetries !== undefined)
-      sets.provider_retries = updates.providerRetries;
+    if (updates.providerRetries !== undefined) sets.provider_retries = updates.providerRetries;
     if (updates.maxProviderRetries !== undefined)
       sets.max_provider_retries = updates.maxProviderRetries;
-    if (updates.pollingStrategy !== undefined)
-      sets.polling_strategy = updates.pollingStrategy;
-    if (updates.submittedAt !== undefined)
-      sets.submitted_at = updates.submittedAt;
+    if (updates.pollingStrategy !== undefined) sets.polling_strategy = updates.pollingStrategy;
+    if (updates.submittedAt !== undefined) sets.submitted_at = updates.submittedAt;
     if (updates.endedAt !== undefined) sets.ended_at = updates.endedAt;
 
     await this.sql`
@@ -331,18 +299,14 @@ export class PostgresStore implements Store {
   async updateResult(id: string, updates: ResultDeliveryUpdate): Promise<void> {
     const sets: Record<string, unknown> = {};
 
-    if (updates.deliveryStatus !== undefined)
-      sets.delivery_status = updates.deliveryStatus;
-    if (updates.deliveryAttempts !== undefined)
-      sets.delivery_attempts = updates.deliveryAttempts;
+    if (updates.deliveryStatus !== undefined) sets.delivery_status = updates.deliveryStatus;
+    if (updates.deliveryAttempts !== undefined) sets.delivery_attempts = updates.deliveryAttempts;
     if (updates.maxDeliveryAttempts !== undefined)
       sets.max_delivery_attempts = updates.maxDeliveryAttempts;
     if (updates.lastDeliveryError !== undefined)
       sets.last_delivery_error = updates.lastDeliveryError;
-    if (updates.nextDeliveryAt !== undefined)
-      sets.next_delivery_at = updates.nextDeliveryAt;
-    if (updates.deliveredAt !== undefined)
-      sets.delivered_at = updates.deliveredAt;
+    if (updates.nextDeliveryAt !== undefined) sets.next_delivery_at = updates.nextDeliveryAt;
+    if (updates.deliveredAt !== undefined) sets.delivered_at = updates.deliveredAt;
     if (updates.contentScrubbedAt !== undefined)
       sets.content_scrubbed_at = updates.contentScrubbedAt;
 
@@ -390,7 +354,7 @@ export class PostgresStore implements Store {
     const row = rows[0] as Record<string, unknown>;
     return {
       id: row.id as string,
-      entityType: row.entity_type as EventLogEntry["entityType"],
+      entityType: row.entity_type as EventLogEntry['entityType'],
       entityId: row.entity_id as string,
       event: row.event as string,
       details: (row.details as Record<string, unknown>) ?? null,
@@ -599,10 +563,7 @@ export class PostgresStore implements Store {
     };
   }
 
-  async getDetailedStats(
-    userId: string,
-    period: DateRange,
-  ): Promise<DetailedUsageStats> {
+  async getDetailedStats(userId: string, period: DateRange): Promise<DetailedUsageStats> {
     // Run the basic stats query and the cost breakdown query in parallel.
     const [basic, breakdownRows, turnaroundRows] = await Promise.all([
       this.getStats(userId, period),
@@ -646,7 +607,7 @@ export class PostgresStore implements Store {
       const inputTokens = (row.input_tokens as number) ?? 0;
       const outputTokens = (row.output_tokens as number) ?? 0;
       return {
-        provider: provider as CostBreakdownEntry["provider"],
+        provider: provider as CostBreakdownEntry['provider'],
         model,
         inputTokens,
         outputTokens,
@@ -657,18 +618,11 @@ export class PostgresStore implements Store {
     });
 
     const turnaroundRow = turnaroundRows[0] as Record<string, unknown>;
-    const avgTurnaroundMs = turnaroundRow.avg_turnaround_ms != null
-      ? Number(turnaroundRow.avg_turnaround_ms)
-      : null;
+    const avgTurnaroundMs =
+      turnaroundRow.avg_turnaround_ms != null ? Number(turnaroundRow.avg_turnaround_ms) : null;
 
-    const totalStandardCostUsd = costBreakdown.reduce(
-      (s, e) => s + e.standardCostUsd,
-      0,
-    );
-    const totalBatchCostUsd = costBreakdown.reduce(
-      (s, e) => s + e.batchCostUsd,
-      0,
-    );
+    const totalStandardCostUsd = costBreakdown.reduce((s, e) => s + e.standardCostUsd, 0);
+    const totalBatchCostUsd = costBreakdown.reduce((s, e) => s + e.batchCostUsd, 0);
 
     return {
       ...basic,
@@ -690,10 +644,7 @@ export class PostgresStore implements Store {
     return toUserLimits(rows[0] as Record<string, unknown>);
   }
 
-  async upsertUserLimits(
-    userId: string,
-    input: UserLimitsInput,
-  ): Promise<UserLimits> {
+  async upsertUserLimits(userId: string, input: UserLimitsInput): Promise<UserLimits> {
     const rows = await this.sql`
       INSERT INTO user_limits (user_id, max_requests_per_hour, max_tokens_per_period, hard_spend_limit_usd, period_reset_at)
       VALUES (
@@ -722,10 +673,7 @@ export class PostgresStore implements Store {
     return toUserLimits(rows[0] as Record<string, unknown>);
   }
 
-  async incrementPeriodRequests(
-    userId: string,
-    count: number = 1,
-  ): Promise<void> {
+  async incrementPeriodRequests(userId: string, count: number = 1): Promise<void> {
     await this.sql`
       UPDATE user_limits
       SET current_period_requests = current_period_requests + ${count},
@@ -740,10 +688,14 @@ export class PostgresStore implements Store {
     effectiveLimit: number,
   ): Promise<boolean> {
     if (!Number.isFinite(count) || count <= 0 || !Number.isInteger(count)) {
-      throw new Error("count must be a positive integer");
+      throw new Error('count must be a positive integer');
     }
-    if (!Number.isFinite(effectiveLimit) || effectiveLimit < 0 || !Number.isInteger(effectiveLimit)) {
-      throw new Error("effectiveLimit must be a non-negative integer");
+    if (
+      !Number.isFinite(effectiveLimit) ||
+      effectiveLimit < 0 ||
+      !Number.isInteger(effectiveLimit)
+    ) {
+      throw new Error('effectiveLimit must be a non-negative integer');
     }
     const rows = await this.sql`
       UPDATE user_limits
@@ -756,10 +708,7 @@ export class PostgresStore implements Store {
     return rows.length > 0;
   }
 
-  async incrementPeriodTokens(
-    userId: string,
-    count: number,
-  ): Promise<void> {
+  async incrementPeriodTokens(userId: string, count: number): Promise<void> {
     await this.sql`
       UPDATE user_limits
       SET current_period_tokens = current_period_tokens + ${count},
@@ -792,10 +741,7 @@ export class PostgresStore implements Store {
     `;
   }
 
-  async getSlidingWindow(
-    userId: string,
-    windowMs: number,
-  ): Promise<SlidingWindow> {
+  async getSlidingWindow(userId: string, windowMs: number): Promise<SlidingWindow> {
     const windowStart = new Date(Date.now() - windowMs);
 
     const rows = await this.sql`
@@ -827,14 +773,10 @@ function toUserLimits(row: Record<string, unknown>): UserLimits {
     userId: row.user_id as string,
     maxRequestsPerHour: (row.max_requests_per_hour as number) ?? null,
     maxTokensPerPeriod: (row.max_tokens_per_period as number) ?? null,
-    hardSpendLimitUsd: row.hard_spend_limit_usd != null
-      ? Number(row.hard_spend_limit_usd)
-      : null,
+    hardSpendLimitUsd: row.hard_spend_limit_usd != null ? Number(row.hard_spend_limit_usd) : null,
     currentPeriodRequests: (row.current_period_requests as number) ?? 0,
     currentPeriodTokens: (row.current_period_tokens as number) ?? 0,
-    currentSpendUsd: row.current_spend_usd != null
-      ? Number(row.current_spend_usd)
-      : 0,
+    currentSpendUsd: row.current_spend_usd != null ? Number(row.current_spend_usd) : 0,
     periodResetAt: new Date(row.period_reset_at as string),
     createdAt: new Date(row.created_at as string),
     updatedAt: new Date(row.updated_at as string),

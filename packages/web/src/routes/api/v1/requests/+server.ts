@@ -5,33 +5,43 @@
  * Authentication: Bearer token in Authorization header.
  */
 
-import { json } from "@sveltejs/kit";
-import type { RequestHandler } from "./$types";
-import { getSql, getEngine, getStore } from "$lib/server/norush";
-import { authenticateApiRequest } from "$lib/server/api-auth";
+import { json } from '@sveltejs/kit';
+import type { RequestHandler } from './$types';
+import { getSql, getEngine, getStore } from '$lib/server/norush';
+import { authenticateApiRequest } from '$lib/server/api-auth';
 import {
   checkRateLimit,
   buildRateLimitHeaders,
   nextPeriodReset,
   DEFAULT_WINDOW_MS,
-} from "@norush/core";
-import type { ProviderName, RequestStatus } from "@norush/core";
+} from '@norush/core';
+import type { ProviderName, RequestStatus } from '@norush/core';
 
 // ---------------------------------------------------------------------------
 // Error helpers
 // ---------------------------------------------------------------------------
 
 function apiError(code: string, message: string, status: number, details?: unknown) {
-  return json({ error: { code, message, ...(details !== undefined ? { details } : {}) } }, { status });
+  return json(
+    { error: { code, message, ...(details !== undefined ? { details } : {}) } },
+    { status },
+  );
 }
 
 // ---------------------------------------------------------------------------
 // Validation
 // ---------------------------------------------------------------------------
 
-const VALID_PROVIDERS: ProviderName[] = ["claude", "openai"];
+const VALID_PROVIDERS: ProviderName[] = ['claude', 'openai'];
 const VALID_STATUSES: RequestStatus[] = [
-  "queued", "batched", "processing", "succeeded", "failed", "expired", "failed_final", "canceled",
+  'queued',
+  'batched',
+  'processing',
+  'succeeded',
+  'failed',
+  'expired',
+  'failed_final',
+  'canceled',
 ];
 
 interface RequestInput {
@@ -51,36 +61,42 @@ function validateRequestInput(input: unknown): { data: RequestInput; errors: Val
   const errors: ValidationError[] = [];
   const data = input as Record<string, unknown>;
 
-  if (!data || typeof data !== "object") {
-    return { data: {} as RequestInput, errors: [{ field: "body", message: "Request body must be a JSON object" }] };
+  if (!data || typeof data !== 'object') {
+    return {
+      data: {} as RequestInput,
+      errors: [{ field: 'body', message: 'Request body must be a JSON object' }],
+    };
   }
 
-  const provider = String(data.provider ?? "");
-  const model = String(data.model ?? "");
+  const provider = String(data.provider ?? '');
+  const model = String(data.model ?? '');
   const params = data.params;
   const callbackUrl = data.callback_url;
   const webhookSecret = data.webhook_secret;
 
   if (!provider) {
-    errors.push({ field: "provider", message: "Provider is required" });
+    errors.push({ field: 'provider', message: 'Provider is required' });
   } else if (!VALID_PROVIDERS.includes(provider as ProviderName)) {
-    errors.push({ field: "provider", message: `Invalid provider. Must be one of: ${VALID_PROVIDERS.join(", ")}` });
+    errors.push({
+      field: 'provider',
+      message: `Invalid provider. Must be one of: ${VALID_PROVIDERS.join(', ')}`,
+    });
   }
 
   if (!model || model.trim().length === 0) {
-    errors.push({ field: "model", message: "Model is required" });
+    errors.push({ field: 'model', message: 'Model is required' });
   }
 
-  if (!params || typeof params !== "object" || Array.isArray(params)) {
-    errors.push({ field: "params", message: "Params must be a JSON object" });
+  if (!params || typeof params !== 'object' || Array.isArray(params)) {
+    errors.push({ field: 'params', message: 'Params must be a JSON object' });
   }
 
-  if (callbackUrl !== undefined && callbackUrl !== null && typeof callbackUrl !== "string") {
-    errors.push({ field: "callback_url", message: "callback_url must be a string" });
+  if (callbackUrl !== undefined && callbackUrl !== null && typeof callbackUrl !== 'string') {
+    errors.push({ field: 'callback_url', message: 'callback_url must be a string' });
   }
 
-  if (webhookSecret !== undefined && webhookSecret !== null && typeof webhookSecret !== "string") {
-    errors.push({ field: "webhook_secret", message: "webhook_secret must be a string" });
+  if (webhookSecret !== undefined && webhookSecret !== null && typeof webhookSecret !== 'string') {
+    errors.push({ field: 'webhook_secret', message: 'webhook_secret must be a string' });
   }
 
   return {
@@ -101,16 +117,16 @@ function validateRequestInput(input: unknown): { data: RequestInput; errors: Val
 
 export const POST: RequestHandler = async ({ request }) => {
   const sql = getSql();
-  const caller = await authenticateApiRequest(sql, request.headers.get("authorization"));
+  const caller = await authenticateApiRequest(sql, request.headers.get('authorization'));
   if (!caller) {
-    return apiError("unauthorized", "Invalid or missing API token", 401);
+    return apiError('unauthorized', 'Invalid or missing API token', 401);
   }
 
   let body: unknown;
   try {
     body = await request.json();
   } catch {
-    return apiError("invalid_json", "Request body must be valid JSON", 400);
+    return apiError('invalid_json', 'Request body must be valid JSON', 400);
   }
 
   // Support both single object and array of objects
@@ -118,11 +134,11 @@ export const POST: RequestHandler = async ({ request }) => {
   const items: unknown[] = isBulk ? (body as unknown[]) : [body];
 
   if (items.length === 0) {
-    return apiError("empty_request", "At least one request is required", 400);
+    return apiError('empty_request', 'At least one request is required', 400);
   }
 
   if (items.length > 100) {
-    return apiError("too_many_requests", "Maximum 100 requests per submission", 400);
+    return apiError('too_many_requests', 'Maximum 100 requests per submission', 400);
   }
 
   // Validate all items first
@@ -131,8 +147,8 @@ export const POST: RequestHandler = async ({ request }) => {
     const { data, errors } = validateRequestInput(items[i]);
     if (errors.length > 0) {
       return apiError(
-        "validation_error",
-        isBulk ? `Validation failed for item ${i}` : "Validation failed",
+        'validation_error',
+        isBulk ? `Validation failed for item ${i}` : 'Validation failed',
         400,
         errors,
       );
@@ -155,10 +171,11 @@ export const POST: RequestHandler = async ({ request }) => {
     return json(
       {
         error: {
-          code: "rate_limited",
-          message: limitCheck.reason === "hard_spend_limit_exceeded"
-            ? "Hard spend limit exceeded. No new requests accepted."
-            : `Rate limit exceeded: ${limitCheck.reason ?? "unknown"}`,
+          code: 'rate_limited',
+          message:
+            limitCheck.reason === 'hard_spend_limit_exceeded'
+              ? 'Hard spend limit exceeded. No new requests accepted.'
+              : `Rate limit exceeded: ${limitCheck.reason ?? 'unknown'}`,
         },
       },
       { status: 429, headers },
@@ -190,14 +207,14 @@ export const POST: RequestHandler = async ({ request }) => {
         1,
       );
       const headers = {
-        "Retry-After": String(retryAfterSeconds),
+        'Retry-After': String(retryAfterSeconds),
         ...buildRateLimitHeaders(limitCheck),
       };
       return json(
         {
           error: {
-            code: "rate_limited",
-            message: "Rate limit exceeded: request_limit_exceeded",
+            code: 'rate_limited',
+            message: 'Rate limit exceeded: request_limit_exceeded',
           },
         },
         { status: 429, headers },
@@ -235,17 +252,17 @@ export const POST: RequestHandler = async ({ request }) => {
   } catch (err) {
     // Quota was consumed before the error; log and return 500 so the client
     // knows to retry (not silently drop) the submission.
-    console.error("enqueue failed after quota consumed:", err);
-    return apiError("enqueue_failed", "Failed to enqueue request", 500);
+    console.error('enqueue failed after quota consumed:', err);
+    return apiError('enqueue_failed', 'Failed to enqueue request', 500);
   }
 
   // Include rate limit headers on successful responses too
   const successHeaders: Record<string, string> = {};
   if (limitCheck.health) {
-    successHeaders["X-Norush-Health"] = limitCheck.health.reason;
+    successHeaders['X-Norush-Health'] = limitCheck.health.reason;
   }
   if (limitCheck.effectiveLimit !== undefined) {
-    successHeaders["X-Norush-Effective-Limit"] = String(limitCheck.effectiveLimit);
+    successHeaders['X-Norush-Effective-Limit'] = String(limitCheck.effectiveLimit);
   }
 
   const responseBody = isBulk ? { requests: created } : { request: created[0] };
@@ -258,26 +275,26 @@ export const POST: RequestHandler = async ({ request }) => {
 
 export const GET: RequestHandler = async ({ request, url }) => {
   const sql = getSql();
-  const caller = await authenticateApiRequest(sql, request.headers.get("authorization"));
+  const caller = await authenticateApiRequest(sql, request.headers.get('authorization'));
   if (!caller) {
-    return apiError("unauthorized", "Invalid or missing API token", 401);
+    return apiError('unauthorized', 'Invalid or missing API token', 401);
   }
 
   // Parse pagination
-  const cursor = url.searchParams.get("cursor");
-  const limitParam = url.searchParams.get("limit");
-  const parsedLimit = parseInt(limitParam ?? "50", 10);
+  const cursor = url.searchParams.get('cursor');
+  const limitParam = url.searchParams.get('limit');
+  const parsedLimit = parseInt(limitParam ?? '50', 10);
   const limit = Math.min(Math.max(Number.isNaN(parsedLimit) ? 50 : parsedLimit, 1), 100);
 
   // Parse filters
-  const statusFilter = url.searchParams.get("status");
-  const providerFilter = url.searchParams.get("provider");
+  const statusFilter = url.searchParams.get('status');
+  const providerFilter = url.searchParams.get('provider');
 
   // Validate status filter
   if (statusFilter && !VALID_STATUSES.includes(statusFilter as RequestStatus)) {
     return apiError(
-      "invalid_filter",
-      `Invalid status filter. Must be one of: ${VALID_STATUSES.join(", ")}`,
+      'invalid_filter',
+      `Invalid status filter. Must be one of: ${VALID_STATUSES.join(', ')}`,
       400,
     );
   }
@@ -285,8 +302,8 @@ export const GET: RequestHandler = async ({ request, url }) => {
   // Validate provider filter
   if (providerFilter && !VALID_PROVIDERS.includes(providerFilter as ProviderName)) {
     return apiError(
-      "invalid_filter",
-      `Invalid provider filter. Must be one of: ${VALID_PROVIDERS.join(", ")}`,
+      'invalid_filter',
+      `Invalid provider filter. Must be one of: ${VALID_PROVIDERS.join(', ')}`,
       400,
     );
   }
@@ -323,9 +340,8 @@ export const GET: RequestHandler = async ({ request, url }) => {
     updatedAt: (row.updated_at as Date).toISOString(),
   }));
 
-  const nextCursor = hasMore && pageRows.length > 0
-    ? (pageRows[pageRows.length - 1].id as string)
-    : null;
+  const nextCursor =
+    hasMore && pageRows.length > 0 ? (pageRows[pageRows.length - 1].id as string) : null;
 
   return json({
     requests,

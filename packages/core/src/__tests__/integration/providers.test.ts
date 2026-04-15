@@ -10,12 +10,12 @@
  *   OPENAI_API_KEY    — enables OpenAI integration test.
  */
 
-import { describe, expect, it } from "vitest";
-import { MemoryStore } from "../../store/memory.js";
-import { createNorush } from "../../norush.js";
-import type { Result, Request } from "../../types.js";
-import { ClaudeAdapter } from "../../providers/claude.js";
-import { OpenAIBatchAdapter } from "../../providers/openai-batch.js";
+import { describe, expect, it } from 'vitest';
+import { MemoryStore } from '../../store/memory.js';
+import { createNorush } from '../../norush.js';
+import type { Result, Request } from '../../types.js';
+import { ClaudeAdapter } from '../../providers/claude.js';
+import { OpenAIBatchAdapter } from '../../providers/openai-batch.js';
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
@@ -24,15 +24,15 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 // Claude integration
 // ---------------------------------------------------------------------------
 
-describe.skipIf(!ANTHROPIC_API_KEY)("Claude integration (real API)", () => {
-  it("submits and retrieves a tiny batch", async () => {
+describe.skipIf(!ANTHROPIC_API_KEY)('Claude integration (real API)', () => {
+  it('submits and retrieves a tiny batch', async () => {
     const store = new MemoryStore();
     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- guarded by skipIf
     const adapter = new ClaudeAdapter({ apiKey: ANTHROPIC_API_KEY! });
 
     const engine = createNorush({
       store,
-      providers: new Map([["claude", adapter]]),
+      providers: new Map([['claude', adapter]]),
     });
 
     const delivered: Array<{ result: Result; request: Request }> = [];
@@ -42,17 +42,17 @@ describe.skipIf(!ANTHROPIC_API_KEY)("Claude integration (real API)", () => {
 
     // Enqueue a single cheap request.
     const req = await engine.enqueue({
-      provider: "claude",
-      model: "claude-haiku-4-20250929",
+      provider: 'claude',
+      model: 'claude-haiku-4-20250929',
       params: {
         max_tokens: 50,
-        messages: [{ role: "user", content: "Say hi in one word." }],
+        messages: [{ role: 'user', content: 'Say hi in one word.' }],
       },
-      userId: "integration-test",
+      userId: 'integration-test',
     });
 
     expect(req.id).toBeDefined();
-    expect(req.status).toBe("queued");
+    expect(req.status).toBe('queued');
 
     // Flush to submit the batch.
     await engine.flush();
@@ -67,7 +67,7 @@ describe.skipIf(!ANTHROPIC_API_KEY)("Claude integration (real API)", () => {
 
       // Check if the request has been completed.
       const updatedReq = await store.getRequest(req.id);
-      if (updatedReq && (updatedReq.status === "succeeded" || updatedReq.status === "failed")) {
+      if (updatedReq && (updatedReq.status === 'succeeded' || updatedReq.status === 'failed')) {
         break;
       }
 
@@ -76,7 +76,10 @@ describe.skipIf(!ANTHROPIC_API_KEY)("Claude integration (real API)", () => {
 
       // Check again after pipeline processing.
       const recheckedReq = await store.getRequest(req.id);
-      if (recheckedReq && (recheckedReq.status === "succeeded" || recheckedReq.status === "failed")) {
+      if (
+        recheckedReq &&
+        (recheckedReq.status === 'succeeded' || recheckedReq.status === 'failed')
+      ) {
         break;
       }
 
@@ -89,7 +92,7 @@ describe.skipIf(!ANTHROPIC_API_KEY)("Claude integration (real API)", () => {
     const finalReq = await store.getRequest(req.id);
     expect(finalReq).not.toBeNull();
     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- checked above
-    expect(finalReq!.status).toBe("succeeded");
+    expect(finalReq!.status).toBe('succeeded');
 
     await engine.stop();
   }, 180_000); // 3 minute timeout
@@ -99,15 +102,15 @@ describe.skipIf(!ANTHROPIC_API_KEY)("Claude integration (real API)", () => {
 // OpenAI integration
 // ---------------------------------------------------------------------------
 
-describe.skipIf(!OPENAI_API_KEY)("OpenAI integration (real API)", () => {
-  it("submits and retrieves a tiny batch", async () => {
+describe.skipIf(!OPENAI_API_KEY)('OpenAI integration (real API)', () => {
+  it('submits and retrieves a tiny batch', async () => {
     const store = new MemoryStore();
     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- guarded by skipIf
     const adapter = new OpenAIBatchAdapter({ apiKey: OPENAI_API_KEY! });
 
     const engine = createNorush({
       store,
-      providers: new Map([["openai", adapter]]),
+      providers: new Map([['openai', adapter]]),
     });
 
     const delivered: Array<{ result: Result; request: Request }> = [];
@@ -117,17 +120,17 @@ describe.skipIf(!OPENAI_API_KEY)("OpenAI integration (real API)", () => {
 
     // Enqueue a single cheap request.
     const req = await engine.enqueue({
-      provider: "openai",
-      model: "gpt-4o-mini",
+      provider: 'openai',
+      model: 'gpt-4o-mini',
       params: {
         max_tokens: 50,
-        messages: [{ role: "user", content: "Say hi in one word." }],
+        messages: [{ role: 'user', content: 'Say hi in one word.' }],
       },
-      userId: "integration-test",
+      userId: 'integration-test',
     });
 
     expect(req.id).toBeDefined();
-    expect(req.status).toBe("queued");
+    expect(req.status).toBe('queued');
 
     // Flush to submit the batch.
     await engine.flush();
@@ -141,14 +144,17 @@ describe.skipIf(!OPENAI_API_KEY)("OpenAI integration (real API)", () => {
       await engine.tick();
 
       const updatedReq = await store.getRequest(req.id);
-      if (updatedReq && (updatedReq.status === "succeeded" || updatedReq.status === "failed")) {
+      if (updatedReq && (updatedReq.status === 'succeeded' || updatedReq.status === 'failed')) {
         break;
       }
 
       await new Promise((resolve) => setTimeout(resolve, 500));
 
       const recheckedReq = await store.getRequest(req.id);
-      if (recheckedReq && (recheckedReq.status === "succeeded" || recheckedReq.status === "failed")) {
+      if (
+        recheckedReq &&
+        (recheckedReq.status === 'succeeded' || recheckedReq.status === 'failed')
+      ) {
         break;
       }
 
@@ -161,7 +167,7 @@ describe.skipIf(!OPENAI_API_KEY)("OpenAI integration (real API)", () => {
     const finalReq = await store.getRequest(req.id);
     expect(finalReq).not.toBeNull();
     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- checked above
-    expect(finalReq!.status).toBe("succeeded");
+    expect(finalReq!.status).toBe('succeeded');
 
     await engine.stop();
   }, 180_000); // 3 minute timeout

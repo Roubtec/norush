@@ -1,4 +1,4 @@
-import type { TelemetryHook } from "../interfaces/telemetry.js";
+import type { TelemetryHook } from '../interfaces/telemetry.js';
 
 /**
  * No-op telemetry implementation.
@@ -11,11 +11,7 @@ export class NoopTelemetry implements TelemetryHook {
     // intentionally empty
   }
 
-  histogram(
-    _name: string,
-    _value: number,
-    _tags?: Record<string, string>,
-  ): void {
+  histogram(_name: string, _value: number, _tags?: Record<string, string>): void {
     // intentionally empty
   }
 

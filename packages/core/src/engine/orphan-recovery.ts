@@ -15,11 +15,11 @@
  * Orphans that exceed maxSubmissionAttempts are transitioned to 'failed'.
  */
 
-import type { Store } from "../interfaces/store.js";
-import type { Provider } from "../interfaces/provider.js";
-import type { TelemetryHook } from "../interfaces/telemetry.js";
-import type { Batch, NorushRequest, ProviderName } from "../types.js";
-import { NoopTelemetry } from "../telemetry/noop.js";
+import type { Store } from '../interfaces/store.js';
+import type { Provider } from '../interfaces/provider.js';
+import type { TelemetryHook } from '../interfaces/telemetry.js';
+import type { Batch, NorushRequest, ProviderName } from '../types.js';
+import { NoopTelemetry } from '../telemetry/noop.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -103,10 +103,7 @@ export class OrphanRecovery {
       } else {
         // Check if this failure pushed it over the limit.
         const updated = await this.store.getBatch(batch.id);
-        if (
-          updated &&
-          updated.submissionAttempts >= updated.maxSubmissionAttempts
-        ) {
+        if (updated && updated.submissionAttempts >= updated.maxSubmissionAttempts) {
           await this.markOrphanFailed(updated);
           failed++;
         }
@@ -130,10 +127,10 @@ export class OrphanRecovery {
    */
   private async resubmit(batch: Batch): Promise<boolean> {
     if (!this.claimBatchForRecovery(batch.id)) {
-      this.telemetry.event("orphan_recovery_skipped", {
+      this.telemetry.event('orphan_recovery_skipped', {
         batchId: batch.id,
         provider: batch.provider,
-        reason: "recovery_already_in_progress",
+        reason: 'recovery_already_in_progress',
       });
       return false;
     }
@@ -141,7 +138,7 @@ export class OrphanRecovery {
     try {
       const adapter = this.resolveAdapter(batch.provider, batch.apiKeyId);
       if (!adapter) {
-        this.telemetry.event("orphan_recovery_error", {
+        this.telemetry.event('orphan_recovery_error', {
           batchId: batch.id,
           error: `No provider adapter found for ${batch.provider}`,
         });
@@ -156,9 +153,9 @@ export class OrphanRecovery {
       // Gather the requests for this batch.
       const requests = await this.buildNorushRequests(batch.id);
       if (requests.length === 0) {
-        this.telemetry.event("orphan_recovery_error", {
+        this.telemetry.event('orphan_recovery_error', {
           batchId: batch.id,
-          error: "No requests found for orphaned batch",
+          error: 'No requests found for orphaned batch',
         });
         return false;
       }
@@ -168,11 +165,11 @@ export class OrphanRecovery {
 
         await this.store.updateBatch(batch.id, {
           providerBatchId: ref.providerBatchId,
-          status: "submitted",
+          status: 'submitted',
           submittedAt: this.now(),
         });
 
-        this.telemetry.event("orphan_recovered", {
+        this.telemetry.event('orphan_recovered', {
           batchId: batch.id,
           provider: batch.provider,
           providerBatchId: ref.providerBatchId,
@@ -181,7 +178,7 @@ export class OrphanRecovery {
 
         return true;
       } catch (error) {
-        this.telemetry.event("orphan_recovery_error", {
+        this.telemetry.event('orphan_recovery_error', {
           batchId: batch.id,
           provider: batch.provider,
           error: error instanceof Error ? error.message : String(error),
@@ -225,15 +222,15 @@ export class OrphanRecovery {
    * Mark an orphaned batch as permanently failed and fail its requests.
    */
   private async markOrphanFailed(batch: Batch): Promise<void> {
-    await this.store.updateBatch(batch.id, { status: "failed", endedAt: this.now() });
+    await this.store.updateBatch(batch.id, { status: 'failed', endedAt: this.now() });
 
     // Also fail the associated requests.
     const requests = await this.store.getRequestsByBatchId(batch.id);
     for (const req of requests) {
-      await this.store.updateRequest(req.id, { status: "failed" });
+      await this.store.updateRequest(req.id, { status: 'failed' });
     }
 
-    this.telemetry.event("orphan_failed", {
+    this.telemetry.event('orphan_failed', {
       batchId: batch.id,
       provider: batch.provider,
       submissionAttempts: batch.submissionAttempts,
@@ -244,13 +241,7 @@ export class OrphanRecovery {
   /**
    * Resolve provider adapter by "provider::apiKeyId" falling back to "provider".
    */
-  private resolveAdapter(
-    provider: ProviderName,
-    apiKeyId: string,
-  ): Provider | undefined {
-    return (
-      this.providers.get(`${provider}::${apiKeyId}`) ??
-      this.providers.get(provider)
-    );
+  private resolveAdapter(provider: ProviderName, apiKeyId: string): Provider | undefined {
+    return this.providers.get(`${provider}::${apiKeyId}`) ?? this.providers.get(provider);
   }
 }

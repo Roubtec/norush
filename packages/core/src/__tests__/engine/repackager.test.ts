@@ -1,7 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { MemoryStore } from "../../store/memory.js";
-import { Repackager } from "../../engine/repackager.js";
-import type { Batch, NewRequest, RequestStatus } from "../../types.js";
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MemoryStore } from '../../store/memory.js';
+import { Repackager } from '../../engine/repackager.js';
+import type { Batch, NewRequest, RequestStatus } from '../../types.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -9,13 +9,13 @@ import type { Batch, NewRequest, RequestStatus } from "../../types.js";
 
 function makeNewRequest(overrides: Partial<NewRequest> = {}): NewRequest {
   return {
-    provider: "claude",
-    model: "claude-sonnet-4-5-20250929",
+    provider: 'claude',
+    model: 'claude-sonnet-4-5-20250929',
     params: {
       max_tokens: 1024,
-      messages: [{ role: "user", content: "Hello" }],
+      messages: [{ role: 'user', content: 'Hello' }],
     },
-    userId: "user_01",
+    userId: 'user_01',
     maxRetries: 3,
     ...overrides,
   };
@@ -33,23 +33,21 @@ async function createBatchWithRequests(
   }>,
 ): Promise<Batch> {
   const batch = await store.createBatch({
-    provider: "claude",
-    apiKeyId: "user_01",
+    provider: 'claude',
+    apiKeyId: 'user_01',
     requestCount: requestStatuses.length,
     maxProviderRetries: 3,
   });
 
   await store.updateBatch(batch.id, {
-    status: "ended",
-    providerBatchId: "pb_001",
+    status: 'ended',
+    providerBatchId: 'pb_001',
     submittedAt: new Date(),
     endedAt: new Date(),
   });
 
   for (const { status, retryCount = 0, maxRetries = 3 } of requestStatuses) {
-    const req = await store.createRequest(
-      makeNewRequest({ maxRetries }),
-    );
+    const req = await store.createRequest(makeNewRequest({ maxRetries }));
     await store.updateRequest(req.id, {
       batchId: batch.id,
       status,
@@ -65,7 +63,7 @@ async function createBatchWithRequests(
 // Tests
 // ---------------------------------------------------------------------------
 
-describe("Repackager", () => {
+describe('Repackager', () => {
   let store: MemoryStore;
 
   beforeEach(() => {
@@ -80,11 +78,11 @@ describe("Repackager", () => {
   // Basic repackaging
   // -----------------------------------------------------------------------
 
-  describe("basic repackaging", () => {
-    it("re-queues failed requests with retryCount < maxRetries", async () => {
+  describe('basic repackaging', () => {
+    it('re-queues failed requests with retryCount < maxRetries', async () => {
       const batch = await createBatchWithRequests(store, [
-        { status: "failed", retryCount: 0, maxRetries: 3 },
-        { status: "succeeded" },
+        { status: 'failed', retryCount: 0, maxRetries: 3 },
+        { status: 'succeeded' },
       ]);
 
       const repackager = new Repackager({ store });
@@ -104,13 +102,13 @@ describe("Repackager", () => {
       const queued = await store.getQueuedRequests(100);
       expect(queued).toHaveLength(1);
       expect(queued[0].retryCount).toBe(1);
-      expect(queued[0].status).toBe("queued");
+      expect(queued[0].status).toBe('queued');
       expect(queued[0].batchId).toBeNull();
     });
 
-    it("re-queues expired requests with retryCount < maxRetries", async () => {
+    it('re-queues expired requests with retryCount < maxRetries', async () => {
       const batch = await createBatchWithRequests(store, [
-        { status: "expired", retryCount: 0, maxRetries: 3 },
+        { status: 'expired', retryCount: 0, maxRetries: 3 },
       ]);
 
       const repackager = new Repackager({ store });
@@ -121,12 +119,12 @@ describe("Repackager", () => {
 
       const queued = await store.getQueuedRequests(100);
       expect(queued).toHaveLength(1);
-      expect(queued[0].status).toBe("queued");
+      expect(queued[0].status).toBe('queued');
     });
 
-    it("transitions requests exceeding retry budget to failed_final", async () => {
+    it('transitions requests exceeding retry budget to failed_final', async () => {
       const batch = await createBatchWithRequests(store, [
-        { status: "failed", retryCount: 3, maxRetries: 3 },
+        { status: 'failed', retryCount: 3, maxRetries: 3 },
       ]);
 
       const repackager = new Repackager({ store });
@@ -136,17 +134,17 @@ describe("Repackager", () => {
       expect(result.exhausted).toBe(1);
 
       const requests = await store.getRequestsByBatchId(batch.id);
-      const exhaustedReq = requests.find((r) => r.status === "failed_final");
+      const exhaustedReq = requests.find((r) => r.status === 'failed_final');
       expect(exhaustedReq).toBeDefined();
     });
 
-    it("handles mixed results: some re-queued, some exhausted", async () => {
+    it('handles mixed results: some re-queued, some exhausted', async () => {
       const batch = await createBatchWithRequests(store, [
-        { status: "failed", retryCount: 0, maxRetries: 3 },  // re-queue
-        { status: "failed", retryCount: 3, maxRetries: 3 },  // exhaust
-        { status: "expired", retryCount: 1, maxRetries: 3 }, // re-queue
-        { status: "expired", retryCount: 3, maxRetries: 3 }, // exhaust
-        { status: "succeeded" },                              // skip
+        { status: 'failed', retryCount: 0, maxRetries: 3 }, // re-queue
+        { status: 'failed', retryCount: 3, maxRetries: 3 }, // exhaust
+        { status: 'expired', retryCount: 1, maxRetries: 3 }, // re-queue
+        { status: 'expired', retryCount: 3, maxRetries: 3 }, // exhaust
+        { status: 'succeeded' }, // skip
       ]);
 
       const repackager = new Repackager({ store });
@@ -162,11 +160,11 @@ describe("Repackager", () => {
   // Status filtering
   // -----------------------------------------------------------------------
 
-  describe("status filtering", () => {
-    it("skips succeeded requests", async () => {
+  describe('status filtering', () => {
+    it('skips succeeded requests', async () => {
       const batch = await createBatchWithRequests(store, [
-        { status: "succeeded" },
-        { status: "succeeded" },
+        { status: 'succeeded' },
+        { status: 'succeeded' },
       ]);
 
       const repackager = new Repackager({ store });
@@ -177,10 +175,8 @@ describe("Repackager", () => {
       expect(result.exhausted).toBe(0);
     });
 
-    it("skips canceled requests", async () => {
-      const batch = await createBatchWithRequests(store, [
-        { status: "canceled" },
-      ]);
+    it('skips canceled requests', async () => {
+      const batch = await createBatchWithRequests(store, [{ status: 'canceled' }]);
 
       const repackager = new Repackager({ store });
       const result = await repackager.repackage(batch);
@@ -188,10 +184,8 @@ describe("Repackager", () => {
       expect(result.scanned).toBe(0);
     });
 
-    it("skips queued requests", async () => {
-      const batch = await createBatchWithRequests(store, [
-        { status: "queued" },
-      ]);
+    it('skips queued requests', async () => {
+      const batch = await createBatchWithRequests(store, [{ status: 'queued' }]);
 
       const repackager = new Repackager({ store });
       const result = await repackager.repackage(batch);
@@ -199,10 +193,8 @@ describe("Repackager", () => {
       expect(result.scanned).toBe(0);
     });
 
-    it("skips batched requests", async () => {
-      const batch = await createBatchWithRequests(store, [
-        { status: "batched" },
-      ]);
+    it('skips batched requests', async () => {
+      const batch = await createBatchWithRequests(store, [{ status: 'batched' }]);
 
       const repackager = new Repackager({ store });
       const result = await repackager.repackage(batch);
@@ -210,10 +202,8 @@ describe("Repackager", () => {
       expect(result.scanned).toBe(0);
     });
 
-    it("skips failed_final requests", async () => {
-      const batch = await createBatchWithRequests(store, [
-        { status: "failed_final" },
-      ]);
+    it('skips failed_final requests', async () => {
+      const batch = await createBatchWithRequests(store, [{ status: 'failed_final' }]);
 
       const repackager = new Repackager({ store });
       const result = await repackager.repackage(batch);
@@ -226,10 +216,10 @@ describe("Repackager", () => {
   // Retry count management
   // -----------------------------------------------------------------------
 
-  describe("retry count management", () => {
-    it("increments retryCount on re-queue", async () => {
+  describe('retry count management', () => {
+    it('increments retryCount on re-queue', async () => {
       const batch = await createBatchWithRequests(store, [
-        { status: "failed", retryCount: 0, maxRetries: 5 },
+        { status: 'failed', retryCount: 0, maxRetries: 5 },
       ]);
 
       const repackager = new Repackager({ store });
@@ -239,9 +229,9 @@ describe("Repackager", () => {
       expect(queued[0].retryCount).toBe(1);
     });
 
-    it("increments retryCount correctly for partially retried requests", async () => {
+    it('increments retryCount correctly for partially retried requests', async () => {
       const batch = await createBatchWithRequests(store, [
-        { status: "failed", retryCount: 2, maxRetries: 5 },
+        { status: 'failed', retryCount: 2, maxRetries: 5 },
       ]);
 
       const repackager = new Repackager({ store });
@@ -251,9 +241,9 @@ describe("Repackager", () => {
       expect(queued[0].retryCount).toBe(3);
     });
 
-    it("clears batchId when re-queuing", async () => {
+    it('clears batchId when re-queuing', async () => {
       const batch = await createBatchWithRequests(store, [
-        { status: "failed", retryCount: 0, maxRetries: 3 },
+        { status: 'failed', retryCount: 0, maxRetries: 3 },
       ]);
 
       const repackager = new Repackager({ store });
@@ -263,9 +253,9 @@ describe("Repackager", () => {
       expect(queued[0].batchId).toBeNull();
     });
 
-    it("does not re-queue when retryCount equals maxRetries", async () => {
+    it('does not re-queue when retryCount equals maxRetries', async () => {
       const batch = await createBatchWithRequests(store, [
-        { status: "failed", retryCount: 5, maxRetries: 5 },
+        { status: 'failed', retryCount: 5, maxRetries: 5 },
       ]);
 
       const repackager = new Repackager({ store });
@@ -275,9 +265,9 @@ describe("Repackager", () => {
       expect(result.exhausted).toBe(1);
     });
 
-    it("handles maxRetries of 0 (no retries allowed)", async () => {
+    it('handles maxRetries of 0 (no retries allowed)', async () => {
       const batch = await createBatchWithRequests(store, [
-        { status: "failed", retryCount: 0, maxRetries: 0 },
+        { status: 'failed', retryCount: 0, maxRetries: 0 },
       ]);
 
       const repackager = new Repackager({ store });
@@ -292,8 +282,8 @@ describe("Repackager", () => {
   // Empty batch
   // -----------------------------------------------------------------------
 
-  describe("empty batch", () => {
-    it("handles batch with no requests", async () => {
+  describe('empty batch', () => {
+    it('handles batch with no requests', async () => {
       const batch = await createBatchWithRequests(store, []);
 
       const repackager = new Repackager({ store });
@@ -304,11 +294,11 @@ describe("Repackager", () => {
       expect(result.exhausted).toBe(0);
     });
 
-    it("handles batch with all succeeded requests", async () => {
+    it('handles batch with all succeeded requests', async () => {
       const batch = await createBatchWithRequests(store, [
-        { status: "succeeded" },
-        { status: "succeeded" },
-        { status: "succeeded" },
+        { status: 'succeeded' },
+        { status: 'succeeded' },
+        { status: 'succeeded' },
       ]);
 
       const repackager = new Repackager({ store });
@@ -322,11 +312,11 @@ describe("Repackager", () => {
   // Telemetry
   // -----------------------------------------------------------------------
 
-  describe("telemetry", () => {
-    it("emits requests_requeued and requests_exhausted counters", async () => {
+  describe('telemetry', () => {
+    it('emits requests_requeued and requests_exhausted counters', async () => {
       const batch = await createBatchWithRequests(store, [
-        { status: "failed", retryCount: 0, maxRetries: 3 },
-        { status: "failed", retryCount: 3, maxRetries: 3 },
+        { status: 'failed', retryCount: 0, maxRetries: 3 },
+        { status: 'failed', retryCount: 3, maxRetries: 3 },
       ]);
 
       const telemetry = { counter: vi.fn(), histogram: vi.fn(), event: vi.fn() };
@@ -335,20 +325,20 @@ describe("Repackager", () => {
       await repackager.repackage(batch);
 
       expect(telemetry.counter).toHaveBeenCalledWith(
-        "requests_requeued",
+        'requests_requeued',
         1,
         expect.objectContaining({ batchId: batch.id }),
       );
       expect(telemetry.counter).toHaveBeenCalledWith(
-        "requests_exhausted",
+        'requests_exhausted',
         1,
         expect.objectContaining({ batchId: batch.id }),
       );
     });
 
-    it("emits repackage_complete event", async () => {
+    it('emits repackage_complete event', async () => {
       const batch = await createBatchWithRequests(store, [
-        { status: "failed", retryCount: 0, maxRetries: 3 },
+        { status: 'failed', retryCount: 0, maxRetries: 3 },
       ]);
 
       const telemetry = { counter: vi.fn(), histogram: vi.fn(), event: vi.fn() };
@@ -357,7 +347,7 @@ describe("Repackager", () => {
       await repackager.repackage(batch);
 
       expect(telemetry.event).toHaveBeenCalledWith(
-        "repackage_complete",
+        'repackage_complete',
         expect.objectContaining({
           batchId: batch.id,
           scanned: 1,
@@ -367,10 +357,8 @@ describe("Repackager", () => {
       );
     });
 
-    it("does not emit counters when nothing to repackage", async () => {
-      const batch = await createBatchWithRequests(store, [
-        { status: "succeeded" },
-      ]);
+    it('does not emit counters when nothing to repackage', async () => {
+      const batch = await createBatchWithRequests(store, [{ status: 'succeeded' }]);
 
       const telemetry = { counter: vi.fn(), histogram: vi.fn(), event: vi.fn() };
 

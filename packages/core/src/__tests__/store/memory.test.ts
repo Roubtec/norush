@@ -5,10 +5,10 @@
  * No external dependencies required — always runs.
  */
 
-import { describe } from "vitest";
-import { MemoryStore } from "../../store/memory.js";
-import { runStoreContractTests } from "./store-contract.test.js";
+import { describe } from 'vitest';
+import { MemoryStore } from '../../store/memory.js';
+import { runStoreContractTests } from './store-contract.test.js';
 
-describe("MemoryStore", () => {
+describe('MemoryStore', () => {
   runStoreContractTests(() => new MemoryStore());
 });

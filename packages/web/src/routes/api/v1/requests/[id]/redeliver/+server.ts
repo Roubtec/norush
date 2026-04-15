@@ -7,10 +7,10 @@
  * Authentication: Bearer token in Authorization header.
  */
 
-import { json } from "@sveltejs/kit";
-import type { RequestHandler } from "./$types";
-import { getSql } from "$lib/server/norush";
-import { authenticateApiRequest } from "$lib/server/api-auth";
+import { json } from '@sveltejs/kit';
+import type { RequestHandler } from './$types';
+import { getSql } from '$lib/server/norush';
+import { authenticateApiRequest } from '$lib/server/api-auth';
 
 // ---------------------------------------------------------------------------
 // Error helpers
@@ -26,9 +26,9 @@ function apiError(code: string, message: string, status: number) {
 
 export const POST: RequestHandler = async ({ params, request }) => {
   const sql = getSql();
-  const caller = await authenticateApiRequest(sql, request.headers.get("authorization"));
+  const caller = await authenticateApiRequest(sql, request.headers.get('authorization'));
   if (!caller) {
-    return apiError("unauthorized", "Invalid or missing API token", 401);
+    return apiError('unauthorized', 'Invalid or missing API token', 401);
   }
 
   const { id } = params;
@@ -46,23 +46,23 @@ export const POST: RequestHandler = async ({ params, request }) => {
   `;
 
   if (rows.length === 0) {
-    return apiError("not_found", "Request not found", 404);
+    return apiError('not_found', 'Request not found', 404);
   }
 
   const row = rows[0];
 
   if (!row.result_id) {
     return apiError(
-      "no_result",
-      "This request does not have a result yet. Re-delivery is only available for completed requests.",
+      'no_result',
+      'This request does not have a result yet. Re-delivery is only available for completed requests.',
       409,
     );
   }
 
   if (!row.callback_url) {
     return apiError(
-      "no_callback_url",
-      "This request does not have a callback URL configured. Re-delivery requires a callback URL.",
+      'no_callback_url',
+      'This request does not have a callback URL configured. Re-delivery requires a callback URL.',
       409,
     );
   }
@@ -80,7 +80,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
   `;
 
   return json({
-    message: "Re-delivery scheduled",
+    message: 'Re-delivery scheduled',
     requestId: id,
     resultId: row.result_id as string,
     previousDeliveryStatus: row.delivery_status as string,

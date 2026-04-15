@@ -22,7 +22,7 @@ export type ResultId = string;
 // Provider
 // ---------------------------------------------------------------------------
 
-export type ProviderName = "claude" | "openai";
+export type ProviderName = 'claude' | 'openai';
 
 // ---------------------------------------------------------------------------
 // Status unions
@@ -30,27 +30,27 @@ export type ProviderName = "claude" | "openai";
 
 /** Status of an individual request within the norush lifecycle. */
 export type RequestStatus =
-  | "queued"
-  | "batched"
-  | "processing"
-  | "succeeded"
-  | "failed"
-  | "expired"
-  | "failed_final"
-  | "canceled";
+  | 'queued'
+  | 'batched'
+  | 'processing'
+  | 'succeeded'
+  | 'failed'
+  | 'expired'
+  | 'failed_final'
+  | 'canceled';
 
 /** Status of a batch submitted to a provider. */
 export type BatchStatus =
-  | "pending"
-  | "submitted"
-  | "processing"
-  | "ended"
-  | "expired"
-  | "cancelled"
-  | "failed";
+  | 'pending'
+  | 'submitted'
+  | 'processing'
+  | 'ended'
+  | 'expired'
+  | 'cancelled'
+  | 'failed';
 
 /** Delivery status for a result back to the caller. */
-export type DeliveryStatus = "pending" | "delivered" | "failed" | "no_target";
+export type DeliveryStatus = 'pending' | 'delivered' | 'failed' | 'no_target';
 
 // ---------------------------------------------------------------------------
 // Provider batch reference
@@ -265,7 +265,7 @@ export interface DetailedUsageStats extends UsageStats {
 // ---------------------------------------------------------------------------
 
 /** Entity types tracked in the event log. */
-export type EventEntityType = "batch" | "request" | "result";
+export type EventEntityType = 'batch' | 'request' | 'result';
 
 /** Fields required to create a new event log entry. */
 export interface NewEvent {
@@ -293,7 +293,7 @@ export interface HealthScore {
   /** Value between 0.1 and 1.0. */
   factor: number;
   /** What's driving the score. */
-  reason: "healthy" | "partial_failures" | "mostly_failing" | "critical";
+  reason: 'healthy' | 'partial_failures' | 'mostly_failing' | 'critical';
 }
 
 // ---------------------------------------------------------------------------

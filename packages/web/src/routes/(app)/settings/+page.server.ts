@@ -6,19 +6,14 @@
  * - delete: Removes an API key by ID.
  */
 
-import { fail, redirect } from "@sveltejs/kit";
-import type { Actions, PageServerLoad } from "./$types";
-import { getSql } from "$lib/server/norush";
-import {
-  listApiKeys,
-  createApiKey,
-  deleteApiKey,
-  validateApiKeyInput,
-} from "$lib/server/api-keys";
+import { fail, redirect } from '@sveltejs/kit';
+import type { Actions, PageServerLoad } from './$types';
+import { getSql } from '$lib/server/norush';
+import { listApiKeys, createApiKey, deleteApiKey, validateApiKeyInput } from '$lib/server/api-keys';
 
 /** Extract authenticated user ID, redirecting to login if absent. */
 function requireUser(locals: App.Locals): string {
-  if (!locals.user) redirect(302, "/login");
+  if (!locals.user) redirect(302, '/login');
   return locals.user.id;
 }
 
@@ -33,8 +28,8 @@ export const load: PageServerLoad = async ({ locals }) => {
     keys = await listApiKeys(sql, userId);
   } catch (err) {
     // Don't expose internal errors to the client
-    console.error("[settings] Failed to load API keys:", err);
-    loadError = "Failed to load API keys. Please check server configuration.";
+    console.error('[settings] Failed to load API keys:', err);
+    loadError = 'Failed to load API keys. Please check server configuration.';
   }
 
   return { keys, loadError };
@@ -46,10 +41,10 @@ export const actions = {
     const sql = getSql();
     const data = await request.formData();
 
-    const provider = (data.get("provider") as string | null) ?? "";
-    const label = (data.get("label") as string | null) ?? "";
-    const apiKey = (data.get("apiKey") as string | null) ?? "";
-    const priorityRaw = data.get("priority") as string | null;
+    const provider = (data.get('provider') as string | null) ?? '';
+    const label = (data.get('label') as string | null) ?? '';
+    const apiKey = (data.get('apiKey') as string | null) ?? '';
+    const priorityRaw = data.get('priority') as string | null;
     const priority = priorityRaw ? parseInt(priorityRaw, 10) : 0;
 
     // Server-side validation
@@ -57,12 +52,12 @@ export const actions = {
 
     // Priority range validation (clients can bypass HTML min/max)
     if (isNaN(priority) || priority < 0 || priority > 99 || !Number.isInteger(priority)) {
-      errors.push({ field: "priority", message: "Priority must be an integer between 0 and 99" });
+      errors.push({ field: 'priority', message: 'Priority must be an integer between 0 and 99' });
     }
 
     if (errors.length > 0) {
       return fail(400, {
-        action: "add" as const,
+        action: 'add' as const,
         errors,
         values: { provider, label, priority },
       });
@@ -77,10 +72,10 @@ export const actions = {
         priority: isNaN(priority) ? 0 : priority,
       });
     } catch (err) {
-      console.error("[settings] Failed to create API key:", err);
+      console.error('[settings] Failed to create API key:', err);
       return fail(500, {
-        action: "add" as const,
-        errors: [{ field: "general", message: "Failed to store API key. Please try again." }],
+        action: 'add' as const,
+        errors: [{ field: 'general', message: 'Failed to store API key. Please try again.' }],
         values: { provider, label, priority },
       });
     }
@@ -93,11 +88,11 @@ export const actions = {
     const sql = getSql();
     const data = await request.formData();
 
-    const keyId = (data.get("keyId") as string | null) ?? "";
+    const keyId = (data.get('keyId') as string | null) ?? '';
     if (!keyId) {
       return fail(400, {
-        action: "delete" as const,
-        errors: [{ field: "keyId", message: "Key ID is required" }],
+        action: 'delete' as const,
+        errors: [{ field: 'keyId', message: 'Key ID is required' }],
       });
     }
 
@@ -105,15 +100,15 @@ export const actions = {
       const deleted = await deleteApiKey(sql, userId, keyId);
       if (!deleted) {
         return fail(404, {
-          action: "delete" as const,
-          errors: [{ field: "keyId", message: "API key not found" }],
+          action: 'delete' as const,
+          errors: [{ field: 'keyId', message: 'API key not found' }],
         });
       }
     } catch (err) {
-      console.error("[settings] Failed to delete API key:", err);
+      console.error('[settings] Failed to delete API key:', err);
       return fail(500, {
-        action: "delete" as const,
-        errors: [{ field: "general", message: "Failed to delete API key. Please try again." }],
+        action: 'delete' as const,
+        errors: [{ field: 'general', message: 'Failed to delete API key. Please try again.' }],
       });
     }
 

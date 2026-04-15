@@ -6,9 +6,9 @@
  * to the authenticated user.
  */
 
-import type postgres from "postgres";
-import type { ProviderName, RequestStatus } from "@norush/core";
-import { calculateSavings as sharedCalculateSavings } from "$lib/savings.js";
+import type postgres from 'postgres';
+import type { ProviderName, RequestStatus } from '@norush/core';
+import { calculateSavings as sharedCalculateSavings } from '$lib/savings.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -56,7 +56,7 @@ export interface MessageValidationError {
   message: string;
 }
 
-const VALID_PROVIDERS: ProviderName[] = ["claude", "openai"];
+const VALID_PROVIDERS: ProviderName[] = ['claude', 'openai'];
 
 const MAX_CONTENT_LENGTH = 100_000;
 
@@ -72,23 +72,23 @@ export function validateMessageInput(input: {
   const errors: MessageValidationError[] = [];
 
   if (!input.provider) {
-    errors.push({ field: "provider", message: "Provider is required" });
+    errors.push({ field: 'provider', message: 'Provider is required' });
   } else if (!VALID_PROVIDERS.includes(input.provider as ProviderName)) {
     errors.push({
-      field: "provider",
-      message: `Invalid provider. Must be one of: ${VALID_PROVIDERS.join(", ")}`,
+      field: 'provider',
+      message: `Invalid provider. Must be one of: ${VALID_PROVIDERS.join(', ')}`,
     });
   }
 
   if (!input.model || input.model.trim().length === 0) {
-    errors.push({ field: "model", message: "Model is required" });
+    errors.push({ field: 'model', message: 'Model is required' });
   }
 
   if (!input.content || input.content.trim().length === 0) {
-    errors.push({ field: "content", message: "Message content is required" });
+    errors.push({ field: 'content', message: 'Message content is required' });
   } else if (input.content.length > MAX_CONTENT_LENGTH) {
     errors.push({
-      field: "content",
+      field: 'content',
       message: `Message must be ${MAX_CONTENT_LENGTH.toLocaleString()} characters or fewer`,
     });
   }

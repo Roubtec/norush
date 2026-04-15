@@ -1,5 +1,5 @@
-import { Counter, Histogram, Registry } from "prom-client";
-import type { TelemetryHook } from "../interfaces/telemetry.js";
+import { Counter, Histogram, Registry } from 'prom-client';
+import type { TelemetryHook } from '../interfaces/telemetry.js';
 
 /**
  * Prometheus telemetry adapter.
@@ -91,9 +91,9 @@ export class PrometheusTelemetry implements TelemetryHook {
  * Prometheus metric names must match [a-zA-Z_:][a-zA-Z0-9_:]*.
  */
 function sanitize(name: string): string {
-  let s = name.replace(/[^a-zA-Z0-9_:]/g, "_");
+  let s = name.replace(/[^a-zA-Z0-9_:]/g, '_');
   if (/^[0-9]/.test(s)) {
-    s = "_" + s;
+    s = '_' + s;
   }
   return s;
 }

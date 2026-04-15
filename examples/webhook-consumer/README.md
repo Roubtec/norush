@@ -30,14 +30,14 @@ When enqueuing a request, include the webhook URL and secret:
 
 ```typescript
 await engine.enqueue({
-  provider: "claude",
-  model: "claude-sonnet-4-6",
+  provider: 'claude',
+  model: 'claude-sonnet-4-6',
   params: {
-    messages: [{ role: "user", content: "Hello!" }],
+    messages: [{ role: 'user', content: 'Hello!' }],
     max_tokens: 256,
   },
-  webhookUrl: "http://localhost:4000/webhook",
-  webhookSecret: "my-shared-secret",
+  webhookUrl: 'http://localhost:4000/webhook',
+  webhookSecret: 'my-shared-secret',
 });
 ```
 

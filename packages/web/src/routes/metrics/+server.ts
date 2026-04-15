@@ -15,8 +15,8 @@
  * to prevent exposing metric label values to untrusted clients.
  */
 
-import type { RequestHandler } from "./$types";
-import { registry } from "$lib/server/metrics";
+import type { RequestHandler } from './$types';
+import { registry } from '$lib/server/metrics';
 
 export const GET: RequestHandler = async () => {
   const body = await registry.metrics();
@@ -24,7 +24,7 @@ export const GET: RequestHandler = async () => {
   return new Response(body, {
     status: 200,
     headers: {
-      "Content-Type": registry.contentType,
+      'Content-Type': registry.contentType,
     },
   });
 };

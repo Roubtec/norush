@@ -120,7 +120,7 @@ Runs on startup or periodically to handle process crashes.
 Each provider adapter implements the `Provider` interface:
 
 | Adapter              | Provider  | Mechanism                                        |
-|----------------------|-----------|--------------------------------------------------|
+| -------------------- | --------- | ------------------------------------------------ |
 | `ClaudeAdapter`      | Anthropic | JSON body submission via Message Batches API     |
 | `OpenAIBatchAdapter` | OpenAI    | JSONL file upload via Batch API                  |
 | `OpenAIFlexAdapter`  | OpenAI    | Synchronous requests with `service_tier: "flex"` |
@@ -133,7 +133,7 @@ The `Store` interface abstracts persistence.
 Two implementations are provided:
 
 | Store           | Use case                                       |
-|-----------------|------------------------------------------------|
+| --------------- | ---------------------------------------------- |
 | `MemoryStore`   | Testing and development. Data is lost on exit. |
 | `PostgresStore` | Production. Crash-safe, survives restarts.     |
 
@@ -148,7 +148,7 @@ All engine components instrument through the `TelemetryHook` interface.
 Metrics are categorized as:
 
 | Category | Metrics                                                                                  | Purpose           |
-|----------|------------------------------------------------------------------------------------------|-------------------|
+| -------- | ---------------------------------------------------------------------------------------- | ----------------- |
 | Volume   | `requests_queued`, `batches_submitted`, `results_ingested`, `deliveries_attempted`       | Throughput        |
 | Latency  | `batch_turnaround_ms`, `delivery_latency_ms`                                             | Performance       |
 | Errors   | `submission_failures`, `delivery_failures`, `circuit_breaker_trips`, `orphan_recoveries` | Reliability       |

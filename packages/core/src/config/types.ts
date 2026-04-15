@@ -10,7 +10,7 @@
  * operator → library default, with user settings clamped to operator caps.
  */
 
-import type { ProviderName } from "../types.js";
+import type { ProviderName } from '../types.js';
 
 // ---------------------------------------------------------------------------
 // Batching config

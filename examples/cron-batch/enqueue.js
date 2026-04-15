@@ -8,8 +8,8 @@
  *   DATABASE_URL=postgres://... ANTHROPIC_API_KEY=sk-ant-... node enqueue.js
  */
 
-import postgres from "postgres";
-import { createNorush, PostgresStore, migrate, ConsoleTelemetry } from "@norush/core";
+import postgres from 'postgres';
+import { createNorush, PostgresStore, migrate, ConsoleTelemetry } from '@norush/core';
 
 const sql = postgres(process.env.DATABASE_URL);
 
@@ -28,17 +28,17 @@ try {
 
   // Enqueue a batch of requests
   const prompts = [
-    "Summarise the key benefits of batch processing for LLM APIs.",
-    "Explain the difference between synchronous and asynchronous API calls.",
-    "What are the cost implications of using deferred processing?",
+    'Summarise the key benefits of batch processing for LLM APIs.',
+    'Explain the difference between synchronous and asynchronous API calls.',
+    'What are the cost implications of using deferred processing?',
   ];
 
   for (const content of prompts) {
     const request = await engine.enqueue({
-      provider: "claude",
-      model: "claude-sonnet-4-6",
+      provider: 'claude',
+      model: 'claude-sonnet-4-6',
       params: {
-        messages: [{ role: "user", content }],
+        messages: [{ role: 'user', content }],
         max_tokens: 1024,
       },
     });

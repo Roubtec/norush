@@ -11,17 +11,17 @@ on:
   workflow_dispatch:
     inputs:
       prompt:
-        description: "Prompt to send to the LLM"
+        description: 'Prompt to send to the LLM'
         required: true
         default: "Summarise today's top news in technology."
       provider:
-        description: "Provider (claude or openai)"
+        description: 'Provider (claude or openai)'
         required: true
-        default: "claude"
+        default: 'claude'
       model:
-        description: "Model name"
+        description: 'Model name'
         required: true
-        default: "claude-sonnet-4-6"
+        default: 'claude-sonnet-4-6'
 
 jobs:
   enqueue:
@@ -37,7 +37,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "24"
+          node-version: '24'
           cache: pnpm
 
       - name: Install dependencies

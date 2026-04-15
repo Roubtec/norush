@@ -1,21 +1,21 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from 'vitest';
 import {
   checkRateLimit,
   buildRateLimitHeaders,
   nextPeriodReset,
   DEFAULT_PERIOD_MS,
-} from "../../rate-limit/limiter.js";
-import type { SlidingWindow, UserLimits } from "../../types.js";
+} from '../../rate-limit/limiter.js';
+import type { SlidingWindow, UserLimits } from '../../types.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-const NOW = new Date("2025-06-01T12:00:00Z");
+const NOW = new Date('2025-06-01T12:00:00Z');
 
 function makeUserLimits(overrides: Partial<UserLimits> = {}): UserLimits {
   return {
-    userId: "user_01",
+    userId: 'user_01',
     maxRequestsPerHour: 100,
     maxTokensPerPeriod: 1_000_000,
     hardSpendLimitUsd: 50.0,
@@ -23,8 +23,8 @@ function makeUserLimits(overrides: Partial<UserLimits> = {}): UserLimits {
     currentPeriodTokens: 0,
     currentSpendUsd: 0,
     periodResetAt: new Date(NOW.getTime() + 1_800_000), // 30 min from now
-    createdAt: new Date("2025-01-01"),
-    updatedAt: new Date("2025-01-01"),
+    createdAt: new Date('2025-01-01'),
+    updatedAt: new Date('2025-01-01'),
     ...overrides,
   };
 }
@@ -38,41 +38,41 @@ const EMPTY_WINDOW: SlidingWindow = { total: 0, succeeded: 0, failed: 0 };
 // checkRateLimit
 // ---------------------------------------------------------------------------
 
-describe("checkRateLimit", () => {
-  describe("when no limits are configured", () => {
-    it("allows the request", () => {
+describe('checkRateLimit', () => {
+  describe('when no limits are configured', () => {
+    it('allows the request', () => {
       const result = checkRateLimit(null, HEALTHY_WINDOW, 1, NOW);
       expect(result.allowed).toBe(true);
     });
 
-    it("still computes health score", () => {
+    it('still computes health score', () => {
       const result = checkRateLimit(null, DEGRADED_WINDOW, 1, NOW);
-      expect(result.health?.reason).toBe("partial_failures");
+      expect(result.health?.reason).toBe('partial_failures');
     });
   });
 
-  describe("hard spend limit", () => {
-    it("rejects when cumulative spend reaches the limit", () => {
+  describe('hard spend limit', () => {
+    it('rejects when cumulative spend reaches the limit', () => {
       const limits = makeUserLimits({
         hardSpendLimitUsd: 50.0,
         currentSpendUsd: 50.0,
       });
       const result = checkRateLimit(limits, HEALTHY_WINDOW, 1, NOW);
       expect(result.allowed).toBe(false);
-      expect(result.reason).toBe("hard_spend_limit_exceeded");
+      expect(result.reason).toBe('hard_spend_limit_exceeded');
     });
 
-    it("rejects when cumulative spend exceeds the limit", () => {
+    it('rejects when cumulative spend exceeds the limit', () => {
       const limits = makeUserLimits({
         hardSpendLimitUsd: 50.0,
         currentSpendUsd: 75.0,
       });
       const result = checkRateLimit(limits, HEALTHY_WINDOW, 1, NOW);
       expect(result.allowed).toBe(false);
-      expect(result.reason).toBe("hard_spend_limit_exceeded");
+      expect(result.reason).toBe('hard_spend_limit_exceeded');
     });
 
-    it("allows when spend is below the limit", () => {
+    it('allows when spend is below the limit', () => {
       const limits = makeUserLimits({
         hardSpendLimitUsd: 50.0,
         currentSpendUsd: 49.99,
@@ -81,7 +81,7 @@ describe("checkRateLimit", () => {
       expect(result.allowed).toBe(true);
     });
 
-    it("allows when hard spend limit is null (unlimited)", () => {
+    it('allows when hard spend limit is null (unlimited)', () => {
       const limits = makeUserLimits({
         hardSpendLimitUsd: null,
         currentSpendUsd: 1_000_000,
@@ -91,8 +91,8 @@ describe("checkRateLimit", () => {
     });
   });
 
-  describe("request limit enforcement", () => {
-    it("allows when below the effective limit", () => {
+  describe('request limit enforcement', () => {
+    it('allows when below the effective limit', () => {
       const limits = makeUserLimits({
         maxRequestsPerHour: 100,
         currentPeriodRequests: 50,
@@ -101,27 +101,27 @@ describe("checkRateLimit", () => {
       expect(result.allowed).toBe(true);
     });
 
-    it("rejects when at the effective limit", () => {
+    it('rejects when at the effective limit', () => {
       const limits = makeUserLimits({
         maxRequestsPerHour: 100,
         currentPeriodRequests: 100,
       });
       const result = checkRateLimit(limits, HEALTHY_WINDOW, 1, NOW);
       expect(result.allowed).toBe(false);
-      expect(result.reason).toBe("request_limit_exceeded");
+      expect(result.reason).toBe('request_limit_exceeded');
     });
 
-    it("rejects when above the effective limit", () => {
+    it('rejects when above the effective limit', () => {
       const limits = makeUserLimits({
         maxRequestsPerHour: 100,
         currentPeriodRequests: 150,
       });
       const result = checkRateLimit(limits, HEALTHY_WINDOW, 1, NOW);
       expect(result.allowed).toBe(false);
-      expect(result.reason).toBe("request_limit_exceeded");
+      expect(result.reason).toBe('request_limit_exceeded');
     });
 
-    it("applies health factor to effective limit", () => {
+    it('applies health factor to effective limit', () => {
       // Degraded health (factor 0.5) -> effective limit = 50
       const limits = makeUserLimits({
         maxRequestsPerHour: 100,
@@ -129,11 +129,11 @@ describe("checkRateLimit", () => {
       });
       const result = checkRateLimit(limits, DEGRADED_WINDOW, 1, NOW);
       expect(result.allowed).toBe(false);
-      expect(result.reason).toBe("request_limit_exceeded");
+      expect(result.reason).toBe('request_limit_exceeded');
       expect(result.effectiveLimit).toBe(50);
     });
 
-    it("allows when below health-adjusted limit", () => {
+    it('allows when below health-adjusted limit', () => {
       const limits = makeUserLimits({
         maxRequestsPerHour: 100,
         currentPeriodRequests: 49,
@@ -143,7 +143,7 @@ describe("checkRateLimit", () => {
       expect(result.effectiveLimit).toBe(50);
     });
 
-    it("provides retry-after seconds", () => {
+    it('provides retry-after seconds', () => {
       const limits = makeUserLimits({
         maxRequestsPerHour: 100,
         currentPeriodRequests: 100,
@@ -154,7 +154,7 @@ describe("checkRateLimit", () => {
       expect(result.retryAfterSeconds).toBe(600);
     });
 
-    it("allows when max_requests_per_hour is null (unlimited)", () => {
+    it('allows when max_requests_per_hour is null (unlimited)', () => {
       const limits = makeUserLimits({
         maxRequestsPerHour: null,
         currentPeriodRequests: 999_999,
@@ -164,18 +164,18 @@ describe("checkRateLimit", () => {
     });
   });
 
-  describe("token limit enforcement", () => {
-    it("rejects when token limit is exceeded", () => {
+  describe('token limit enforcement', () => {
+    it('rejects when token limit is exceeded', () => {
       const limits = makeUserLimits({
         maxTokensPerPeriod: 1_000_000,
         currentPeriodTokens: 1_000_000,
       });
       const result = checkRateLimit(limits, HEALTHY_WINDOW, 1, NOW);
       expect(result.allowed).toBe(false);
-      expect(result.reason).toBe("token_limit_exceeded");
+      expect(result.reason).toBe('token_limit_exceeded');
     });
 
-    it("sets tokenLimit (not effectiveLimit) on token_limit_exceeded", () => {
+    it('sets tokenLimit (not effectiveLimit) on token_limit_exceeded', () => {
       const limits = makeUserLimits({
         maxTokensPerPeriod: 1_000_000,
         currentPeriodTokens: 1_000_000,
@@ -185,7 +185,7 @@ describe("checkRateLimit", () => {
       expect(result.effectiveLimit).toBeUndefined();
     });
 
-    it("allows when below token limit", () => {
+    it('allows when below token limit', () => {
       const limits = makeUserLimits({
         maxTokensPerPeriod: 1_000_000,
         currentPeriodTokens: 999_999,
@@ -194,7 +194,7 @@ describe("checkRateLimit", () => {
       expect(result.allowed).toBe(true);
     });
 
-    it("allows when token limit is null (unlimited)", () => {
+    it('allows when token limit is null (unlimited)', () => {
       const limits = makeUserLimits({
         maxTokensPerPeriod: null,
         currentPeriodTokens: 999_999_999,
@@ -204,8 +204,8 @@ describe("checkRateLimit", () => {
     });
   });
 
-  describe("period reset behavior", () => {
-    it("treats counters as 0 when period has expired", () => {
+  describe('period reset behavior', () => {
+    it('treats counters as 0 when period has expired', () => {
       const pastReset = new Date(NOW.getTime() - 1000); // 1 second ago
       const limits = makeUserLimits({
         maxRequestsPerHour: 100,
@@ -216,7 +216,7 @@ describe("checkRateLimit", () => {
       expect(result.allowed).toBe(true);
     });
 
-    it("treats token counters as 0 when period has expired", () => {
+    it('treats token counters as 0 when period has expired', () => {
       const pastReset = new Date(NOW.getTime() - 1000);
       const limits = makeUserLimits({
         maxTokensPerPeriod: 100,
@@ -228,8 +228,8 @@ describe("checkRateLimit", () => {
     });
   });
 
-  describe("minimum throughput guarantee at critical health", () => {
-    it("allows at least 1 request even at critical health", () => {
+  describe('minimum throughput guarantee at critical health', () => {
+    it('allows at least 1 request even at critical health', () => {
       const limits = makeUserLimits({
         maxRequestsPerHour: 100,
         currentPeriodRequests: 0,
@@ -240,7 +240,7 @@ describe("checkRateLimit", () => {
       expect(result.effectiveLimit).toBe(10);
     });
 
-    it("allows 1 request with small base limit at critical health", () => {
+    it('allows 1 request with small base limit at critical health', () => {
       const limits = makeUserLimits({
         maxRequestsPerHour: 5,
         currentPeriodRequests: 0,
@@ -251,7 +251,7 @@ describe("checkRateLimit", () => {
       expect(result.effectiveLimit).toBe(1);
     });
 
-    it("rejects only after minimum 1 request at critical", () => {
+    it('rejects only after minimum 1 request at critical', () => {
       const limits = makeUserLimits({
         maxRequestsPerHour: 5,
         currentPeriodRequests: 1,
@@ -263,21 +263,21 @@ describe("checkRateLimit", () => {
     });
   });
 
-  describe("empty window (no batch history)", () => {
-    it("uses healthy factor (1.0) when no batch data exists", () => {
+  describe('empty window (no batch history)', () => {
+    it('uses healthy factor (1.0) when no batch data exists', () => {
       const limits = makeUserLimits({
         maxRequestsPerHour: 100,
         currentPeriodRequests: 50,
       });
       const result = checkRateLimit(limits, EMPTY_WINDOW, 1, NOW);
       expect(result.allowed).toBe(true);
-      expect(result.health?.reason).toBe("healthy");
+      expect(result.health?.reason).toBe('healthy');
       expect(result.effectiveLimit).toBe(100);
     });
   });
 
-  describe("bulk submission count", () => {
-    it("rejects when bulk count would exceed the limit", () => {
+  describe('bulk submission count', () => {
+    it('rejects when bulk count would exceed the limit', () => {
       const limits = makeUserLimits({
         maxRequestsPerHour: 100,
         currentPeriodRequests: 98,
@@ -285,10 +285,10 @@ describe("checkRateLimit", () => {
       // 98 + 5 = 103 > 100 — reject
       const result = checkRateLimit(limits, HEALTHY_WINDOW, 5, NOW);
       expect(result.allowed).toBe(false);
-      expect(result.reason).toBe("request_limit_exceeded");
+      expect(result.reason).toBe('request_limit_exceeded');
     });
 
-    it("allows when bulk count fits within remaining capacity", () => {
+    it('allows when bulk count fits within remaining capacity', () => {
       const limits = makeUserLimits({
         maxRequestsPerHour: 100,
         currentPeriodRequests: 95,
@@ -298,7 +298,7 @@ describe("checkRateLimit", () => {
       expect(result.allowed).toBe(true);
     });
 
-    it("rejects single request at exactly the limit", () => {
+    it('rejects single request at exactly the limit', () => {
       const limits = makeUserLimits({
         maxRequestsPerHour: 100,
         currentPeriodRequests: 100,
@@ -309,22 +309,22 @@ describe("checkRateLimit", () => {
     });
   });
 
-  describe("periodExpired signal", () => {
-    it("returns periodExpired=true when period has passed", () => {
+  describe('periodExpired signal', () => {
+    it('returns periodExpired=true when period has passed', () => {
       const pastReset = new Date(NOW.getTime() - 1000);
       const limits = makeUserLimits({ periodResetAt: pastReset });
       const result = checkRateLimit(limits, HEALTHY_WINDOW, 1, NOW);
       expect(result.periodExpired).toBe(true);
     });
 
-    it("returns periodExpired=false when period is still active", () => {
+    it('returns periodExpired=false when period is still active', () => {
       const futureReset = new Date(NOW.getTime() + 1000);
       const limits = makeUserLimits({ periodResetAt: futureReset });
       const result = checkRateLimit(limits, HEALTHY_WINDOW, 1, NOW);
       expect(result.periodExpired).toBe(false);
     });
 
-    it("still returns periodExpired when request is rejected by spend limit", () => {
+    it('still returns periodExpired when request is rejected by spend limit', () => {
       const pastReset = new Date(NOW.getTime() - 1000);
       const limits = makeUserLimits({
         hardSpendLimitUsd: 10,
@@ -334,7 +334,7 @@ describe("checkRateLimit", () => {
       // spend limit rejection happens before period check
       const result = checkRateLimit(limits, HEALTHY_WINDOW, 1, NOW);
       expect(result.allowed).toBe(false);
-      expect(result.reason).toBe("hard_spend_limit_exceeded");
+      expect(result.reason).toBe('hard_spend_limit_exceeded');
       // periodExpired not set for spend limit (period doesn't affect spend)
       expect(result.periodExpired).toBeUndefined();
     });
@@ -345,58 +345,58 @@ describe("checkRateLimit", () => {
 // buildRateLimitHeaders
 // ---------------------------------------------------------------------------
 
-describe("buildRateLimitHeaders", () => {
-  it("includes request limit headers when rate limited on requests", () => {
+describe('buildRateLimitHeaders', () => {
+  it('includes request limit headers when rate limited on requests', () => {
     const headers = buildRateLimitHeaders({
       allowed: false,
-      reason: "request_limit_exceeded",
+      reason: 'request_limit_exceeded',
       retryAfterSeconds: 600,
-      health: { factor: 0.5, reason: "partial_failures" },
+      health: { factor: 0.5, reason: 'partial_failures' },
       effectiveLimit: 50,
     });
-    expect(headers["Retry-After"]).toBe("600");
-    expect(headers["X-Norush-Health"]).toBe("partial_failures");
-    expect(headers["X-Norush-Effective-Limit"]).toBe("50");
-    expect(headers["X-Norush-Token-Limit"]).toBeUndefined();
+    expect(headers['Retry-After']).toBe('600');
+    expect(headers['X-Norush-Health']).toBe('partial_failures');
+    expect(headers['X-Norush-Effective-Limit']).toBe('50');
+    expect(headers['X-Norush-Token-Limit']).toBeUndefined();
   });
 
-  it("includes X-Norush-Token-Limit when token limit exceeded", () => {
+  it('includes X-Norush-Token-Limit when token limit exceeded', () => {
     const headers = buildRateLimitHeaders({
       allowed: false,
-      reason: "token_limit_exceeded",
+      reason: 'token_limit_exceeded',
       retryAfterSeconds: 300,
-      health: { factor: 1.0, reason: "healthy" },
+      health: { factor: 1.0, reason: 'healthy' },
       tokenLimit: 1_000_000,
     });
-    expect(headers["Retry-After"]).toBe("300");
-    expect(headers["X-Norush-Health"]).toBe("healthy");
-    expect(headers["X-Norush-Token-Limit"]).toBe("1000000");
-    expect(headers["X-Norush-Effective-Limit"]).toBeUndefined();
+    expect(headers['Retry-After']).toBe('300');
+    expect(headers['X-Norush-Health']).toBe('healthy');
+    expect(headers['X-Norush-Token-Limit']).toBe('1000000');
+    expect(headers['X-Norush-Effective-Limit']).toBeUndefined();
   });
 
-  it("omits Retry-After for hard_spend_limit_exceeded (no reset time)", () => {
+  it('omits Retry-After for hard_spend_limit_exceeded (no reset time)', () => {
     const headers = buildRateLimitHeaders({
       allowed: false,
-      reason: "hard_spend_limit_exceeded",
-      health: { factor: 1.0, reason: "healthy" },
+      reason: 'hard_spend_limit_exceeded',
+      health: { factor: 1.0, reason: 'healthy' },
       effectiveLimit: 0,
     });
-    expect(headers["Retry-After"]).toBeUndefined();
-    expect(headers["X-Norush-Health"]).toBe("healthy");
+    expect(headers['Retry-After']).toBeUndefined();
+    expect(headers['X-Norush-Health']).toBe('healthy');
   });
 
-  it("omits Retry-After when not present", () => {
+  it('omits Retry-After when not present', () => {
     const headers = buildRateLimitHeaders({
       allowed: true,
-      health: { factor: 1.0, reason: "healthy" },
+      health: { factor: 1.0, reason: 'healthy' },
       effectiveLimit: 100,
     });
-    expect(headers["Retry-After"]).toBeUndefined();
-    expect(headers["X-Norush-Health"]).toBe("healthy");
-    expect(headers["X-Norush-Effective-Limit"]).toBe("100");
+    expect(headers['Retry-After']).toBeUndefined();
+    expect(headers['X-Norush-Health']).toBe('healthy');
+    expect(headers['X-Norush-Effective-Limit']).toBe('100');
   });
 
-  it("handles minimal result", () => {
+  it('handles minimal result', () => {
     const headers = buildRateLimitHeaders({ allowed: true });
     expect(Object.keys(headers)).toHaveLength(0);
   });
@@ -406,8 +406,8 @@ describe("buildRateLimitHeaders", () => {
 // nextPeriodReset
 // ---------------------------------------------------------------------------
 
-describe("nextPeriodReset", () => {
-  it("returns a date 1 hour from now", () => {
+describe('nextPeriodReset', () => {
+  it('returns a date 1 hour from now', () => {
     const reset = nextPeriodReset(NOW);
     expect(reset.getTime()).toBe(NOW.getTime() + DEFAULT_PERIOD_MS);
   });

@@ -9,8 +9,8 @@
  *   DATABASE_URL=postgres://... ANTHROPIC_API_KEY=sk-ant-... node tick.js
  */
 
-import postgres from "postgres";
-import { createNorush, PostgresStore, migrate, ConsoleTelemetry } from "@norush/core";
+import postgres from 'postgres';
+import { createNorush, PostgresStore, migrate, ConsoleTelemetry } from '@norush/core';
 
 const sql = postgres(process.env.DATABASE_URL);
 
@@ -35,18 +35,18 @@ try {
   });
 
   // Listen for events during this tick
-  engine.on("batch:completed", (data) => {
+  engine.on('batch:completed', (data) => {
     console.log(`Batch completed: ${data.batchId}`);
   });
 
-  engine.on("delivery:success", (data) => {
+  engine.on('delivery:success', (data) => {
     console.log(`Delivered result for request: ${data.requestId}`);
   });
 
   // Run one processing cycle
-  console.log("Running tick...");
+  console.log('Running tick...');
   await engine.tick();
-  console.log("Tick complete.");
+  console.log('Tick complete.');
 } finally {
   await sql.end();
 }

@@ -1,9 +1,4 @@
-import type {
-  BatchStatus,
-  NorushRequest,
-  NorushResult,
-  ProviderBatchRef,
-} from "../types.js";
+import type { BatchStatus, NorushRequest, NorushResult, ProviderBatchRef } from '../types.js';
 
 /**
  * Provider adapter interface.

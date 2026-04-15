@@ -1,18 +1,18 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { PollContext } from "../../types.js";
-import { clampInterval, MAX_INTERVAL_MS, MIN_INTERVAL_MS } from "../../polling/clamp.js";
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { PollContext } from '../../types.js';
+import { clampInterval, MAX_INTERVAL_MS, MIN_INTERVAL_MS } from '../../polling/clamp.js';
 import {
   BackoffStrategy,
   DeadlineAwareStrategy,
   EagerStrategy,
   LinearStrategy,
-} from "../../polling/strategies.js";
+} from '../../polling/strategies.js';
 import {
   getClampedStrategy,
   getStrategy,
   isPollingPreset,
   withClamping,
-} from "../../polling/index.js";
+} from '../../polling/index.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -22,8 +22,8 @@ import {
 function makePollContext(overrides: Partial<PollContext> = {}): PollContext {
   const now = Date.now();
   return {
-    batchId: "test-batch-001",
-    provider: "claude",
+    batchId: 'test-batch-001',
+    provider: 'claude',
     submittedAt: new Date(now - 60_000), // 1 minute ago
     lastPolledAt: null,
     pollCount: 0,
@@ -36,40 +36,38 @@ function makePollContext(overrides: Partial<PollContext> = {}): PollContext {
 // Clamping
 // ---------------------------------------------------------------------------
 
-describe("clampInterval", () => {
-  it("returns the value unchanged when within range", () => {
+describe('clampInterval', () => {
+  it('returns the value unchanged when within range', () => {
     expect(clampInterval(60_000)).toBe(60_000);
   });
 
-  it("clamps below minimum to MIN_INTERVAL_MS (10s)", () => {
+  it('clamps below minimum to MIN_INTERVAL_MS (10s)', () => {
     expect(clampInterval(0)).toBe(MIN_INTERVAL_MS);
     expect(clampInterval(5_000)).toBe(MIN_INTERVAL_MS);
     expect(clampInterval(-1)).toBe(MIN_INTERVAL_MS);
   });
 
-  it("clamps above maximum to MAX_INTERVAL_MS (15min)", () => {
+  it('clamps above maximum to MAX_INTERVAL_MS (15min)', () => {
     expect(clampInterval(1_000_000)).toBe(MAX_INTERVAL_MS);
     expect(clampInterval(999_999_999)).toBe(MAX_INTERVAL_MS);
   });
 
-  it("returns exact boundary values", () => {
+  it('returns exact boundary values', () => {
     expect(clampInterval(MIN_INTERVAL_MS)).toBe(MIN_INTERVAL_MS);
     expect(clampInterval(MAX_INTERVAL_MS)).toBe(MAX_INTERVAL_MS);
   });
 
-  it("has MIN_INTERVAL_MS = 10_000 and MAX_INTERVAL_MS = 900_000", () => {
+  it('has MIN_INTERVAL_MS = 10_000 and MAX_INTERVAL_MS = 900_000', () => {
     expect(MIN_INTERVAL_MS).toBe(10_000);
     expect(MAX_INTERVAL_MS).toBe(900_000);
   });
 
-  it("throws RangeError for NaN", () => {
+  it('throws RangeError for NaN', () => {
     expect(() => clampInterval(NaN)).toThrow(RangeError);
-    expect(() => clampInterval(NaN)).toThrow(
-      "Polling interval must be a finite number, got: NaN",
-    );
+    expect(() => clampInterval(NaN)).toThrow('Polling interval must be a finite number, got: NaN');
   });
 
-  it("throws RangeError for Infinity", () => {
+  it('throws RangeError for Infinity', () => {
     expect(() => clampInterval(Infinity)).toThrow(RangeError);
     expect(() => clampInterval(-Infinity)).toThrow(RangeError);
   });
@@ -79,27 +77,27 @@ describe("clampInterval", () => {
 // LinearStrategy
 // ---------------------------------------------------------------------------
 
-describe("LinearStrategy", () => {
-  it("returns the default interval (60s) when constructed without args", () => {
+describe('LinearStrategy', () => {
+  it('returns the default interval (60s) when constructed without args', () => {
     const strategy = new LinearStrategy();
     const ctx = makePollContext();
     expect(strategy.nextInterval(ctx)).toBe(60_000);
   });
 
-  it("returns the configured interval", () => {
+  it('returns the configured interval', () => {
     const strategy = new LinearStrategy(45_000);
     const ctx = makePollContext();
     expect(strategy.nextInterval(ctx)).toBe(45_000);
   });
 
-  it("returns the same interval regardless of poll count", () => {
+  it('returns the same interval regardless of poll count', () => {
     const strategy = new LinearStrategy(30_000);
     expect(strategy.nextInterval(makePollContext({ pollCount: 0 }))).toBe(30_000);
     expect(strategy.nextInterval(makePollContext({ pollCount: 5 }))).toBe(30_000);
     expect(strategy.nextInterval(makePollContext({ pollCount: 100 }))).toBe(30_000);
   });
 
-  it("is a pure function of context — no internal state mutation", () => {
+  it('is a pure function of context — no internal state mutation', () => {
     const strategy = new LinearStrategy();
     const ctx = makePollContext();
     const first = strategy.nextInterval(ctx);
@@ -112,15 +110,15 @@ describe("LinearStrategy", () => {
 // BackoffStrategy
 // ---------------------------------------------------------------------------
 
-describe("BackoffStrategy", () => {
-  it("starts at 30s on first poll", () => {
+describe('BackoffStrategy', () => {
+  it('starts at 30s on first poll', () => {
     const strategy = new BackoffStrategy();
     const ctx = makePollContext({ pollCount: 0 });
     // 30_000 * 2^0 = 30_000
     expect(strategy.nextInterval(ctx)).toBe(30_000);
   });
 
-  it("doubles each subsequent poll", () => {
+  it('doubles each subsequent poll', () => {
     const strategy = new BackoffStrategy();
     expect(strategy.nextInterval(makePollContext({ pollCount: 0 }))).toBe(30_000);
     expect(strategy.nextInterval(makePollContext({ pollCount: 1 }))).toBe(60_000);
@@ -129,7 +127,7 @@ describe("BackoffStrategy", () => {
     expect(strategy.nextInterval(makePollContext({ pollCount: 4 }))).toBe(480_000);
   });
 
-  it("caps at 600_000 (10 minutes)", () => {
+  it('caps at 600_000 (10 minutes)', () => {
     const strategy = new BackoffStrategy();
     // 30_000 * 2^5 = 960_000 > 600_000
     expect(strategy.nextInterval(makePollContext({ pollCount: 5 }))).toBe(600_000);
@@ -137,7 +135,7 @@ describe("BackoffStrategy", () => {
     expect(strategy.nextInterval(makePollContext({ pollCount: 100 }))).toBe(600_000);
   });
 
-  it("accepts custom base and cap", () => {
+  it('accepts custom base and cap', () => {
     const strategy = new BackoffStrategy(10_000, 100_000);
     expect(strategy.nextInterval(makePollContext({ pollCount: 0 }))).toBe(10_000);
     expect(strategy.nextInterval(makePollContext({ pollCount: 1 }))).toBe(20_000);
@@ -152,7 +150,7 @@ describe("BackoffStrategy", () => {
 // DeadlineAwareStrategy
 // ---------------------------------------------------------------------------
 
-describe("DeadlineAwareStrategy", () => {
+describe('DeadlineAwareStrategy', () => {
   beforeEach(() => {
     vi.useFakeTimers();
   });
@@ -161,7 +159,7 @@ describe("DeadlineAwareStrategy", () => {
     vi.useRealTimers();
   });
 
-  it("returns near-max interval when mostly time remaining", () => {
+  it('returns near-max interval when mostly time remaining', () => {
     const now = Date.now();
     vi.setSystemTime(now);
 
@@ -177,7 +175,7 @@ describe("DeadlineAwareStrategy", () => {
     expect(interval).toBeLessThanOrEqual(300_000);
   });
 
-  it("returns near-min interval when close to deadline", () => {
+  it('returns near-min interval when close to deadline', () => {
     const now = Date.now();
     vi.setSystemTime(now);
 
@@ -193,28 +191,24 @@ describe("DeadlineAwareStrategy", () => {
     expect(interval).toBeGreaterThanOrEqual(15_000);
   });
 
-  it("accelerates as deadline approaches", () => {
+  it('accelerates as deadline approaches', () => {
     const strategy = new DeadlineAwareStrategy();
     const submittedAt = new Date(0);
     const expiresAt = new Date(100_000); // 100s window
 
     // At 25% through the window (25s elapsed)
     vi.setSystemTime(25_000);
-    const interval25 = strategy.nextInterval(
-      makePollContext({ submittedAt, expiresAt }),
-    );
+    const interval25 = strategy.nextInterval(makePollContext({ submittedAt, expiresAt }));
 
     // At 75% through the window (75s elapsed)
     vi.setSystemTime(75_000);
-    const interval75 = strategy.nextInterval(
-      makePollContext({ submittedAt, expiresAt }),
-    );
+    const interval75 = strategy.nextInterval(makePollContext({ submittedAt, expiresAt }));
 
     // Later in the window should have a shorter interval
     expect(interval75).toBeLessThan(interval25);
   });
 
-  it("returns min interval when already past deadline", () => {
+  it('returns min interval when already past deadline', () => {
     const now = Date.now();
     vi.setSystemTime(now);
 
@@ -228,7 +222,7 @@ describe("DeadlineAwareStrategy", () => {
     expect(interval).toBe(15_000);
   });
 
-  it("returns min interval when expiresAt equals submittedAt (zero window)", () => {
+  it('returns min interval when expiresAt equals submittedAt (zero window)', () => {
     const now = Date.now();
     vi.setSystemTime(now);
 
@@ -241,16 +235,14 @@ describe("DeadlineAwareStrategy", () => {
     expect(strategy.nextInterval(ctx)).toBe(15_000);
   });
 
-  it("returns exactly halfway between min and max at 50% remaining", () => {
+  it('returns exactly halfway between min and max at 50% remaining', () => {
     const strategy = new DeadlineAwareStrategy(10_000, 310_000);
     const submittedAt = new Date(0);
     const expiresAt = new Date(100_000);
 
     // At exactly 50% through -> 50% remaining
     vi.setSystemTime(50_000);
-    const interval = strategy.nextInterval(
-      makePollContext({ submittedAt, expiresAt }),
-    );
+    const interval = strategy.nextInterval(makePollContext({ submittedAt, expiresAt }));
 
     // 10_000 + 0.5 * (310_000 - 10_000) = 10_000 + 150_000 = 160_000
     expect(interval).toBe(160_000);
@@ -261,7 +253,7 @@ describe("DeadlineAwareStrategy", () => {
 // EagerStrategy
 // ---------------------------------------------------------------------------
 
-describe("EagerStrategy", () => {
+describe('EagerStrategy', () => {
   beforeEach(() => {
     vi.useFakeTimers();
   });
@@ -270,7 +262,7 @@ describe("EagerStrategy", () => {
     vi.useRealTimers();
   });
 
-  it("returns 15s during the first 5 minutes", () => {
+  it('returns 15s during the first 5 minutes', () => {
     const now = Date.now();
     vi.setSystemTime(now);
 
@@ -283,7 +275,7 @@ describe("EagerStrategy", () => {
     expect(strategy.nextInterval(ctx)).toBe(15_000);
   });
 
-  it("returns 15s at 4 minutes 59 seconds", () => {
+  it('returns 15s at 4 minutes 59 seconds', () => {
     const now = Date.now();
     const submittedAt = new Date(now);
 
@@ -296,7 +288,7 @@ describe("EagerStrategy", () => {
     expect(strategy.nextInterval(ctx)).toBe(15_000);
   });
 
-  it("falls back to backoff after 5 minutes", () => {
+  it('falls back to backoff after 5 minutes', () => {
     const now = Date.now();
     const submittedAt = new Date(now);
 
@@ -310,7 +302,7 @@ describe("EagerStrategy", () => {
     expect(strategy.nextInterval(ctx)).toBe(30_000);
   });
 
-  it("uses backoff doubling after eager window ends", () => {
+  it('uses backoff doubling after eager window ends', () => {
     const now = Date.now();
     const submittedAt = new Date(now);
 
@@ -319,12 +311,10 @@ describe("EagerStrategy", () => {
     const strategy = new EagerStrategy();
 
     // pollCount=3: 30_000 * 2^3 = 240_000
-    expect(
-      strategy.nextInterval(makePollContext({ submittedAt, pollCount: 3 })),
-    ).toBe(240_000);
+    expect(strategy.nextInterval(makePollContext({ submittedAt, pollCount: 3 }))).toBe(240_000);
   });
 
-  it("caps backoff at 600_000 after eager window", () => {
+  it('caps backoff at 600_000 after eager window', () => {
     const now = Date.now();
     const submittedAt = new Date(now);
 
@@ -332,9 +322,7 @@ describe("EagerStrategy", () => {
 
     const strategy = new EagerStrategy();
 
-    expect(
-      strategy.nextInterval(makePollContext({ submittedAt, pollCount: 10 })),
-    ).toBe(600_000);
+    expect(strategy.nextInterval(makePollContext({ submittedAt, pollCount: 10 }))).toBe(600_000);
   });
 });
 
@@ -342,59 +330,57 @@ describe("EagerStrategy", () => {
 // Registry / Factory
 // ---------------------------------------------------------------------------
 
-describe("getStrategy", () => {
+describe('getStrategy', () => {
   it("resolves 'linear' to a LinearStrategy", () => {
-    const strategy = getStrategy("linear");
+    const strategy = getStrategy('linear');
     expect(strategy).toBeInstanceOf(LinearStrategy);
   });
 
   it("resolves 'backoff' to a BackoffStrategy", () => {
-    const strategy = getStrategy("backoff");
+    const strategy = getStrategy('backoff');
     expect(strategy).toBeInstanceOf(BackoffStrategy);
   });
 
   it("resolves 'deadline-aware' to a DeadlineAwareStrategy", () => {
-    const strategy = getStrategy("deadline-aware");
+    const strategy = getStrategy('deadline-aware');
     expect(strategy).toBeInstanceOf(DeadlineAwareStrategy);
   });
 
   it("resolves 'eager' to a EagerStrategy", () => {
-    const strategy = getStrategy("eager");
+    const strategy = getStrategy('eager');
     expect(strategy).toBeInstanceOf(EagerStrategy);
   });
 
-  it("throws for unknown preset names", () => {
-    expect(() => getStrategy("unknown")).toThrow(
-      'Unknown polling strategy "unknown"',
-    );
+  it('throws for unknown preset names', () => {
+    expect(() => getStrategy('unknown')).toThrow('Unknown polling strategy "unknown"');
   });
 
-  it("returns a new instance on each call", () => {
-    const a = getStrategy("linear");
-    const b = getStrategy("linear");
+  it('returns a new instance on each call', () => {
+    const a = getStrategy('linear');
+    const b = getStrategy('linear');
     expect(a).not.toBe(b);
   });
 });
 
-describe("isPollingPreset", () => {
-  it("returns true for known presets", () => {
-    expect(isPollingPreset("linear")).toBe(true);
-    expect(isPollingPreset("backoff")).toBe(true);
-    expect(isPollingPreset("deadline-aware")).toBe(true);
-    expect(isPollingPreset("eager")).toBe(true);
+describe('isPollingPreset', () => {
+  it('returns true for known presets', () => {
+    expect(isPollingPreset('linear')).toBe(true);
+    expect(isPollingPreset('backoff')).toBe(true);
+    expect(isPollingPreset('deadline-aware')).toBe(true);
+    expect(isPollingPreset('eager')).toBe(true);
   });
 
-  it("returns false for unknown names", () => {
-    expect(isPollingPreset("unknown")).toBe(false);
-    expect(isPollingPreset("")).toBe(false);
-    expect(isPollingPreset("LINEAR")).toBe(false);
+  it('returns false for unknown names', () => {
+    expect(isPollingPreset('unknown')).toBe(false);
+    expect(isPollingPreset('')).toBe(false);
+    expect(isPollingPreset('LINEAR')).toBe(false);
   });
 
-  it("returns false for prototype-chain keys (regression: prototype pollution)", () => {
-    expect(isPollingPreset("__proto__")).toBe(false);
-    expect(isPollingPreset("toString")).toBe(false);
-    expect(isPollingPreset("constructor")).toBe(false);
-    expect(isPollingPreset("hasOwnProperty")).toBe(false);
+  it('returns false for prototype-chain keys (regression: prototype pollution)', () => {
+    expect(isPollingPreset('__proto__')).toBe(false);
+    expect(isPollingPreset('toString')).toBe(false);
+    expect(isPollingPreset('constructor')).toBe(false);
+    expect(isPollingPreset('hasOwnProperty')).toBe(false);
   });
 });
 
@@ -402,26 +388,26 @@ describe("isPollingPreset", () => {
 // withClamping wrapper
 // ---------------------------------------------------------------------------
 
-describe("withClamping", () => {
-  it("clamps a strategy that returns below minimum", () => {
+describe('withClamping', () => {
+  it('clamps a strategy that returns below minimum', () => {
     const tooFast = { nextInterval: () => 1_000 };
     const clamped = withClamping(tooFast);
     expect(clamped.nextInterval(makePollContext())).toBe(MIN_INTERVAL_MS);
   });
 
-  it("clamps a strategy that returns above maximum", () => {
+  it('clamps a strategy that returns above maximum', () => {
     const tooSlow = { nextInterval: () => 2_000_000 };
     const clamped = withClamping(tooSlow);
     expect(clamped.nextInterval(makePollContext())).toBe(MAX_INTERVAL_MS);
   });
 
-  it("passes through values within range", () => {
+  it('passes through values within range', () => {
     const normal = { nextInterval: () => 60_000 };
     const clamped = withClamping(normal);
     expect(clamped.nextInterval(makePollContext())).toBe(60_000);
   });
 
-  it("delegates to the wrapped strategy with the correct context", () => {
+  it('delegates to the wrapped strategy with the correct context', () => {
     const spy = { nextInterval: vi.fn().mockReturnValue(30_000) };
     const clamped = withClamping(spy);
     const ctx = makePollContext({ pollCount: 7 });
@@ -437,22 +423,20 @@ describe("withClamping", () => {
 // getClampedStrategy
 // ---------------------------------------------------------------------------
 
-describe("getClampedStrategy", () => {
-  it("returns a clamped strategy for a valid preset", () => {
-    const strategy = getClampedStrategy("linear");
+describe('getClampedStrategy', () => {
+  it('returns a clamped strategy for a valid preset', () => {
+    const strategy = getClampedStrategy('linear');
     const ctx = makePollContext();
     // Linear defaults to 60_000 which is within clamp range
     expect(strategy.nextInterval(ctx)).toBe(60_000);
   });
 
-  it("throws for unknown preset names", () => {
-    expect(() => getClampedStrategy("nope")).toThrow(
-      'Unknown polling strategy "nope"',
-    );
+  it('throws for unknown preset names', () => {
+    expect(() => getClampedStrategy('nope')).toThrow('Unknown polling strategy "nope"');
   });
 
-  it("clamps backoff at high poll counts to MAX_INTERVAL_MS", () => {
-    const strategy = getClampedStrategy("backoff");
+  it('clamps backoff at high poll counts to MAX_INTERVAL_MS', () => {
+    const strategy = getClampedStrategy('backoff');
     // At pollCount=100, raw backoff would be astronomically large, capped first
     // at 600_000 by the strategy itself, which is within clamp range.
     const ctx = makePollContext({ pollCount: 100 });

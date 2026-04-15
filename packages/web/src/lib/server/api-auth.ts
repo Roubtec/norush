@@ -10,15 +10,15 @@
  *   // caller is { userId, tokenId } on success, or null on failure.
  */
 
-import { createHash, randomBytes } from "node:crypto";
-import type postgres from "postgres";
-import { ulid } from "ulidx";
+import { createHash, randomBytes } from 'node:crypto';
+import type postgres from 'postgres';
+import { ulid } from 'ulidx';
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
-const TOKEN_PREFIX = "nrsh_";
+const TOKEN_PREFIX = 'nrsh_';
 const TOKEN_BYTES = 32;
 
 // ---------------------------------------------------------------------------
@@ -57,12 +57,12 @@ export interface ApiTokenRecord {
 
 /** Generate a new raw API token string. */
 export function generateToken(): string {
-  return TOKEN_PREFIX + randomBytes(TOKEN_BYTES).toString("hex");
+  return TOKEN_PREFIX + randomBytes(TOKEN_BYTES).toString('hex');
 }
 
 /** Hash a raw token for storage comparison. */
 export function hashToken(token: string): string {
-  return createHash("sha256").update(token).digest("hex");
+  return createHash('sha256').update(token).digest('hex');
 }
 
 /** Extract the display prefix from a raw token. */
@@ -127,8 +127,8 @@ export async function validateApiToken(
  */
 export function extractBearerToken(authHeader: string | null): string | null {
   if (!authHeader) return null;
-  const parts = authHeader.split(" ");
-  if (parts.length !== 2 || parts[0].toLowerCase() !== "bearer") return null;
+  const parts = authHeader.split(' ');
+  if (parts.length !== 2 || parts[0].toLowerCase() !== 'bearer') return null;
   return parts[1];
 }
 
@@ -160,7 +160,7 @@ export async function authenticateApiRequest(
 export async function createApiToken(
   sql: postgres.Sql,
   userId: string,
-  label = "default",
+  label = 'default',
 ): Promise<CreatedToken> {
   const id = ulid();
   const rawToken = generateToken();
@@ -184,10 +184,7 @@ export async function createApiToken(
 /**
  * List all API tokens for a user (no plaintext).
  */
-export async function listApiTokens(
-  sql: postgres.Sql,
-  userId: string,
-): Promise<ApiTokenRecord[]> {
+export async function listApiTokens(sql: postgres.Sql, userId: string): Promise<ApiTokenRecord[]> {
   const rows = await sql`
     SELECT id, label, token_prefix, last_used_at, expires_at, revoked_at, created_at
     FROM api_tokens

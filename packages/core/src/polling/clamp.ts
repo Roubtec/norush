@@ -19,9 +19,7 @@ export const MAX_INTERVAL_MS = 900_000;
  */
 export function clampInterval(intervalMs: number): number {
   if (!Number.isFinite(intervalMs)) {
-    throw new RangeError(
-      `Polling interval must be a finite number, got: ${intervalMs}`,
-    );
+    throw new RangeError(`Polling interval must be a finite number, got: ${intervalMs}`);
   }
   return Math.max(MIN_INTERVAL_MS, Math.min(MAX_INTERVAL_MS, intervalMs));
 }

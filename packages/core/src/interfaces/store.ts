@@ -16,7 +16,7 @@ import type {
   UsageStats,
   UserLimits,
   UserLimitsInput,
-} from "../types.js";
+} from '../types.js';
 
 /**
  * The subset of Result fields that may be mutated after creation.
@@ -26,7 +26,7 @@ import type {
  * accidentally overwrite them via `updateResult()`.
  */
 export interface ResultDeliveryUpdate {
-  deliveryStatus?: Result["deliveryStatus"];
+  deliveryStatus?: Result['deliveryStatus'];
   deliveryAttempts?: number;
   maxDeliveryAttempts?: number;
   lastDeliveryError?: string | null;
@@ -60,11 +60,7 @@ export interface Store {
    * Atomically assign a batch to multiple requests and mark them as 'batched'.
    * More efficient than calling `updateRequest()` for each request individually.
    */
-  assignBatchToRequests(
-    ids: NorushId[],
-    batchId: BatchId,
-    status: "batched",
-  ): Promise<void>;
+  assignBatchToRequests(ids: NorushId[], batchId: BatchId, status: 'batched'): Promise<void>;
 
   // -- API key lookup -------------------------------------------------------
 
@@ -175,11 +171,7 @@ export interface Store {
    * @throws if `count` is not a positive integer or `effectiveLimit` is not
    *   a non-negative integer.
    */
-  consumePeriodRequests(
-    userId: string,
-    count: number,
-    effectiveLimit: number,
-  ): Promise<boolean>;
+  consumePeriodRequests(userId: string, count: number, effectiveLimit: number): Promise<boolean>;
 
   /** Increment the user's period token counter by `count`. */
   incrementPeriodTokens(userId: string, count: number): Promise<void>;

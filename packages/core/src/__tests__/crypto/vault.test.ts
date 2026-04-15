@@ -5,9 +5,9 @@
  * empty/malformed input rejection, and masking utility.
  */
 
-import { describe, it, expect } from "vitest";
-import { randomBytes } from "node:crypto";
-import { encrypt, decrypt, deriveKey, maskApiKey } from "../../crypto/vault.js";
+import { describe, it, expect } from 'vitest';
+import { randomBytes } from 'node:crypto';
+import { encrypt, decrypt, deriveKey, maskApiKey } from '../../crypto/vault.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -22,35 +22,35 @@ function testKey(): Buffer {
 // deriveKey
 // ---------------------------------------------------------------------------
 
-describe("deriveKey", () => {
-  it("decodes a 64-char hex string directly as 32 bytes", async () => {
-    const hex = "a".repeat(64);
+describe('deriveKey', () => {
+  it('decodes a 64-char hex string directly as 32 bytes', async () => {
+    const hex = 'a'.repeat(64);
     const key = await deriveKey(hex);
     expect(key).toBeInstanceOf(Buffer);
     expect(key.length).toBe(32);
-    expect(key.toString("hex")).toBe(hex);
+    expect(key.toString('hex')).toBe(hex);
   });
 
-  it("derives a 32-byte key from a passphrase via HKDF", async () => {
-    const key = await deriveKey("my-secret-passphrase");
+  it('derives a 32-byte key from a passphrase via HKDF', async () => {
+    const key = await deriveKey('my-secret-passphrase');
     expect(key).toBeInstanceOf(Buffer);
     expect(key.length).toBe(32);
   });
 
-  it("produces the same key for the same passphrase (deterministic)", async () => {
-    const k1 = await deriveKey("repeat-me");
-    const k2 = await deriveKey("repeat-me");
+  it('produces the same key for the same passphrase (deterministic)', async () => {
+    const k1 = await deriveKey('repeat-me');
+    const k2 = await deriveKey('repeat-me');
     expect(k1.equals(k2)).toBe(true);
   });
 
-  it("produces different keys for different passphrases", async () => {
-    const k1 = await deriveKey("passphrase-one");
-    const k2 = await deriveKey("passphrase-two");
+  it('produces different keys for different passphrases', async () => {
+    const k1 = await deriveKey('passphrase-one');
+    const k2 = await deriveKey('passphrase-two');
     expect(k1.equals(k2)).toBe(false);
   });
 
-  it("throws on empty master key", async () => {
-    await expect(deriveKey("")).rejects.toThrow("Master key must not be empty");
+  it('throws on empty master key', async () => {
+    await expect(deriveKey('')).rejects.toThrow('Master key must not be empty');
   });
 });
 
@@ -58,41 +58,41 @@ describe("deriveKey", () => {
 // encrypt / decrypt round-trip
 // ---------------------------------------------------------------------------
 
-describe("encrypt + decrypt round-trip", () => {
-  it("recovers the original plaintext", () => {
+describe('encrypt + decrypt round-trip', () => {
+  it('recovers the original plaintext', () => {
     const key = testKey();
-    const plaintext = "sk-ant-api03-abcdef1234567890";
+    const plaintext = 'sk-ant-api03-abcdef1234567890';
     const { blob } = encrypt(plaintext, key);
     const recovered = decrypt(blob, key);
     expect(recovered).toBe(plaintext);
   });
 
-  it("works with unicode content", () => {
+  it('works with unicode content', () => {
     const key = testKey();
-    const plaintext = "key-with-unicode-\u00e9\u00e8\u00ea-\u{1F511}";
+    const plaintext = 'key-with-unicode-\u00e9\u00e8\u00ea-\u{1F511}';
     const { blob } = encrypt(plaintext, key);
     const recovered = decrypt(blob, key);
     expect(recovered).toBe(plaintext);
   });
 
-  it("works with a very long key string", () => {
+  it('works with a very long key string', () => {
     const key = testKey();
-    const plaintext = "x".repeat(10_000);
+    const plaintext = 'x'.repeat(10_000);
     const { blob } = encrypt(plaintext, key);
     expect(decrypt(blob, key)).toBe(plaintext);
   });
 
-  it("works end-to-end with deriveKey from hex", async () => {
-    const hex = randomBytes(32).toString("hex");
+  it('works end-to-end with deriveKey from hex', async () => {
+    const hex = randomBytes(32).toString('hex');
     const key = await deriveKey(hex);
-    const plaintext = "sk-proj-abcdef";
+    const plaintext = 'sk-proj-abcdef';
     const { blob } = encrypt(plaintext, key);
     expect(decrypt(blob, key)).toBe(plaintext);
   });
 
-  it("works end-to-end with deriveKey from passphrase", async () => {
-    const key = await deriveKey("my-secure-passphrase");
-    const plaintext = "sk-proj-abcdef";
+  it('works end-to-end with deriveKey from passphrase', async () => {
+    const key = await deriveKey('my-secure-passphrase');
+    const plaintext = 'sk-proj-abcdef';
     const { blob } = encrypt(plaintext, key);
     expect(decrypt(blob, key)).toBe(plaintext);
   });
@@ -102,10 +102,10 @@ describe("encrypt + decrypt round-trip", () => {
 // IV uniqueness
 // ---------------------------------------------------------------------------
 
-describe("IV uniqueness", () => {
-  it("generates a unique IV for each encryption", () => {
+describe('IV uniqueness', () => {
+  it('generates a unique IV for each encryption', () => {
     const key = testKey();
-    const plaintext = "same-key-same-plaintext";
+    const plaintext = 'same-key-same-plaintext';
 
     const { blob: blob1 } = encrypt(plaintext, key);
     const { blob: blob2 } = encrypt(plaintext, key);
@@ -128,13 +128,13 @@ describe("IV uniqueness", () => {
 // Decryption with wrong key
 // ---------------------------------------------------------------------------
 
-describe("wrong key decryption", () => {
-  it("fails with a different key", () => {
+describe('wrong key decryption', () => {
+  it('fails with a different key', () => {
     const key1 = testKey();
     const key2 = testKey();
-    const { blob } = encrypt("secret-api-key", key1);
+    const { blob } = encrypt('secret-api-key', key1);
 
-    expect(() => decrypt(blob, key2)).toThrow("Decryption failed");
+    expect(() => decrypt(blob, key2)).toThrow('Decryption failed');
   });
 });
 
@@ -142,46 +142,46 @@ describe("wrong key decryption", () => {
 // Input validation
 // ---------------------------------------------------------------------------
 
-describe("input validation", () => {
-  it("rejects empty plaintext", () => {
+describe('input validation', () => {
+  it('rejects empty plaintext', () => {
     const key = testKey();
-    expect(() => encrypt("", key)).toThrow("Plaintext must not be empty");
+    expect(() => encrypt('', key)).toThrow('Plaintext must not be empty');
   });
 
-  it("rejects key that is not 32 bytes (encrypt)", () => {
+  it('rejects key that is not 32 bytes (encrypt)', () => {
     const badKey = Buffer.alloc(16);
-    expect(() => encrypt("test", badKey)).toThrow("Key must be 32 bytes");
+    expect(() => encrypt('test', badKey)).toThrow('Key must be 32 bytes');
   });
 
-  it("rejects key that is not 32 bytes (decrypt)", () => {
+  it('rejects key that is not 32 bytes (decrypt)', () => {
     const key = testKey();
-    const { blob } = encrypt("test", key);
+    const { blob } = encrypt('test', key);
     const badKey = Buffer.alloc(16);
-    expect(() => decrypt(blob, badKey)).toThrow("Key must be 32 bytes");
+    expect(() => decrypt(blob, badKey)).toThrow('Key must be 32 bytes');
   });
 
-  it("rejects a blob that is too short", () => {
+  it('rejects a blob that is too short', () => {
     const key = testKey();
     const shortBlob = Buffer.alloc(5);
-    expect(() => decrypt(shortBlob, key)).toThrow("too short");
+    expect(() => decrypt(shortBlob, key)).toThrow('too short');
   });
 
-  it("rejects a blob with unsupported version", () => {
+  it('rejects a blob with unsupported version', () => {
     const key = testKey();
-    const { blob } = encrypt("test", key);
+    const { blob } = encrypt('test', key);
     // Corrupt the version byte
     const corrupted = Buffer.from(blob);
     corrupted[0] = 0xff;
-    expect(() => decrypt(corrupted, key)).toThrow("Unsupported envelope version");
+    expect(() => decrypt(corrupted, key)).toThrow('Unsupported envelope version');
   });
 
-  it("rejects a tampered blob", () => {
+  it('rejects a tampered blob', () => {
     const key = testKey();
-    const { blob } = encrypt("test", key);
+    const { blob } = encrypt('test', key);
     // Flip a bit in the ciphertext
     const tampered = Buffer.from(blob);
     tampered[15] ^= 0xff;
-    expect(() => decrypt(tampered, key)).toThrow("Decryption failed");
+    expect(() => decrypt(tampered, key)).toThrow('Decryption failed');
   });
 });
 
@@ -189,21 +189,21 @@ describe("input validation", () => {
 // maskApiKey
 // ---------------------------------------------------------------------------
 
-describe("maskApiKey", () => {
-  it("masks a long key showing only the prefix", () => {
-    expect(maskApiKey("sk-ant-api03-abcdef1234567890")).toBe("sk-ant...****");
+describe('maskApiKey', () => {
+  it('masks a long key showing only the prefix', () => {
+    expect(maskApiKey('sk-ant-api03-abcdef1234567890')).toBe('sk-ant...****');
   });
 
-  it("masks with custom prefix length", () => {
-    expect(maskApiKey("sk-proj-abcdef1234567890", 8)).toBe("sk-proj-...****");
+  it('masks with custom prefix length', () => {
+    expect(maskApiKey('sk-proj-abcdef1234567890', 8)).toBe('sk-proj-...****');
   });
 
-  it("returns **** for keys shorter than or equal to prefix length", () => {
-    expect(maskApiKey("short")).toBe("****");
-    expect(maskApiKey("123456")).toBe("****");
+  it('returns **** for keys shorter than or equal to prefix length', () => {
+    expect(maskApiKey('short')).toBe('****');
+    expect(maskApiKey('123456')).toBe('****');
   });
 
-  it("handles a key just above the prefix length", () => {
-    expect(maskApiKey("1234567")).toBe("123456...****");
+  it('handles a key just above the prefix length', () => {
+    expect(maskApiKey('1234567')).toBe('123456...****');
   });
 });

@@ -9,10 +9,10 @@
  * so we structure tests to return the desired status on the first poll.
  */
 
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { MemoryStore } from "../store/memory.js";
-import { createNorush, type NorushEngine } from "../norush.js";
-import type { Provider } from "../interfaces/provider.js";
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { MemoryStore } from '../store/memory.js';
+import { createNorush, type NorushEngine } from '../norush.js';
+import type { Provider } from '../interfaces/provider.js';
 import type {
   BatchStatus,
   NewRequest,
@@ -20,7 +20,7 @@ import type {
   ProviderBatchRef,
   Result,
   Request,
-} from "../types.js";
+} from '../types.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -28,20 +28,18 @@ import type {
 
 function makeRequest(overrides: Partial<NewRequest> = {}): NewRequest {
   return {
-    provider: "claude",
-    model: "claude-sonnet-4-5-20250929",
+    provider: 'claude',
+    model: 'claude-sonnet-4-5-20250929',
     params: {
       max_tokens: 100,
-      messages: [{ role: "user", content: "Hello" }],
+      messages: [{ role: 'user', content: 'Hello' }],
     },
-    userId: "user_01",
+    userId: 'user_01',
     ...overrides,
   };
 }
 
-async function* makeResultStream(
-  results: NorushResult[],
-): AsyncIterable<NorushResult> {
+async function* makeResultStream(results: NorushResult[]): AsyncIterable<NorushResult> {
   for (const r of results) {
     yield r;
   }
@@ -50,10 +48,10 @@ async function* makeResultStream(
 function mockProvider(overrides: Partial<Provider> = {}): Provider {
   return {
     submitBatch: vi.fn().mockResolvedValue({
-      providerBatchId: "pb_001",
-      provider: "claude",
+      providerBatchId: 'pb_001',
+      provider: 'claude',
     } satisfies ProviderBatchRef),
-    checkStatus: vi.fn().mockResolvedValue("processing" as BatchStatus),
+    checkStatus: vi.fn().mockResolvedValue('processing' as BatchStatus),
     fetchResults: vi.fn().mockReturnValue(makeResultStream([])),
     cancelBatch: vi.fn(),
     ...overrides,
@@ -71,7 +69,7 @@ function waitForPipeline(ms = 150): Promise<void> {
 // Tests
 // ---------------------------------------------------------------------------
 
-describe("createNorush()", () => {
+describe('createNorush()', () => {
   let engine: NorushEngine;
 
   afterEach(async () => {
@@ -85,26 +83,26 @@ describe("createNorush()", () => {
   // Factory creation
   // -----------------------------------------------------------------------
 
-  describe("factory", () => {
-    it("creates an engine with all public API methods", () => {
+  describe('factory', () => {
+    it('creates an engine with all public API methods', () => {
       const store = new MemoryStore();
       engine = createNorush({
         store,
-        providers: new Map([["claude", mockProvider()]]),
+        providers: new Map([['claude', mockProvider()]]),
       });
 
-      expect(typeof engine.enqueue).toBe("function");
-      expect(typeof engine.flush).toBe("function");
-      expect(typeof engine.tick).toBe("function");
-      expect(typeof engine.start).toBe("function");
-      expect(typeof engine.stop).toBe("function");
-      expect(typeof engine.on).toBe("function");
-      expect(typeof engine.off).toBe("function");
-      expect(typeof engine.addDeliveryCallback).toBe("function");
-      expect(typeof engine.removeDeliveryCallback).toBe("function");
+      expect(typeof engine.enqueue).toBe('function');
+      expect(typeof engine.flush).toBe('function');
+      expect(typeof engine.tick).toBe('function');
+      expect(typeof engine.start).toBe('function');
+      expect(typeof engine.stop).toBe('function');
+      expect(typeof engine.on).toBe('function');
+      expect(typeof engine.off).toBe('function');
+      expect(typeof engine.addDeliveryCallback).toBe('function');
+      expect(typeof engine.removeDeliveryCallback).toBe('function');
     });
 
-    it("resolves config with defaults", () => {
+    it('resolves config with defaults', () => {
       const store = new MemoryStore();
       engine = createNorush({
         store,
@@ -117,7 +115,7 @@ describe("createNorush()", () => {
       expect(engine.config.polling.intervalMs).toBe(60_000);
     });
 
-    it("resolves config with custom values", () => {
+    it('resolves config with custom values', () => {
       const store = new MemoryStore();
       engine = createNorush({
         store,
@@ -131,13 +129,13 @@ describe("createNorush()", () => {
       expect(engine.config.polling.intervalMs).toBe(30_000);
     });
 
-    it("accepts provider config object and builds adapters", () => {
+    it('accepts provider config object and builds adapters', () => {
       const store = new MemoryStore();
       // This should not throw — adapters are built from key config.
       engine = createNorush({
         store,
         providers: {
-          claude: [{ apiKey: "sk-test-key", label: "primary" }],
+          claude: [{ apiKey: 'sk-test-key', label: 'primary' }],
         },
       });
 
@@ -149,50 +147,50 @@ describe("createNorush()", () => {
   // Enqueue
   // -----------------------------------------------------------------------
 
-  describe("enqueue()", () => {
-    it("persists a request to the store", async () => {
+  describe('enqueue()', () => {
+    it('persists a request to the store', async () => {
       const store = new MemoryStore();
       engine = createNorush({
         store,
-        providers: new Map([["claude", mockProvider()]]),
+        providers: new Map([['claude', mockProvider()]]),
       });
 
       const req = await engine.enqueue(makeRequest());
 
       expect(req.id).toBeDefined();
-      expect(req.status).toBe("queued");
-      expect(req.provider).toBe("claude");
+      expect(req.status).toBe('queued');
+      expect(req.provider).toBe('claude');
 
       // Verify it's in the store.
       const stored = await store.getRequest(req.id);
       expect(stored).not.toBeNull();
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- checked above
-      expect(stored!.status).toBe("queued");
+      expect(stored!.status).toBe('queued');
     });
 
-    it("enqueues multiple requests to different providers", async () => {
+    it('enqueues multiple requests to different providers', async () => {
       const store = new MemoryStore();
       const claudeProvider = mockProvider();
       const openaiProvider = mockProvider({
         submitBatch: vi.fn().mockResolvedValue({
-          providerBatchId: "pb_openai_001",
-          provider: "openai",
+          providerBatchId: 'pb_openai_001',
+          provider: 'openai',
         } satisfies ProviderBatchRef),
       });
 
       engine = createNorush({
         store,
         providers: new Map([
-          ["claude", claudeProvider],
-          ["openai", openaiProvider],
+          ['claude', claudeProvider],
+          ['openai', openaiProvider],
         ]),
       });
 
-      const r1 = await engine.enqueue(makeRequest({ provider: "claude" }));
-      const r2 = await engine.enqueue(makeRequest({ provider: "openai", model: "gpt-4o" }));
+      const r1 = await engine.enqueue(makeRequest({ provider: 'claude' }));
+      const r2 = await engine.enqueue(makeRequest({ provider: 'openai', model: 'gpt-4o' }));
 
-      expect(r1.provider).toBe("claude");
-      expect(r2.provider).toBe("openai");
+      expect(r1.provider).toBe('claude');
+      expect(r2.provider).toBe('openai');
     });
   });
 
@@ -200,14 +198,14 @@ describe("createNorush()", () => {
   // Flush
   // -----------------------------------------------------------------------
 
-  describe("flush()", () => {
-    it("creates and submits batches from queued requests", async () => {
+  describe('flush()', () => {
+    it('creates and submits batches from queued requests', async () => {
       const store = new MemoryStore();
       const provider = mockProvider();
 
       engine = createNorush({
         store,
-        providers: new Map([["claude", provider]]),
+        providers: new Map([['claude', provider]]),
       });
 
       await engine.enqueue(makeRequest());
@@ -227,8 +225,8 @@ describe("createNorush()", () => {
   // Full lifecycle: enqueue -> flush -> tick -> deliver
   // -----------------------------------------------------------------------
 
-  describe("full lifecycle (happy path)", () => {
-    it("processes requests end-to-end: enqueue -> flush -> poll -> ingest -> deliver", async () => {
+  describe('full lifecycle (happy path)', () => {
+    it('processes requests end-to-end: enqueue -> flush -> poll -> ingest -> deliver', async () => {
       const store = new MemoryStore();
 
       // Track delivered results via callback.
@@ -237,13 +235,13 @@ describe("createNorush()", () => {
       // Return "ended" on the first poll (since second tick won't get past
       // isDueForPoll check due to the 10s minimum polling interval).
       const provider = mockProvider({
-        checkStatus: vi.fn().mockResolvedValue("ended" as BatchStatus),
+        checkStatus: vi.fn().mockResolvedValue('ended' as BatchStatus),
         fetchResults: vi.fn(),
       });
 
       engine = createNorush({
         store,
-        providers: new Map([["claude", provider]]),
+        providers: new Map([['claude', provider]]),
       });
 
       engine.addDeliveryCallback(async (result, request) => {
@@ -265,25 +263,23 @@ describe("createNorush()", () => {
       const norushResults: NorushResult[] = [
         {
           requestId: req1.id,
-          response: { content: "Hello from Claude!" },
+          response: { content: 'Hello from Claude!' },
           success: true,
-          stopReason: "end_turn",
+          stopReason: 'end_turn',
           inputTokens: 10,
           outputTokens: 20,
         },
         {
           requestId: req2.id,
-          response: { content: "Hello again!" },
+          response: { content: 'Hello again!' },
           success: true,
-          stopReason: "end_turn",
+          stopReason: 'end_turn',
           inputTokens: 15,
           outputTokens: 25,
         },
       ];
 
-      vi.mocked(provider.fetchResults).mockReturnValue(
-        makeResultStream(norushResults),
-      );
+      vi.mocked(provider.fetchResults).mockReturnValue(makeResultStream(norushResults));
 
       // Step 3: Tick — polls batch, sees "ended", triggers ingest pipeline.
       await engine.tick();
@@ -298,15 +294,15 @@ describe("createNorush()", () => {
       const reqAfterIngest1 = await store.getRequest(req1.id);
       const reqAfterIngest2 = await store.getRequest(req2.id);
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- test: request was just enqueued
-      expect(reqAfterIngest1!.status).toBe("succeeded");
+      expect(reqAfterIngest1!.status).toBe('succeeded');
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- test: request was just enqueued
-      expect(reqAfterIngest2!.status).toBe("succeeded");
+      expect(reqAfterIngest2!.status).toBe('succeeded');
 
       // Verify delivery callbacks invoked.
       expect(delivered).toHaveLength(2);
       expect(delivered[0].result.requestId).toBe(req1.id);
       expect(delivered[1].result.requestId).toBe(req2.id);
-      expect(delivered[0].result.response).toEqual({ content: "Hello from Claude!" });
+      expect(delivered[0].result.response).toEqual({ content: 'Hello from Claude!' });
     });
   });
 
@@ -314,18 +310,18 @@ describe("createNorush()", () => {
   // Failure path: repackaging
   // -----------------------------------------------------------------------
 
-  describe("failure path (repackaging)", () => {
-    it("repackages failed requests for retry", async () => {
+  describe('failure path (repackaging)', () => {
+    it('repackages failed requests for retry', async () => {
       const store = new MemoryStore();
 
       const provider = mockProvider({
-        checkStatus: vi.fn().mockResolvedValue("ended" as BatchStatus),
+        checkStatus: vi.fn().mockResolvedValue('ended' as BatchStatus),
         fetchResults: vi.fn(),
       });
 
       engine = createNorush({
         store,
-        providers: new Map([["claude", provider]]),
+        providers: new Map([['claude', provider]]),
       });
 
       // Enqueue requests with maxRetries = 2.
@@ -340,12 +336,12 @@ describe("createNorush()", () => {
         makeResultStream([
           {
             requestId: req1.id,
-            response: { content: "OK" },
+            response: { content: 'OK' },
             success: true,
           },
           {
             requestId: req2.id,
-            response: { error: "server_error" },
+            response: { error: 'server_error' },
             success: false,
           },
         ]),
@@ -360,27 +356,27 @@ describe("createNorush()", () => {
       // req1 should be succeeded.
       const r1 = await store.getRequest(req1.id);
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- test: request was just enqueued
-      expect(r1!.status).toBe("succeeded");
+      expect(r1!.status).toBe('succeeded');
 
       // req2 should be re-queued for retry (retryCount incremented).
       const r2 = await store.getRequest(req2.id);
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- test: request was just enqueued
-      expect(r2!.status).toBe("queued");
+      expect(r2!.status).toBe('queued');
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- test: request was just enqueued
       expect(r2!.retryCount).toBe(1);
     });
 
-    it("marks requests as failed_final when retry budget exhausted", async () => {
+    it('marks requests as failed_final when retry budget exhausted', async () => {
       const store = new MemoryStore();
 
       const provider = mockProvider({
-        checkStatus: vi.fn().mockResolvedValue("ended" as BatchStatus),
+        checkStatus: vi.fn().mockResolvedValue('ended' as BatchStatus),
         fetchResults: vi.fn(),
       });
 
       engine = createNorush({
         store,
-        providers: new Map([["claude", provider]]),
+        providers: new Map([['claude', provider]]),
       });
 
       // Enqueue a request with maxRetries = 0 (no retries allowed).
@@ -393,7 +389,7 @@ describe("createNorush()", () => {
         makeResultStream([
           {
             requestId: req.id,
-            response: { error: "server_error" },
+            response: { error: 'server_error' },
             success: false,
           },
         ]),
@@ -408,7 +404,7 @@ describe("createNorush()", () => {
       // Request should be marked as permanently failed.
       const r = await store.getRequest(req.id);
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- test: request was just enqueued
-      expect(r!.status).toBe("failed_final");
+      expect(r!.status).toBe('failed_final');
     });
   });
 
@@ -416,23 +412,23 @@ describe("createNorush()", () => {
   // Event subscription
   // -----------------------------------------------------------------------
 
-  describe("event subscription", () => {
-    it("emits batch:completed event to registered handlers", async () => {
+  describe('event subscription', () => {
+    it('emits batch:completed event to registered handlers', async () => {
       const store = new MemoryStore();
 
       const provider = mockProvider({
-        checkStatus: vi.fn().mockResolvedValue("ended" as BatchStatus),
+        checkStatus: vi.fn().mockResolvedValue('ended' as BatchStatus),
         fetchResults: vi.fn().mockReturnValue(makeResultStream([])),
       });
 
       engine = createNorush({
         store,
-        providers: new Map([["claude", provider]]),
+        providers: new Map([['claude', provider]]),
       });
 
       const events: Array<{ name: string; data: Record<string, unknown> }> = [];
-      engine.on("batch:completed", (data) => {
-        events.push({ name: "batch:completed", data });
+      engine.on('batch:completed', (data) => {
+        events.push({ name: 'batch:completed', data });
       });
 
       await engine.enqueue(makeRequest());
@@ -442,25 +438,25 @@ describe("createNorush()", () => {
       await engine.tick();
 
       expect(events).toHaveLength(1);
-      expect(events[0].name).toBe("batch:completed");
+      expect(events[0].name).toBe('batch:completed');
       expect(events[0].data.batchId).toBeDefined();
     });
 
-    it("emits delivery:success event when result is delivered", async () => {
+    it('emits delivery:success event when result is delivered', async () => {
       const store = new MemoryStore();
 
       const provider = mockProvider({
-        checkStatus: vi.fn().mockResolvedValue("ended" as BatchStatus),
+        checkStatus: vi.fn().mockResolvedValue('ended' as BatchStatus),
         fetchResults: vi.fn(),
       });
 
       engine = createNorush({
         store,
-        providers: new Map([["claude", provider]]),
+        providers: new Map([['claude', provider]]),
       });
 
       const deliveryEvents: Array<Record<string, unknown>> = [];
-      engine.on("delivery:success", (data) => {
+      engine.on('delivery:success', (data) => {
         deliveryEvents.push(data);
       });
 
@@ -476,7 +472,7 @@ describe("createNorush()", () => {
         makeResultStream([
           {
             requestId: req.id,
-            response: { content: "OK" },
+            response: { content: 'OK' },
             success: true,
           },
         ]),
@@ -495,18 +491,18 @@ describe("createNorush()", () => {
       expect(deliveryEvents[0].requestId).toBe(req.id);
     });
 
-    it("off() removes event handler", async () => {
+    it('off() removes event handler', async () => {
       const store = new MemoryStore();
       engine = createNorush({
         store,
-        providers: new Map([["claude", mockProvider()]]),
+        providers: new Map([['claude', mockProvider()]]),
       });
 
       const calls: number[] = [];
       const handler = () => calls.push(1);
 
-      engine.on("batch:completed", handler);
-      engine.off("batch:completed", handler);
+      engine.on('batch:completed', handler);
+      engine.off('batch:completed', handler);
 
       expect(calls).toHaveLength(0);
     });
@@ -516,12 +512,12 @@ describe("createNorush()", () => {
   // start() and stop()
   // -----------------------------------------------------------------------
 
-  describe("start() and stop()", () => {
-    it("start() and stop() manage interval loops", async () => {
+  describe('start() and stop()', () => {
+    it('start() and stop() manage interval loops', async () => {
       const store = new MemoryStore();
       engine = createNorush({
         store,
-        providers: new Map([["claude", mockProvider()]]),
+        providers: new Map([['claude', mockProvider()]]),
         batching: { flushIntervalMs: 50 },
         polling: { intervalMs: 50 },
         delivery: { tickIntervalMs: 50 },
@@ -537,13 +533,13 @@ describe("createNorush()", () => {
       await engine.stop();
     });
 
-    it("stop() performs a final flush", async () => {
+    it('stop() performs a final flush', async () => {
       const store = new MemoryStore();
       const provider = mockProvider();
 
       engine = createNorush({
         store,
-        providers: new Map([["claude", provider]]),
+        providers: new Map([['claude', provider]]),
         batching: { flushIntervalMs: 999_999 },
       });
 
@@ -561,18 +557,18 @@ describe("createNorush()", () => {
   // Delivery callback management
   // -----------------------------------------------------------------------
 
-  describe("delivery callbacks", () => {
-    it("addDeliveryCallback and removeDeliveryCallback work", async () => {
+  describe('delivery callbacks', () => {
+    it('addDeliveryCallback and removeDeliveryCallback work', async () => {
       const store = new MemoryStore();
 
       const provider = mockProvider({
-        checkStatus: vi.fn().mockResolvedValue("ended" as BatchStatus),
+        checkStatus: vi.fn().mockResolvedValue('ended' as BatchStatus),
         fetchResults: vi.fn(),
       });
 
       engine = createNorush({
         store,
-        providers: new Map([["claude", provider]]),
+        providers: new Map([['claude', provider]]),
       });
 
       const delivered: string[] = [];
@@ -589,7 +585,7 @@ describe("createNorush()", () => {
         makeResultStream([
           {
             requestId: req.id,
-            response: { content: "OK" },
+            response: { content: 'OK' },
             success: true,
           },
         ]),
@@ -614,34 +610,34 @@ describe("createNorush()", () => {
   // Multi-provider
   // -----------------------------------------------------------------------
 
-  describe("multi-provider", () => {
-    it("routes requests to the correct provider adapter", async () => {
+  describe('multi-provider', () => {
+    it('routes requests to the correct provider adapter', async () => {
       const store = new MemoryStore();
 
       const claudeProvider = mockProvider({
         submitBatch: vi.fn().mockResolvedValue({
-          providerBatchId: "pb_claude",
-          provider: "claude",
+          providerBatchId: 'pb_claude',
+          provider: 'claude',
         }),
       });
 
       const openaiProvider = mockProvider({
         submitBatch: vi.fn().mockResolvedValue({
-          providerBatchId: "pb_openai",
-          provider: "openai",
+          providerBatchId: 'pb_openai',
+          provider: 'openai',
         }),
       });
 
       engine = createNorush({
         store,
         providers: new Map([
-          ["claude", claudeProvider],
-          ["openai", openaiProvider],
+          ['claude', claudeProvider],
+          ['openai', openaiProvider],
         ]),
       });
 
-      await engine.enqueue(makeRequest({ provider: "claude" }));
-      await engine.enqueue(makeRequest({ provider: "openai", model: "gpt-4o" }));
+      await engine.enqueue(makeRequest({ provider: 'claude' }));
+      await engine.enqueue(makeRequest({ provider: 'openai', model: 'gpt-4o' }));
 
       await engine.flush();
 

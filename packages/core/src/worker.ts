@@ -23,18 +23,18 @@
  *   NORUSH_RETENTION_INTERVAL_MS — Retention sweep interval (default: 3600000).
  */
 
-import postgres from "postgres";
-import { createNorush, type NorushConfig } from "./norush.js";
-import { migrate } from "./store/migrate.js";
-import { PostgresStore } from "./store/postgres.js";
-import { ConsoleTelemetry } from "./telemetry/console.js";
-import type { ProviderName } from "./types.js";
-import type { ProviderKeyConfig } from "./config/types.js";
+import postgres from 'postgres';
+import { createNorush, type NorushConfig } from './norush.js';
+import { migrate } from './store/migrate.js';
+import { PostgresStore } from './store/postgres.js';
+import { ConsoleTelemetry } from './telemetry/console.js';
+import type { ProviderName } from './types.js';
+import type { ProviderKeyConfig } from './config/types.js';
 import {
   parseRetentionPolicy,
   DEFAULT_RETENTION_POLICY,
   type RetentionPolicy,
-} from "./engine/retention-worker.js";
+} from './engine/retention-worker.js';
 
 // ---------------------------------------------------------------------------
 // Environment parsing
@@ -66,16 +66,11 @@ function positiveEnvInt(name: string, fallback: number): number {
   return value;
 }
 
-function parseRequiredRetentionPolicy(
-  name: string,
-  fallback: RetentionPolicy,
-): RetentionPolicy {
+function parseRequiredRetentionPolicy(name: string, fallback: RetentionPolicy): RetentionPolicy {
   const raw = process.env[name] ?? fallback;
   const parsed = parseRetentionPolicy(raw);
   if (parsed === null) {
-    throw new Error(
-      `Invalid ${name}: '${raw}'. Expected 'on_ack' or 'Nd' (e.g. '7d', '30d').`,
-    );
+    throw new Error(`Invalid ${name}: '${raw}'. Expected 'on_ack' or 'Nd' (e.g. '7d', '30d').`);
   }
   return raw as RetentionPolicy;
 }
@@ -85,25 +80,24 @@ function parseRequiredRetentionPolicy(
 // ---------------------------------------------------------------------------
 
 async function main(): Promise<void> {
-  const databaseUrl = requiredEnv("DATABASE_URL");
+  const databaseUrl = requiredEnv('DATABASE_URL');
 
   // Build provider config from environment.
   const providers: Partial<Record<ProviderName, ProviderKeyConfig[]>> = {};
 
   const anthropicKey = process.env.ANTHROPIC_API_KEY;
   if (anthropicKey) {
-    providers.claude = [{ apiKey: anthropicKey, label: "primary" }];
+    providers.claude = [{ apiKey: anthropicKey, label: 'primary' }];
   }
 
   const openaiKey = process.env.OPENAI_API_KEY;
   if (openaiKey) {
-    providers.openai = [{ apiKey: openaiKey, label: "primary" }];
+    providers.openai = [{ apiKey: openaiKey, label: 'primary' }];
   }
 
   if (!anthropicKey && !openaiKey) {
     console.warn(
-      "Warning: No provider API keys configured. " +
-      "Set ANTHROPIC_API_KEY and/or OPENAI_API_KEY.",
+      'Warning: No provider API keys configured. ' + 'Set ANTHROPIC_API_KEY and/or OPENAI_API_KEY.',
     );
   }
 
@@ -113,7 +107,7 @@ async function main(): Promise<void> {
   // up-to-date, even if the worker starts before the first web request.
   const applied = await migrate(sql);
   if (applied.length > 0) {
-    console.log(`Applied ${applied.length} migration(s): ${applied.join(", ")}`);
+    console.log(`Applied ${applied.length} migration(s): ${applied.join(', ')}`);
   }
 
   const store = new PostgresStore(sql);
@@ -123,22 +117,22 @@ async function main(): Promise<void> {
     store,
     providers,
     batching: {
-      flushIntervalMs: optionalEnvInt("NORUSH_FLUSH_INTERVAL_MS", 300_000),
-      maxRequests: optionalEnvInt("NORUSH_MAX_REQUESTS", 1000),
+      flushIntervalMs: optionalEnvInt('NORUSH_FLUSH_INTERVAL_MS', 300_000),
+      maxRequests: optionalEnvInt('NORUSH_MAX_REQUESTS', 1000),
     },
     polling: {
-      intervalMs: optionalEnvInt("NORUSH_POLL_INTERVAL_MS", 60_000),
+      intervalMs: optionalEnvInt('NORUSH_POLL_INTERVAL_MS', 60_000),
     },
     delivery: {
-      tickIntervalMs: optionalEnvInt("NORUSH_DELIVERY_INTERVAL_MS", 5_000),
+      tickIntervalMs: optionalEnvInt('NORUSH_DELIVERY_INTERVAL_MS', 5_000),
     },
     retention: {
       defaultPolicy: parseRequiredRetentionPolicy(
-        "NORUSH_RETENTION_DEFAULT",
+        'NORUSH_RETENTION_DEFAULT',
         DEFAULT_RETENTION_POLICY,
       ),
-      hardCapDays: positiveEnvInt("NORUSH_RETENTION_HARD_CAP_DAYS", 90),
-      intervalMs: positiveEnvInt("NORUSH_RETENTION_INTERVAL_MS", 3_600_000),
+      hardCapDays: positiveEnvInt('NORUSH_RETENTION_HARD_CAP_DAYS', 90),
+      intervalMs: positiveEnvInt('NORUSH_RETENTION_INTERVAL_MS', 3_600_000),
     },
     telemetry,
   };
@@ -156,7 +150,7 @@ async function main(): Promise<void> {
 
     // Force-exit after 30 s in case shutdown hangs (e.g., stuck provider call).
     const forceExitTimer = setTimeout(() => {
-      console.error("Shutdown timed out after 30 s, forcing exit.");
+      console.error('Shutdown timed out after 30 s, forcing exit.');
       process.exit(1);
     }, 30_000);
     // Don't let the timer prevent normal exit.
@@ -168,9 +162,9 @@ async function main(): Promise<void> {
       // no in-flight queries are cut off.
       await sql.end();
       clearTimeout(forceExitTimer);
-      console.log("Engine stopped. Exiting.");
+      console.log('Engine stopped. Exiting.');
     } catch (error) {
-      console.error("Error during shutdown:", error);
+      console.error('Error during shutdown:', error);
       clearTimeout(forceExitTimer);
       process.exit(1);
     }
@@ -178,15 +172,15 @@ async function main(): Promise<void> {
     process.exit(0);
   }
 
-  process.on("SIGTERM", () => void shutdown("SIGTERM"));
-  process.on("SIGINT", () => void shutdown("SIGINT"));
+  process.on('SIGTERM', () => void shutdown('SIGTERM'));
+  process.on('SIGINT', () => void shutdown('SIGINT'));
 
   // Start the engine.
   engine.start();
-  console.log("norush worker started.");
+  console.log('norush worker started.');
 }
 
 main().catch((error) => {
-  console.error("Fatal error starting norush worker:", error);
+  console.error('Fatal error starting norush worker:', error);
   process.exit(1);
 });

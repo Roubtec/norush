@@ -242,7 +242,7 @@ az containerapp logs show \
 Configure these secrets in GitHub (Settings > Secrets and variables > Actions):
 
 | Secret                       | Description                                            | Example                                                                           |
-|------------------------------|--------------------------------------------------------|-----------------------------------------------------------------------------------|
+| ---------------------------- | ------------------------------------------------------ | --------------------------------------------------------------------------------- |
 | `AZURE_CREDENTIALS`          | Service principal JSON from `az ad sp create-for-rbac` | `{"clientId":"...","clientSecret":"...","subscriptionId":"...","tenantId":"..."}` |
 | `ACR_LOGIN_SERVER`           | ACR login server hostname                              | `norushacr.azurecr.io`                                                            |
 | `ACR_USERNAME`               | ACR admin username                                     | `norushacr`                                                                       |
@@ -254,7 +254,7 @@ Configure these secrets in GitHub (Settings > Secrets and variables > Actions):
 Also configure as a repository variable (Settings > Secrets and variables > Actions > Variables):
 
 | Variable     | Description                            | Example                      |
-|--------------|----------------------------------------|------------------------------|
+| ------------ | -------------------------------------- | ---------------------------- |
 | `DEPLOY_URL` | Production base URL (for health check) | `https://norush.roubtec.com` |
 
 ### Creating the Service Principal
@@ -295,7 +295,7 @@ az containerapp hostname bind \
 DNS records needed:
 
 | Type  | Name                       | Value                                          |
-|-------|----------------------------|------------------------------------------------|
+| ----- | -------------------------- | ---------------------------------------------- |
 | CNAME | `norush.roubtec.com`       | `<web-app-fqdn>` (from `az containerapp show`) |
 | TXT   | `asuid.norush.roubtec.com` | Domain verification token (from Azure)         |
 
@@ -373,7 +373,7 @@ az containerapp update \
 Using the Azure Container Apps consumption plan:
 
 | Resource                            | SKU                           | Estimated Monthly Cost |
-|-------------------------------------|-------------------------------|------------------------|
+| ----------------------------------- | ----------------------------- | ---------------------- |
 | Container Apps (web, scale-to-zero) | Consumption                   | ~$5-15 (pay per use)   |
 | Container Apps (worker, always-on)  | Consumption, 0.5 vCPU / 1 GiB | ~$30                   |
 | PostgreSQL Flexible Server          | Burstable B1ms                | ~$15                   |

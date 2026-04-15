@@ -7,15 +7,10 @@
  * results() iterator, and supports batch cancellation.
  */
 
-import Anthropic from "@anthropic-ai/sdk";
-import type { MessageBatchIndividualResponse } from "@anthropic-ai/sdk/resources/messages/batches.js";
-import type { Provider } from "../interfaces/provider.js";
-import type {
-  BatchStatus,
-  NorushRequest,
-  NorushResult,
-  ProviderBatchRef,
-} from "../types.js";
+import Anthropic from '@anthropic-ai/sdk';
+import type { MessageBatchIndividualResponse } from '@anthropic-ai/sdk/resources/messages/batches.js';
+import type { Provider } from '../interfaces/provider.js';
+import type { BatchStatus, NorushRequest, NorushResult, ProviderBatchRef } from '../types.js';
 
 // ---------------------------------------------------------------------------
 // Options
@@ -37,15 +32,13 @@ export interface ClaudeAdapterOptions {
  *
  * Anthropic statuses: in_progress | canceling | ended
  */
-function mapStatus(
-  processingStatus: "in_progress" | "canceling" | "ended",
-): BatchStatus {
+function mapStatus(processingStatus: 'in_progress' | 'canceling' | 'ended'): BatchStatus {
   switch (processingStatus) {
-    case "in_progress":
-    case "canceling":
-      return "processing";
-    case "ended":
-      return "ended";
+    case 'in_progress':
+    case 'canceling':
+      return 'processing';
+    case 'ended':
+      return 'ended';
   }
 }
 
@@ -64,7 +57,7 @@ function mapResult(line: MessageBatchIndividualResponse): NorushResult {
   const result = line.result;
 
   switch (result.type) {
-    case "succeeded": {
+    case 'succeeded': {
       const msg = result.message;
       return {
         requestId,
@@ -75,7 +68,7 @@ function mapResult(line: MessageBatchIndividualResponse): NorushResult {
         outputTokens: msg.usage.output_tokens,
       };
     }
-    case "errored":
+    case 'errored':
       return {
         requestId,
         response: result.error as unknown as Record<string, unknown>,
@@ -84,19 +77,19 @@ function mapResult(line: MessageBatchIndividualResponse): NorushResult {
         inputTokens: null,
         outputTokens: null,
       };
-    case "canceled":
+    case 'canceled':
       return {
         requestId,
-        response: { type: "canceled" },
+        response: { type: 'canceled' },
         success: false,
         stopReason: null,
         inputTokens: null,
         outputTokens: null,
       };
-    case "expired":
+    case 'expired':
       return {
         requestId,
-        response: { type: "expired" },
+        response: { type: 'expired' },
         success: false,
         stopReason: null,
         inputTokens: null,
@@ -139,7 +132,7 @@ export class ClaudeAdapter implements Provider {
 
         // Validate max_tokens - must be a number if provided.
         const maxTokensParam = req.params.max_tokens;
-        if (maxTokensParam !== undefined && typeof maxTokensParam !== "number") {
+        if (maxTokensParam !== undefined && typeof maxTokensParam !== 'number') {
           throw new Error(
             `ClaudeAdapter: request "${req.id}" has invalid "max_tokens" in params: expected a number, got ${typeof maxTokensParam}`,
           );
@@ -152,7 +145,7 @@ export class ClaudeAdapter implements Provider {
             // req.model takes precedence over any model key in params.
             model: req.model,
             // Anthropic requires max_tokens; default to 4096 if not supplied.
-            max_tokens: typeof maxTokensParam === "number" ? maxTokensParam : 4096,
+            max_tokens: typeof maxTokensParam === 'number' ? maxTokensParam : 4096,
             messages: req.params.messages as Anthropic.MessageParam[],
           },
         };
@@ -161,7 +154,7 @@ export class ClaudeAdapter implements Provider {
 
     return {
       providerBatchId: batch.id,
-      provider: "claude",
+      provider: 'claude',
     };
   }
 
@@ -169,9 +162,7 @@ export class ClaudeAdapter implements Provider {
    * Check the current status of a submitted batch.
    */
   async checkStatus(ref: ProviderBatchRef): Promise<BatchStatus> {
-    const batch = await this.client.messages.batches.retrieve(
-      ref.providerBatchId,
-    );
+    const batch = await this.client.messages.batches.retrieve(ref.providerBatchId);
     return mapStatus(batch.processing_status);
   }
 
@@ -182,9 +173,7 @@ export class ClaudeAdapter implements Provider {
    * as the SDK streams them from the JSONL results endpoint.
    */
   async *fetchResults(ref: ProviderBatchRef): AsyncIterable<NorushResult> {
-    const decoder = await this.client.messages.batches.results(
-      ref.providerBatchId,
-    );
+    const decoder = await this.client.messages.batches.results(ref.providerBatchId);
 
     for await (const line of decoder) {
       yield mapResult(line);
