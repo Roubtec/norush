@@ -36,8 +36,12 @@ with a local fallback so the UI still functions when the fetch fails.
 - Fall back to hardcoded defaults in `$lib/savings.ts` and `$lib/models.ts` (new) when no DB row exists or the fetch fails
 - Update `CostIndicator.svelte` and `+page.svelte` total-savings calculation to use server-fetched rates
 - Update `Composer.svelte` to load its model list from the server catalog instead of the hardcoded `MODEL_OPTIONS` constant.
-  Retired models must not be offered. Deprecated models may still be offered but should be visually marked
-  (e.g. "(deprecated — use {replacement})") so users are nudged toward the replacement.
+  **Neither `retired` nor `deprecated` models should be offered for selection.** Because NoRush submits batches
+  for delayed execution, a job submitted against a deprecated model may not run until after that model is retired
+  and will then fail at the provider. Offering only `active` (and `legacy`) models in the Composer avoids that
+  failure window entirely. The catalog still stores `deprecated_at`, `retires_at`, and `replacement_model` so
+  we can revisit this UI decision later (e.g. surface a "previously used" picker or in-flight-job warnings)
+  without re-scraping.
 - CLI or admin endpoint to manually trigger a catalog refresh
 - Unit tests for each provider's parser against captured HTML/JSON fixtures, and for the fallback path when
   the DB is empty or the upstream fetch errors
@@ -103,7 +107,7 @@ OpenAI uses "shutdown" instead of "retired" — treat them as equivalent.
   Primary key on `(provider, model)`.
 - **Fetch cadence.** Once every 24 hours is fine for production. Add a small jitter so multiple workers don't stampede the upstream pages simultaneously. Refreshes should run on startup too so a fresh deployment isn't stuck on stale fallback data.
 - **Parser robustness.** Treat every upstream field as potentially missing. An entry with a valid model ID and lifecycle state but no price is still useful for the Composer; an entry with a price but no lifecycle defaults to `active`.
-- **UI behaviour.** In the Composer, sort `active` first, then `legacy`, then `deprecated`; hide `retired`. When a deprecated model is selected, surface the `replacement_model` as helper text near the dropdown so users can migrate with one click.
+- **UI behaviour.** In the Composer, offer only `active` and `legacy` models, sorted `active` first. Hide both `deprecated` and `retired` — see the Scope section for rationale. Lifecycle metadata still needs to be loaded into the page context so other surfaces (e.g. historical message views, future admin pages) can render "this model has since been deprecated" annotations without refetching.
 - **Prerequisite ordering.** No other task needs to land first, but the admin refresh endpoint should reuse whatever auth gate already protects other admin routes — do not invent a new auth scheme here.
 - **What not to change.** Leave the message-submission path alone; this task only changes how the model list is sourced and how savings are priced. The wire format between Composer and the submit handler (`{ provider, model, content }`) must stay the same.
 
@@ -112,7 +116,8 @@ OpenAI uses "shutdown" instead of "retired" — treat them as equivalent.
 - [ ] `provider_catalog` table exists with the columns listed above and a `(provider, model)` primary key
 - [ ] Catalog is refreshed automatically (cron or worker loop) at least once every 24 hours, plus once on startup
 - [ ] `CostIndicator` and total-savings display reflect fetched rates when available
-- [ ] `Composer.svelte` shows models sourced from the server catalog, hides `retired` models, and visibly marks `deprecated` models with their recommended replacement
+- [ ] `Composer.svelte` shows models sourced from the server catalog and offers only `active` and `legacy` models — `deprecated` and `retired` models are not selectable
+- [ ] Deprecation metadata (`deprecated_at`, `retires_at`, `replacement_model`) is still persisted and available via `listProviderCatalog` for future UI use, even though the Composer does not render it today
 - [ ] Hardcoded fallbacks in `$lib/savings.ts` and `$lib/models.ts` are used when the DB has no row for a given provider/model
 - [ ] Unit tests cover: each provider parser against captured fixtures, the fallback-when-empty path, and the "upstream returned garbage — keep prior row" path
 - [ ] Manual refresh endpoint returns `204` on success and `500` with error detail on failure, and is gated behind the existing admin auth
@@ -123,8 +128,8 @@ OpenAI uses "shutdown" instead of "retired" — treat them as equivalent.
 - `pnpm format && pnpm lint && pnpm typecheck && pnpm test && pnpm build` all pass
 - Manually trigger the admin refresh endpoint in a dev environment and confirm `provider_catalog` rows are populated
 - Load `/chat` with an empty catalog and confirm the Composer still renders a usable (fallback) model list
-- Select a deprecated model in the Composer and confirm the replacement hint is visible
-- Confirm `claude-3-5-haiku-20241022` no longer appears in the Composer after a successful refresh
+- Confirm that after a successful refresh the Composer offers only `active` / `legacy` models — in particular, neither `claude-3-5-haiku-20241022` (retired) nor `claude-sonnet-4-20250514` (deprecated 2026-04-14) should appear
+- Query the `provider_catalog` table directly and confirm the hidden deprecated/retired rows are still present with their lifecycle metadata
 
 ## Review plan
 
@@ -132,6 +137,6 @@ Reviewer should verify, in order:
 
 1. The migration adds the unified `provider_catalog` table with the documented columns and primary key.
 2. Each provider parser has a fixture-backed test, and a negative test proves parser failure does not clobber existing rows.
-3. `Composer.svelte` no longer contains a hardcoded model list and correctly hides retired / flags deprecated models.
+3. `Composer.svelte` no longer contains a hardcoded model list and filters out both `deprecated` and `retired` models, while the underlying catalog still stores them with full lifecycle metadata.
 4. `savings.ts` falls back to the hardcoded table only when the DB row is missing, not silently on every call.
 5. The admin refresh endpoint reuses existing auth rather than introducing a new gate.
