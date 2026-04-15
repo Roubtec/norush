@@ -12,11 +12,15 @@
     "lint": "eslint .",
     "typecheck": "pnpm -r run typecheck",
     "format": "prettier --write . --log-level warn",
+    "db:up": "docker compose up -d postgres",
+    "db:down": "docker compose stop postgres",
+    "worker:up": "docker compose up -d worker",
+    "worker:down": "docker compose stop worker",
+    "host:dev": "pnpm worker:up && pnpm --filter @norush/web dev",
+    "docker:build": "docker compose build",
     "dev:start": "docker compose up -d",
     "dev:up": "docker compose up --build",
-    "dev:down": "docker compose down",
-    "db:up": "docker compose up -d postgres",
-    "db:down": "docker compose stop postgres"
+    "dev:down": "docker compose down"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
