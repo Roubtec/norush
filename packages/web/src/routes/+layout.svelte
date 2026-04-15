@@ -1,15 +1,12 @@
 <script>
   import "../app.css";
+  import Header from "$lib/components/Header.svelte";
 
   let { children } = $props();
 </script>
 
 <div class="app">
-  <header>
-    <nav>
-      <a href="/" class="logo">norush</a>
-    </nav>
-  </header>
+  <Header />
 
   <main>
     {@render children()}
@@ -25,35 +22,6 @@
     display: flex;
     flex-direction: column;
     min-height: 100vh;
-  }
-
-  header {
-    height: var(--header-height);
-    display: flex;
-    align-items: center;
-    border-bottom: 1px solid var(--color-border);
-    background: var(--color-surface);
-    padding: 0 1.5rem;
-  }
-
-  nav {
-    width: 100%;
-    max-width: var(--max-width);
-    margin: 0 auto;
-    display: flex;
-    align-items: center;
-  }
-
-  .logo {
-    font-size: 1.25rem;
-    font-weight: 700;
-    color: var(--color-text);
-    text-decoration: none;
-  }
-
-  .logo:hover {
-    text-decoration: none;
-    color: var(--color-primary);
   }
 
   main {
