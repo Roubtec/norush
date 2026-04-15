@@ -116,12 +116,12 @@ const engine = createNorush({
 
 norush supports multiple polling strategies that determine how the interval changes between polls:
 
-| Strategy   | Behavior                                                      |
-| ---------- | ------------------------------------------------------------- |
-| `linear`   | Fixed interval (default).                                     |
-| `backoff`  | Exponential backoff starting from the base interval.          |
-| `deadline` | Polls more aggressively as the batch approaches its deadline. |
-| `eager`    | Short initial interval, gradually increasing.                 |
+| Strategy         | Behavior                                                      |
+| ---------------- | ------------------------------------------------------------- |
+| `linear`         | Fixed interval (default).                                     |
+| `backoff`        | Exponential backoff starting from the base interval.          |
+| `deadline-aware` | Polls more aggressively as the batch approaches its deadline. |
+| `eager`          | Short initial interval, gradually increasing.                 |
 
 ## Retention Configuration
 

@@ -26,7 +26,7 @@ node server.js
 
 ## Usage with norush
 
-When enqueuing a request, include the webhook URL and secret:
+When enqueuing a request, include the callback URL and secret:
 
 ```typescript
 await engine.enqueue({
@@ -36,7 +36,7 @@ await engine.enqueue({
     messages: [{ role: 'user', content: 'Hello!' }],
     max_tokens: 256,
   },
-  webhookUrl: 'http://localhost:4000/webhook',
+  callbackUrl: 'http://localhost:4000/webhook',
   webhookSecret: 'my-shared-secret',
 });
 ```
@@ -47,10 +47,15 @@ The webhook POST body is JSON:
 
 ```json
 {
-  "requestId": "01ABC...",
+  "norush_id": "01ABC...",
+  "status": "succeeded",
   "response": { "content": "..." },
-  "success": true
+  "input_tokens": 12,
+  "output_tokens": 48,
+  "model": "claude-sonnet-4-6",
+  "provider": "claude"
 }
 ```
 
-The `x-norush-signature` header contains the HMAC-SHA256 hex digest of the body, computed with your shared secret.
+The `X-Norush-Signature` header contains `sha256=<hex>`, where the hex is the HMAC-SHA256 of the timestamp-bound signing input `"${X-Norush-Timestamp}.${body}"`.
+Verify the signature against that signing input rather than the raw body to prevent replay attacks.

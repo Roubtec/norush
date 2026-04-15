@@ -2,7 +2,11 @@
  * Example webhook consumer for norush.
  *
  * Receives POST /webhook with a JSON body and verifies the
- * HMAC-SHA256 signature from the x-norush-signature header.
+ * HMAC-SHA256 signature from the X-Norush-Signature header.
+ *
+ * norush signs a timestamp-bound canonical string to prevent replay attacks:
+ *   signing_input = "${X-Norush-Timestamp}.${raw_body}"
+ *   X-Norush-Signature = "sha256=<HMAC-SHA256(secret, signing_input)>"
  *
  * Usage:
  *   WEBHOOK_SECRET=my-secret node server.js
@@ -19,13 +23,26 @@ if (!SECRET) {
 }
 
 /**
- * Verify an HMAC-SHA256 signature using timing-safe comparison.
+ * Verify a timestamp-bound HMAC-SHA256 signature using timing-safe comparison.
+ *
+ * @param {string} body - Raw request body string.
+ * @param {string} timestamp - Value of the X-Norush-Timestamp header.
+ * @param {string} signature - Value of the X-Norush-Signature header ("sha256=<hex>" or raw hex).
  */
-function verifySignature(body, signature) {
+function verifySignature(body, timestamp, signature) {
   if (!SECRET) return true; // Skip if no secret configured
-  const expected = createHmac('sha256', SECRET).update(body).digest('hex');
+
+  // Strip optional "sha256=" prefix so the header value can be passed directly.
+  const hex = signature.startsWith('sha256=') ? signature.slice('sha256='.length) : signature;
+
+  // norush binds the timestamp to the body to prevent replay attacks.
+  const signingInput = `${timestamp}.${body}`;
+  const expected = createHmac('sha256', SECRET).update(signingInput).digest('hex');
+
+  if (expected.length !== hex.length) return false;
+
   try {
-    return timingSafeEqual(Buffer.from(signature, 'hex'), Buffer.from(expected, 'hex'));
+    return timingSafeEqual(Buffer.from(hex, 'hex'), Buffer.from(expected, 'hex'));
   } catch {
     return false;
   }
@@ -47,26 +64,26 @@ const server = createServer(async (req, res) => {
     }
     const body = Buffer.concat(chunks).toString('utf-8');
 
-    // Verify signature
+    // Verify signature (timestamp-bound to prevent replays).
     const signature = req.headers['x-norush-signature'] ?? '';
-    if (SECRET && !verifySignature(body, signature)) {
+    const timestamp = req.headers['x-norush-timestamp'] ?? '';
+    if (SECRET && !verifySignature(body, timestamp, signature)) {
       console.error('Signature verification failed!');
       res.writeHead(401, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'Invalid signature' }));
       return;
     }
 
-    // Parse and process the result
+    // Parse and process the result.
+    // Payload shape: { norush_id, status, response, input_tokens, output_tokens, model, provider }
     try {
       const payload = JSON.parse(body);
       console.log('Received norush result:');
-      console.log('  Request ID:', payload.requestId);
-      console.log('  Success:', payload.success);
+      console.log('  norush ID:', payload.norush_id);
+      console.log('  Status:', payload.status);
+      console.log('  Provider:', payload.provider, payload.model);
       if (payload.response) {
         console.log('  Response:', JSON.stringify(payload.response).slice(0, 200));
-      }
-      if (payload.error) {
-        console.log('  Error:', payload.error);
       }
 
       // --- Your processing logic here ---

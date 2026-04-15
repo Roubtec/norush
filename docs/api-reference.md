@@ -57,10 +57,10 @@ interface NewRequest {
   provider: ProviderName; // "claude" | "openai"
   model: string;
   params: Record<string, unknown>;
-  userId?: string;
-  webhookUrl?: string;
-  webhookSecret?: string;
-  externalId?: string;
+  userId: string;
+  callbackUrl?: string | null;
+  webhookSecret?: string | null;
+  maxRetries?: number;
 }
 ```
 
@@ -71,16 +71,18 @@ A persisted request with its full lifecycle state:
 ```typescript
 interface Request {
   id: NorushId;
-  externalId?: string;
+  externalId: string | null;
   provider: ProviderName;
   model: string;
   params: Record<string, unknown>;
   status: RequestStatus;
-  batchId?: string;
-  userId?: string;
-  webhookUrl?: string;
-  webhookSecret?: string;
+  batchId: BatchId | null;
+  userId: string;
+  callbackUrl: string | null;
+  webhookSecret: string | null;
   retryCount: number;
+  maxRetries: number;
+  contentScrubbedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -93,10 +95,11 @@ type RequestStatus =
   | 'queued' // Waiting to be batched
   | 'batched' // Assigned to a batch, not yet submitted
   | 'processing' // Batch submitted and in progress
-  | 'completed' // Result received
-  | 'failed' // Permanently failed
+  | 'succeeded' // Result received successfully
+  | 'failed' // Failed, may be retried
   | 'expired' // Batch expired, may be retried
-  | 'delivered'; // Result delivered to callback/webhook
+  | 'failed_final' // Permanently failed, no more retries
+  | 'canceled'; // Canceled before completion
 ```
 
 ### `BatchStatus`
@@ -106,7 +109,7 @@ type BatchStatus =
   | 'pending' // Created, not yet submitted
   | 'submitted' // Sent to provider
   | 'processing' // Provider is processing
-  | 'completed' // All results available
+  | 'ended' // All results available
   | 'failed' // Provider reported failure
   | 'expired' // Timed out
   | 'cancelled'; // Cancelled by user or system
@@ -114,12 +117,32 @@ type BatchStatus =
 
 ### `NorushResult`
 
+Provider-level result returned by adapter `fetchResults()`:
+
 ```typescript
 interface NorushResult {
-  requestId: string;
+  requestId: NorushId;
   response: Record<string, unknown>;
   success: boolean;
-  error?: string;
+  stopReason?: string | null;
+  inputTokens?: number | null;
+  outputTokens?: number | null;
+}
+```
+
+### `WebhookPayload`
+
+JSON body POSTed to `callbackUrl` on result delivery:
+
+```typescript
+interface WebhookPayload {
+  norush_id: string; // norush request ID (for deduplication)
+  status: 'succeeded' | 'failed';
+  response: Record<string, unknown>;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  model: string;
+  provider: string;
 }
 ```
 
@@ -341,10 +364,10 @@ These are exported for advanced use cases where you need to compose the engine y
 ```typescript
 import { deriveKey, encrypt, decrypt, maskApiKey } from '@norush/core';
 
-const key = await deriveKey('master-password');
-const encrypted = await encrypt(key, 'sk-ant-secret-key');
-const decrypted = await decrypt(key, encrypted);
-console.log(maskApiKey('sk-ant-secret-key')); // "sk-ant-***key"
+const key = await deriveKey('master-password'); // async: derives 32-byte AES key
+const { blob } = encrypt('sk-ant-secret-key', key); // sync: plaintext, then key
+const plaintext = decrypt(blob, key); // sync: blob, then key
+console.log(maskApiKey('sk-ant-secret-key')); // "sk-ant-...****"
 ```
 
 ### Webhooks
@@ -352,8 +375,11 @@ console.log(maskApiKey('sk-ant-secret-key')); // "sk-ant-***key"
 ```typescript
 import { signWebhookPayload, verifyWebhookSignature } from '@norush/core';
 
-const signature = await signWebhookPayload(payload, secret);
-const valid = await verifyWebhookSignature(payload, signature, secret);
+// Sign a payload (sync). Signing input is "${timestamp}.${body}" for replay protection.
+const signature = signWebhookPayload(secret, signingInput);
+
+// Verify on the consumer side (sync). Accepts "sha256=<hex>" or raw hex.
+const valid = verifyWebhookSignature(secret, signingInput, signature);
 ```
 
 ### Rate Limiting
