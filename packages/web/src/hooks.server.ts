@@ -18,7 +18,7 @@ let nextInitializationAttemptAt = 0;
 const INITIALIZATION_RETRY_DELAY_MS = 60_000;
 
 // Dev-only auth bypass flag. Read at request time (inside handle) so that
-// process.env is fully populated from .env files before it is evaluated.
+// env is fully populated from .env files before it is evaluated.
 
 const DEV_USER = {
   id: 'dev-user',

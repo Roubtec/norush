@@ -7,6 +7,7 @@
  */
 
 import { redirect, error } from '@sveltejs/kit';
+import { env } from '$env/dynamic/private';
 import type { RequestHandler } from './$types';
 import { exchangeCodeForSession, SESSION_COOKIE, COOKIE_OPTIONS } from '$lib/server/auth';
 import { provisionUser } from '$lib/server/user';
@@ -28,7 +29,7 @@ export const GET: RequestHandler = async ({ url, cookies }) => {
     const { user, sealedSession } = await exchangeCodeForSession(code);
 
     // Provision user in database (idempotent).
-    if (process.env.DATABASE_URL) {
+    if (env.DATABASE_URL) {
       const sql = getSql();
       await provisionUser(sql, {
         workosId: user.id,

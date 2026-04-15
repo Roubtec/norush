@@ -6,12 +6,13 @@
  */
 
 import { json, error } from '@sveltejs/kit';
+import { env } from '$env/dynamic/private';
 import type { RequestHandler } from './$types';
 import { getSql } from '$lib/server/norush';
 
 export const GET: RequestHandler = async () => {
   // If DATABASE_URL is not set, return healthy with a warning
-  if (!process.env.DATABASE_URL) {
+  if (!env.DATABASE_URL) {
     return json({
       status: 'ok',
       database: 'unconfigured',
