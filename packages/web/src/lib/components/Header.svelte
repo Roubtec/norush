@@ -1,9 +1,11 @@
 <!--
   Site header with primary navigation.
 
-  Rendered in the root layout so it appears on every page. Highlights the
-  link matching the current pathname. Navigation is plain anchor links so
-  SvelteKit performs client-side routing automatically.
+  Rendered in the root layout so it appears on every page. The primary nav
+  and logout link are only shown when a user is logged in (read from
+  `page.data.user`, populated by the root +layout.server.ts). Unauthenticated
+  pages (/login and unauthenticated /) get a logo-only header so the layout
+  stays consistent. Logout is a GET to /auth/logout, so a plain anchor works.
 -->
 <script>
   import { page } from "$app/state";
@@ -29,22 +31,27 @@
 <header>
   <nav aria-label="Primary">
     <a href="/" class="logo">norush</a>
-    <ul class="links">
-      {#each links as link}
-        <li>
-          <a
-            href={link.href}
-            class="link"
-            class:active={isActive(link.href, page.url.pathname)}
-            aria-current={isActive(link.href, page.url.pathname)
-              ? "page"
-              : undefined}
-          >
-            {link.label}
-          </a>
-        </li>
-      {/each}
-    </ul>
+    {#if page.data.user}
+      <ul class="links">
+        {#each links as link}
+          <li>
+            <a
+              href={link.href}
+              class="link"
+              class:active={isActive(link.href, page.url.pathname)}
+              aria-current={isActive(link.href, page.url.pathname)
+                ? "page"
+                : undefined}
+            >
+              {link.label}
+            </a>
+          </li>
+        {/each}
+      </ul>
+      <div class="auth">
+        <a href="/auth/logout" class="link" data-sveltekit-reload>Log out</a>
+      </div>
+    {/if}
   </nav>
 </header>
 
@@ -86,6 +93,10 @@
     list-style: none;
     margin: 0;
     padding: 0;
+  }
+
+  .auth {
+    margin-left: auto;
   }
 
   .link {
