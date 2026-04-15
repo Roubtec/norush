@@ -6,6 +6,7 @@
  */
 
 import postgres from 'postgres';
+import { env } from '$env/dynamic/private';
 import { PostgresStore, migrate, createNorush, type NorushEngine } from '@norush/core';
 
 let store: PostgresStore | undefined;
@@ -17,7 +18,7 @@ let sql: postgres.Sql | undefined;
  */
 export function getSql(): postgres.Sql {
   if (!sql) {
-    const url = process.env.DATABASE_URL;
+    const url = env.DATABASE_URL;
     if (!url) {
       throw new Error('DATABASE_URL environment variable is required');
     }
