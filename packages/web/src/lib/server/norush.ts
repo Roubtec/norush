@@ -21,7 +21,11 @@ export function getSql(): postgres.Sql {
     if (!url) {
       throw new Error('DATABASE_URL environment variable is required');
     }
-    sql = postgres(url);
+    sql = postgres(url, {
+      onnotice: (notice) => {
+        console.log(`[postgres] ${notice.severity ?? 'NOTICE'} ${JSON.stringify(notice)}`);
+      },
+    });
   }
   return sql;
 }
