@@ -43,6 +43,10 @@ with a local fallback so the UI still functions when the fetch fails.
   we can revisit this UI decision later (e.g. surface a "previously used" picker or in-flight-job warnings)
   without re-scraping.
 - CLI or admin endpoint to manually trigger a catalog refresh
+- **Execution-time lifecycle preflight** in the batch submission path (see dedicated section below) —
+  catch requests whose target model was active at submission time but became retired before the batch runs,
+  and short-circuit queued-but-not-yet-submitted retired-model requests to `failed_final` without burning
+  provider calls or retry budget
 - Unit tests for each provider's parser against captured HTML/JSON fixtures, and for the fallback path when
   the DB is empty or the upstream fetch errors
 
@@ -52,7 +56,16 @@ with a local fallback so the UI still functions when the fetch fails.
 - Historical tracking (store only the latest row per provider+model; lifecycle dates already encode history)
 - Billing reconciliation against actual invoices
 - Provider feature flags (vision, tool-use, context window) — these can be added in a later task if needed
-- Automatic migration of already-submitted messages that referenced a now-retired model
+- **Automatic migration of in-flight requests to a replacement model.** Anthropic's public deprecation policy
+  commits to "at least 60 days notice" between deprecation and retirement, and observed history confirms it
+  (Sonnet 4 got 62 days, Haiku 3.5 got 62 days, Haiku 3 got 60). NoRush's longest pipeline — a 24h batch
+  plus its retry budget — fits comfortably inside that window with ~50 days of margin, so a request submitted
+  against an active model cannot realistically reach retirement before execution. The execution-time preflight
+  (see below) is sufficient defense-in-depth for the exceptional case of an unannounced short-notice shutdown;
+  silent rewriting of the user's chosen model to a "replacement" is out of scope because it changes the
+  semantics of the submission without consent. **The delivered code for the preflight must carry a comment
+  that names the 60-day policy and explains why we chose preflight-and-fail over silent migration**, so a
+  future reviewer revisiting this area has the reasoning in-situ rather than having to dig up this task.
 
 ## Context and references
 
@@ -73,6 +86,43 @@ with a local fallback so the UI still functions when the fetch fails.
 
 Both sources are HTML that may change shape. Parsers must be defensive: if parsing fails, log a warning
 and leave the existing catalog row untouched rather than overwriting it with garbage or nulls.
+
+## Execution-time lifecycle preflight
+
+**Why it's needed.** Neither Anthropic nor OpenAI exposes a machine-readable "this model is retired" signal
+that we can distinguish from ordinary not-found / typo errors. Anthropic returns a prose message inside an
+`invalid_request_error`; OpenAI returns a generic 404 / `model_not_found` that also covers mistyped or
+restricted model names. Without the catalog we can't classify retirement in principle, so the catalog is the
+only place a reliable lifecycle gate can live.
+
+**Today's behaviour (the bug we're fixing).** A request targeting a retired model (e.g. the currently
+hardcoded `claude-3-5-haiku-20241022`) is submitted to the provider, comes back `errored` per-request, and is
+re-queued by `Repackager` (`packages/core/src/engine/repackager.ts`) up to `maxRetries` times. Every attempt
+burns a provider call and retry budget for a request that can never succeed.
+
+**What to add.** In the batch submission path — `BatchManager.flush` / `submitBatch` in
+`packages/core/src/engine/batch-manager.ts` — before handing a group of requests to the provider adapter,
+look up each request's `(provider, model)` in `provider_catalog` using the `getProviderCatalogEntry` store
+helper introduced above. For any request whose entry has `lifecycle_state = 'retired'`:
+
+- Do **not** include the request in the batch sent to the provider.
+- Transition the request's status directly to `failed_final` (bypass the normal failed → repackager → retry loop).
+- Record a structured error carrying `{ reason: 'model_retired', model, retired_at, replacement_model }` so the
+  UI layer can surface a clear explanation rather than "provider returned an error".
+- Emit a telemetry event so ops can see when this fires at volume.
+
+Requests with `lifecycle_state = 'deprecated'` should **still** be submitted (the Composer already filters them
+out of new submissions, and an already-queued deprecated-but-not-retired request is still callable). Models
+absent from the catalog should also be submitted — the catalog may lag and we don't want to false-positive
+against a just-released model.
+
+**Why preflight rather than error-classification after the fact.** See the matching out-of-scope bullet:
+providers don't expose a clean "retired" error code, so a post-hoc classifier would have to string-match
+message prose and would drift as providers change their wording. Preflight is the stable gate.
+
+**Code comment requirement.** The preflight function must include a short comment block naming the Anthropic
+60-day notice commitment and explaining why we gate here instead of silently rewriting the model choice. This
+is explicitly called out so future reviewers don't re-litigate the decision from first principles.
 
 ## Provider lifecycle vocabulary
 
@@ -96,7 +146,9 @@ OpenAI uses "shutdown" instead of "retired" — treat them as equivalent.
 - `packages/web/src/lib/components/Composer.svelte` — remove the hardcoded `MODEL_OPTIONS`, accept model options as a prop, render deprecation hints
 - `packages/web/src/routes/(app)/chat/+page.server.ts` — load current catalog entries alongside messages and pass model options down to the Composer
 - `packages/web/src/routes/api/admin/refresh-catalog/+server.ts` — manual refresh trigger (admin only)
+- `packages/core/src/engine/batch-manager.ts` — add the execution-time preflight inside `flush` / `submitBatch` before the provider adapter is called; the preflight uses the new `getProviderCatalogEntry` store helper and must carry the in-code comment described in the Execution-time lifecycle preflight section
 - Test fixtures under `packages/web/test/fixtures/provider-catalog/` capturing representative upstream HTML/JSON responses for parser tests
+- `packages/core/src/__tests__/engine/batch-manager.test.ts` (or a new sibling file) — tests for the preflight covering: `retired` → `failed_final` without submission, `deprecated` → submitted normally, unknown model → submitted normally, `active` → submitted normally
 
 ## Implementation notes
 
@@ -121,7 +173,10 @@ OpenAI uses "shutdown" instead of "retired" — treat them as equivalent.
 - [ ] Hardcoded fallbacks in `$lib/savings.ts` and `$lib/models.ts` are used when the DB has no row for a given provider/model
 - [ ] Unit tests cover: each provider parser against captured fixtures, the fallback-when-empty path, and the "upstream returned garbage — keep prior row" path
 - [ ] Manual refresh endpoint returns `204` on success and `500` with error detail on failure, and is gated behind the existing admin auth
-- [ ] No message submission path or Composer wire format changes
+- [ ] Execution-time preflight in `BatchManager` short-circuits requests whose model is `retired` directly to `failed_final` with a structured `{ reason: 'model_retired', ... }` error, without sending them to the provider or enqueuing them for repackager retries
+- [ ] `deprecated`, unknown, and `active` models are all still submitted normally by the preflight (proven by unit tests)
+- [ ] The preflight carries an in-code comment naming the Anthropic 60-day notice commitment and the "preflight rather than silent migration" rationale
+- [ ] Composer wire format (`{ provider, model, content }`) is unchanged and the broader submission path is otherwise untouched
 
 ## Validation
 
@@ -130,6 +185,7 @@ OpenAI uses "shutdown" instead of "retired" — treat them as equivalent.
 - Load `/chat` with an empty catalog and confirm the Composer still renders a usable (fallback) model list
 - Confirm that after a successful refresh the Composer offers only `active` / `legacy` models — in particular, neither `claude-3-5-haiku-20241022` (retired) nor `claude-sonnet-4-20250514` (deprecated 2026-04-14) should appear
 - Query the `provider_catalog` table directly and confirm the hidden deprecated/retired rows are still present with their lifecycle metadata
+- Manually queue a request against a known-retired model (e.g. seed the catalog with a retired entry in a dev DB) and confirm: the next `BatchManager.flush` moves the request directly to `failed_final`, no provider call is made, and the request's error payload includes `reason: 'model_retired'` with the replacement model
 
 ## Review plan
 
@@ -140,3 +196,4 @@ Reviewer should verify, in order:
 3. `Composer.svelte` no longer contains a hardcoded model list and filters out both `deprecated` and `retired` models, while the underlying catalog still stores them with full lifecycle metadata.
 4. `savings.ts` falls back to the hardcoded table only when the DB row is missing, not silently on every call.
 5. The admin refresh endpoint reuses existing auth rather than introducing a new gate.
+6. The `BatchManager` preflight: check the in-code comment is present and names the 60-day commitment, confirm retired-model requests skip the provider adapter entirely and go straight to `failed_final` with a structured reason, and confirm the deprecated / unknown / active paths are covered by tests.
