@@ -9,6 +9,12 @@ import postgres from 'postgres';
 import { env } from '$env/dynamic/private';
 import { PostgresStore, migrate, createNorush, type NorushEngine } from '@norush/core';
 
+function optionalEnvInt(value: string | undefined): number | undefined {
+  if (!value) return undefined;
+  const n = parseInt(value, 10);
+  return Number.isNaN(n) ? undefined : n;
+}
+
 let store: PostgresStore | undefined;
 let sql: postgres.Sql | undefined;
 
@@ -49,6 +55,16 @@ export async function getEngine(): Promise<NorushEngine> {
       return createNorush({
         store,
         providers: {},
+        batching: {
+          flushIntervalMs: optionalEnvInt(env.NORUSH_FLUSH_INTERVAL_MS),
+          maxRequests: optionalEnvInt(env.NORUSH_MAX_REQUESTS),
+        },
+        polling: {
+          intervalMs: optionalEnvInt(env.NORUSH_POLL_INTERVAL_MS),
+        },
+        delivery: {
+          tickIntervalMs: optionalEnvInt(env.NORUSH_DELIVERY_INTERVAL_MS),
+        },
       });
     })();
   }
