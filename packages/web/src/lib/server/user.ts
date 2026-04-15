@@ -14,6 +14,14 @@ import type { SessionUser } from './auth.js';
 // Types
 // ---------------------------------------------------------------------------
 
+/** Serializable user data safe to expose in layout data and the client. */
+export interface PublicUser {
+  id: string;
+  email: string;
+  firstName: string | null;
+  lastName: string | null;
+}
+
 export interface DbUser {
   id: string;
   createdAt: Date;
@@ -71,4 +79,22 @@ export async function provisionUser(sql: postgres.Sql, sessionUser: SessionUser)
     throw new Error(`User provisioning failed for ${id}`);
   }
   return user;
+}
+
+// ---------------------------------------------------------------------------
+// Serialization
+// ---------------------------------------------------------------------------
+
+/**
+ * Maps an `App.Locals['user']` to its public serializable shape for use in
+ * layout data. Returns null when no user is present.
+ */
+export function toPublicUser(user: App.Locals['user']): PublicUser | null {
+  if (!user) return null;
+  return {
+    id: user.id,
+    email: user.email,
+    firstName: user.firstName,
+    lastName: user.lastName,
+  };
 }

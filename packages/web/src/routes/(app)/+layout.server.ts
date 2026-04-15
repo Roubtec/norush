@@ -8,6 +8,7 @@
 import { redirect } from '@sveltejs/kit';
 import type { LayoutServerLoad } from './$types';
 import { sanitizeNextPath } from '$lib/server/redirect';
+import { toPublicUser } from '$lib/server/user';
 
 export const load: LayoutServerLoad = async ({ locals, url }) => {
   if (!locals.user) {
@@ -19,12 +20,5 @@ export const load: LayoutServerLoad = async ({ locals, url }) => {
     redirect(302, target);
   }
 
-  return {
-    user: {
-      id: locals.user.id,
-      email: locals.user.email,
-      firstName: locals.user.firstName,
-      lastName: locals.user.lastName,
-    },
-  };
+  return { user: toPublicUser(locals.user) };
 };

@@ -5,7 +5,13 @@
   and logout link are only shown when a user is logged in (read from
   `page.data.user`, populated by the root +layout.server.ts). Unauthenticated
   pages (/login and unauthenticated /) get a logo-only header so the layout
-  stays consistent. Logout is a GET to /auth/logout, so a plain anchor works.
+  stays consistent.
+
+  Logout uses a plain GET anchor to /auth/logout. The CSRF risk is accepted as
+  low-severity: the session cookie is SameSite=Lax, so browsers will not attach
+  it to cross-origin subresource requests (e.g. <img>). A cross-site link that
+  tricks a user into clicking could trigger a "drive-by logout", but that merely
+  ends the session — it does not allow an attacker to act on the user's behalf.
 -->
 <script>
   import { page } from "$app/state";

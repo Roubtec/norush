@@ -7,16 +7,8 @@
  */
 
 import type { LayoutServerLoad } from './$types';
+import { toPublicUser } from '$lib/server/user';
 
 export const load: LayoutServerLoad = async ({ locals }) => {
-  return {
-    user: locals.user
-      ? {
-          id: locals.user.id,
-          email: locals.user.email,
-          firstName: locals.user.firstName,
-          lastName: locals.user.lastName,
-        }
-      : null,
-  };
+  return { user: toPublicUser(locals.user) };
 };
