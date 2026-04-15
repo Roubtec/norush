@@ -35,6 +35,7 @@ docker compose up --build
 ```
 
 This starts:
+
 - PostgreSQL 17 on port 5432
 - Web server on port 3000
 - Background worker
@@ -47,6 +48,7 @@ See [infra/README.md](../infra/README.md) for step-by-step Azure CLI setup.
 ### Infrastructure as Code (Bicep)
 
 The `infra/azure/main.bicep` template provisions:
+
 - Azure Container Apps environment
 - Web container app (scale-to-zero)
 - Worker container app (always-on, single replica)
@@ -68,28 +70,28 @@ az deployment group create \
 
 ### Cost Estimates
 
-| Resource | SKU | Estimated Monthly Cost |
-|----------|-----|----------------------|
-| Container Apps (web, scale-to-zero) | Consumption | ~$5-15 |
-| Container Apps (worker, always-on) | Consumption, 0.5 vCPU / 1 GiB | ~$30 |
-| PostgreSQL Flexible Server | Burstable B1ms | ~$15 |
-| Container Registry | Basic | ~$5 |
-| **Total** | | **~$55-65/month** |
+| Resource                            | SKU                           | Estimated Monthly Cost |
+| ----------------------------------- | ----------------------------- | ---------------------- |
+| Container Apps (web, scale-to-zero) | Consumption                   | ~$5-15                 |
+| Container Apps (worker, always-on)  | Consumption, 0.5 vCPU / 1 GiB | ~$30                   |
+| PostgreSQL Flexible Server          | Burstable B1ms                | ~$15                   |
+| Container Registry                  | Basic                         | ~$5                    |
+| **Total**                           |                               | **~$55-65/month**      |
 
 ### CI/CD
 
 The GitHub Actions workflow at `.github/workflows/deploy.yml` builds and deploys on merge to `main`.
 Required GitHub secrets:
 
-| Secret | Description |
-|--------|-------------|
-| `AZURE_CREDENTIALS` | Service principal JSON |
-| `ACR_LOGIN_SERVER` | e.g. `norushacr.azurecr.io` |
-| `ACR_USERNAME` | ACR admin username |
-| `ACR_PASSWORD` | ACR admin password |
-| `AZURE_RESOURCE_GROUP` | Resource group name |
-| `AZURE_CONTAINER_APP_WEB` | Web container app name |
-| `AZURE_CONTAINER_APP_WORKER` | Worker container app name |
+| Secret                       | Description                 |
+| ---------------------------- | --------------------------- |
+| `AZURE_CREDENTIALS`          | Service principal JSON      |
+| `ACR_LOGIN_SERVER`           | e.g. `norushacr.azurecr.io` |
+| `ACR_USERNAME`               | ACR admin username          |
+| `ACR_PASSWORD`               | ACR admin password          |
+| `AZURE_RESOURCE_GROUP`       | Resource group name         |
+| `AZURE_CONTAINER_APP_WEB`    | Web container app name      |
+| `AZURE_CONTAINER_APP_WORKER` | Worker container app name   |
 
 ## Self-Hosted
 
@@ -101,7 +103,7 @@ Required GitHub secrets:
 
 ### Steps
 
-1. Clone the repository and install dependencies:
+#### 1. Clone the repository and install dependencies:
 
 ```bash
 git clone https://github.com/norush-ai/norush.git
@@ -110,7 +112,7 @@ pnpm install
 pnpm build
 ```
 
-2. Set environment variables:
+#### 2. Set environment variables:
 
 ```bash
 export DATABASE_URL=postgres://user:pass@localhost:5432/norush
@@ -118,13 +120,13 @@ export NORUSH_MASTER_KEY=$(openssl rand -base64 32)
 export ANTHROPIC_API_KEY=sk-ant-...
 ```
 
-3. Start the web server:
+#### 3. Start the web server:
 
 ```bash
 node packages/web/dist/index.js
 ```
 
-4. Start the worker (separate process):
+#### 4. Start the worker (separate process):
 
 ```bash
 node packages/core/dist/worker.js
@@ -176,11 +178,11 @@ WantedBy=multi-user.target
 
 ### Prometheus
 
-1. Configure `PrometheusTelemetry` in your engine:
+#### 1. Configure `PrometheusTelemetry` in your engine:
 
 ```typescript
-import { PrometheusTelemetry } from "@norush/core";
-import { Registry } from "prom-client";
+import { PrometheusTelemetry } from '@norush/core';
+import { Registry } from 'prom-client';
 
 const registry = new Registry();
 const telemetry = new PrometheusTelemetry(registry);
@@ -191,37 +193,37 @@ const engine = createNorush({
 });
 ```
 
-2. The web application exposes `GET /metrics` which returns Prometheus exposition format text.
+#### 2. The web application exposes `GET /metrics` which returns Prometheus exposition format text.
 
-3. Add a scrape config to `prometheus.yml`:
+#### 3. Add a scrape config to `prometheus.yml`:
 
 ```yaml
 scrape_configs:
   - job_name: norush
     scrape_interval: 15s
     static_configs:
-      - targets: ["norush-web:3000"]
+      - targets: ['norush-web:3000']
     metrics_path: /metrics
 ```
 
 ### OpenTelemetry
 
-1. Install the OpenTelemetry SDK and an exporter:
+#### 1. Install the OpenTelemetry SDK and an exporter:
 
 ```bash
 npm install @opentelemetry/sdk-metrics @opentelemetry/exporter-metrics-otlp-http
 ```
 
-2. Configure the SDK before creating the engine:
+#### 2. Configure the SDK before creating the engine:
 
 ```typescript
-import { MeterProvider, PeriodicExportingMetricReader } from "@opentelemetry/sdk-metrics";
-import { OTLPMetricExporter } from "@opentelemetry/exporter-metrics-otlp-http";
-import { metrics } from "@opentelemetry/api";
-import { OpenTelemetryTelemetry } from "@norush/core";
+import { MeterProvider, PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
+import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-http';
+import { metrics } from '@opentelemetry/api';
+import { OpenTelemetryTelemetry } from '@norush/core';
 
 const exporter = new OTLPMetricExporter({
-  url: "http://otel-collector:4318/v1/metrics",
+  url: 'http://otel-collector:4318/v1/metrics',
 });
 
 const provider = new MeterProvider({
@@ -230,7 +232,7 @@ const provider = new MeterProvider({
 
 metrics.setGlobalMeterProvider(provider);
 
-const telemetry = new OpenTelemetryTelemetry("norush");
+const telemetry = new OpenTelemetryTelemetry('norush');
 ```
 
 This works with any OTLP-compatible backend: Datadog, Grafana Cloud, New Relic, Honeycomb, etc.
@@ -238,6 +240,7 @@ This works with any OTLP-compatible backend: Datadog, Grafana Cloud, New Relic, 
 ## Health Checks
 
 The web application exposes `GET /api/health` which returns:
+
 - `200 OK` with `{"status": "ok", "database": "connected"}` when healthy.
 - `503 Service Unavailable` when the database is unreachable.
 

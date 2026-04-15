@@ -1,0 +1,23 @@
+{
+  "default": true,
+
+  // Line length: disabled. Lines are intentionally unwrapped.
+  // One logical line = one diff line.
+  "MD013": false,
+
+  // Allow duplicate headings within different sections.
+  "MD024": { "siblings_only": true },
+
+  // Ordered lists must use incrementing numbers, not all 1s.
+  "MD029": { "style": "ordered" },
+
+  // Enforce fenced code blocks (backtick style).
+  "MD046": { "style": "fenced" },
+  "MD048": { "style": "backtick" },
+
+  // Allow trailing punctuation in headings (e.g. "Why?", "Note:").
+  "MD026": false,
+
+  // Allow bare URLs; useful in technical docs and inline references.
+  "MD034": false,
+}

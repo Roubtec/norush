@@ -14,11 +14,11 @@
  * externally via `worker.tick()` (serverless / cron).
  */
 
-import type { Store } from "../interfaces/store.js";
-import type { TelemetryHook } from "../interfaces/telemetry.js";
-import type { Request, Result } from "../types.js";
-import { NoopTelemetry } from "../telemetry/noop.js";
-import { deliverWebhook, buildWebhookPayload } from "../webhooks/deliver.js";
+import type { Store } from '../interfaces/store.js';
+import type { TelemetryHook } from '../interfaces/telemetry.js';
+import type { Request, Result } from '../types.js';
+import { NoopTelemetry } from '../telemetry/noop.js';
+import { deliverWebhook, buildWebhookPayload } from '../webhooks/deliver.js';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -45,15 +45,9 @@ const DEFAULT_BATCH_SIZE = 50;
  * Receives the result and the associated request (for callback URL, etc.).
  * Should throw on failure to trigger retry.
  */
-export type DeliveryCallback = (
-  result: Result,
-  request: Request,
-) => Promise<void>;
+export type DeliveryCallback = (result: Result, request: Request) => Promise<void>;
 
-export type DeliveryEventName =
-  | "delivery:success"
-  | "delivery:failure"
-  | "delivery:exhausted";
+export type DeliveryEventName = 'delivery:success' | 'delivery:failure' | 'delivery:exhausted';
 
 export type DeliveryEventHandler = (data: Record<string, unknown>) => void;
 
@@ -97,10 +91,7 @@ export class DeliveryWorker {
   private callbacks: DeliveryCallback[] = [];
 
   /** Event listeners. */
-  private listeners = new Map<
-    DeliveryEventName,
-    Set<DeliveryEventHandler>
-  >();
+  private listeners = new Map<DeliveryEventName, Set<DeliveryEventHandler>>();
 
   /** Interval handle for automatic tick loop. */
   private tickTimer: ReturnType<typeof setInterval> | null = null;
@@ -110,8 +101,7 @@ export class DeliveryWorker {
 
   constructor(options: DeliveryWorkerOptions) {
     this.store = options.store;
-    this.maxDeliveryAttempts =
-      options.maxDeliveryAttempts ?? DEFAULT_MAX_DELIVERY_ATTEMPTS;
+    this.maxDeliveryAttempts = options.maxDeliveryAttempts ?? DEFAULT_MAX_DELIVERY_ATTEMPTS;
     this.batchSize = options.batchSize ?? DEFAULT_BATCH_SIZE;
     this.tickIntervalMs = options.tickIntervalMs ?? 5_000;
     this.telemetry = options.telemetry ?? new NoopTelemetry();
@@ -157,10 +147,7 @@ export class DeliveryWorker {
     this.listeners.get(event)?.delete(handler);
   }
 
-  private emit(
-    event: DeliveryEventName,
-    data: Record<string, unknown>,
-  ): void {
+  private emit(event: DeliveryEventName, data: Record<string, unknown>): void {
     const handlers = this.listeners.get(event);
     if (handlers) {
       for (const handler of handlers) {
@@ -186,14 +173,14 @@ export class DeliveryWorker {
     if (this.tickTimer !== null) return;
     this.tickTimer = setInterval(() => {
       void this.tick().catch((error: unknown) => {
-        this.telemetry.event("delivery_worker.tick_error", {
+        this.telemetry.event('delivery_worker.tick_error', {
           message: error instanceof Error ? error.message : String(error),
           name: error instanceof Error ? error.name : undefined,
           stack: error instanceof Error ? error.stack : undefined,
         });
       });
     }, this.tickIntervalMs);
-    if (typeof this.tickTimer === "object" && "unref" in this.tickTimer) {
+    if (typeof this.tickTimer === 'object' && 'unref' in this.tickTimer) {
       this.tickTimer.unref();
     }
   }
@@ -241,8 +228,7 @@ export class DeliveryWorker {
 
       // Skip results that have already exhausted delivery attempts.
       // Use the per-result limit, falling back to the worker-level default.
-      const maxAttempts =
-        result.maxDeliveryAttempts || this.maxDeliveryAttempts;
+      const maxAttempts = result.maxDeliveryAttempts || this.maxDeliveryAttempts;
       if (result.deliveryAttempts >= maxAttempts) {
         continue;
       }
@@ -252,7 +238,7 @@ export class DeliveryWorker {
     }
 
     if (processed > 0) {
-      this.telemetry.counter("deliveries_attempted", processed);
+      this.telemetry.counter('deliveries_attempted', processed);
     }
 
     return processed;
@@ -269,10 +255,9 @@ export class DeliveryWorker {
       // Orphaned result — mark as permanently failed. Set deliveryAttempts to
       // the effective max so getUndeliveredResults callers skip it on the next
       // tick rather than retrying forever.
-      const maxAttempts =
-        result.maxDeliveryAttempts || this.maxDeliveryAttempts;
+      const maxAttempts = result.maxDeliveryAttempts || this.maxDeliveryAttempts;
       await this.store.updateResult(result.id, {
-        deliveryStatus: "failed",
+        deliveryStatus: 'failed',
         deliveryAttempts: maxAttempts,
         lastDeliveryError: `Request ${result.requestId} not found`,
       });
@@ -283,7 +268,7 @@ export class DeliveryWorker {
     // nothing to deliver to — mark as no_target.
     if (this.callbacks.length === 0 && !request.callbackUrl) {
       await this.store.updateResult(result.id, {
-        deliveryStatus: "no_target",
+        deliveryStatus: 'no_target',
       });
       return;
     }
@@ -313,9 +298,9 @@ export class DeliveryWorker {
 
       // Log the successful delivery event.
       await this.store.logEvent({
-        entityType: "result",
+        entityType: 'result',
         entityId: result.id,
-        event: "delivery_succeeded",
+        event: 'delivery_succeeded',
         details: {
           requestId: result.requestId,
           attempt: result.deliveryAttempts + 1,
@@ -324,33 +309,31 @@ export class DeliveryWorker {
         },
       });
 
-      this.emit("delivery:success", {
+      this.emit('delivery:success', {
         resultId: result.id,
         requestId: result.requestId,
         batchId: result.batchId,
       });
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : String(error);
+      const message = error instanceof Error ? error.message : String(error);
 
       const attempts = result.deliveryAttempts + 1;
       // Use per-result limit, falling back to the worker-level default.
-      const maxAttempts =
-        result.maxDeliveryAttempts || this.maxDeliveryAttempts;
+      const maxAttempts = result.maxDeliveryAttempts || this.maxDeliveryAttempts;
 
       if (attempts >= maxAttempts) {
         // Exhausted all attempts — mark permanently failed.
         await this.store.updateResult(result.id, {
-          deliveryStatus: "failed",
+          deliveryStatus: 'failed',
           deliveryAttempts: attempts,
           lastDeliveryError: message,
         });
 
         // Log the exhausted delivery event.
         await this.store.logEvent({
-          entityType: "result",
+          entityType: 'result',
           entityId: result.id,
-          event: "delivery_exhausted",
+          event: 'delivery_exhausted',
           details: {
             requestId: result.requestId,
             attempts,
@@ -360,7 +343,7 @@ export class DeliveryWorker {
           },
         });
 
-        this.emit("delivery:exhausted", {
+        this.emit('delivery:exhausted', {
           resultId: result.id,
           requestId: result.requestId,
           batchId: result.batchId,
@@ -368,7 +351,7 @@ export class DeliveryWorker {
           error: message,
         });
 
-        this.telemetry.counter("delivery_failures", 1);
+        this.telemetry.counter('delivery_failures', 1);
       } else {
         // Schedule retry with exponential backoff.
         const nextDeliveryAt = this.computeNextDeliveryAt(attempts);
@@ -381,9 +364,9 @@ export class DeliveryWorker {
 
         // Log the failed delivery attempt.
         await this.store.logEvent({
-          entityType: "result",
+          entityType: 'result',
           entityId: result.id,
-          event: "delivery_failed",
+          event: 'delivery_failed',
           details: {
             requestId: result.requestId,
             attempt: attempts,
@@ -394,7 +377,7 @@ export class DeliveryWorker {
           },
         });
 
-        this.emit("delivery:failure", {
+        this.emit('delivery:failure', {
           resultId: result.id,
           requestId: result.requestId,
           batchId: result.batchId,
@@ -418,10 +401,7 @@ export class DeliveryWorker {
    * Capped at 10 minutes.
    */
   private computeNextDeliveryAt(attempt: number): Date {
-    const delay = Math.min(
-      BASE_DELAY_MS * Math.pow(2, attempt - 1),
-      MAX_DELAY_MS,
-    );
+    const delay = Math.min(BASE_DELAY_MS * Math.pow(2, attempt - 1), MAX_DELAY_MS);
     return new Date(this.now().getTime() + delay);
   }
 }

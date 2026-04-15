@@ -6,8 +6,8 @@
  * requests matters, use `PostgresStore`.
  */
 
-import { ulid } from "ulidx";
-import type { Store, ResultDeliveryUpdate } from "../interfaces/store.js";
+import { ulid } from 'ulidx';
+import type { Store, ResultDeliveryUpdate } from '../interfaces/store.js';
 import type {
   Batch,
   CostBreakdownEntry,
@@ -24,9 +24,9 @@ import type {
   UsageStats,
   UserLimits,
   UserLimitsInput,
-} from "../types.js";
-import { standardCost, batchCost } from "../pricing.js";
-import { nextPeriodReset } from "../rate-limit/limiter.js";
+} from '../types.js';
+import { standardCost, batchCost } from '../pricing.js';
+import { nextPeriodReset } from '../rate-limit/limiter.js';
 
 export class MemoryStore implements Store {
   private requests = new Map<string, Request>();
@@ -45,7 +45,7 @@ export class MemoryStore implements Store {
       provider: req.provider,
       model: req.model,
       params: structuredClone(req.params),
-      status: "queued",
+      status: 'queued',
       batchId: null,
       userId: req.userId,
       callbackUrl: req.callbackUrl ?? null,
@@ -81,7 +81,7 @@ export class MemoryStore implements Store {
   async getQueuedRequests(limit: number): Promise<Request[]> {
     const queued: Request[] = [];
     for (const r of this.requests.values()) {
-      if (r.status === "queued") queued.push(structuredClone(r));
+      if (r.status === 'queued') queued.push(structuredClone(r));
     }
     // Sort by creation time (ULID is already chronological, but use createdAt
     // for clarity since MemoryStore doesn't depend on ULID ordering).
@@ -89,14 +89,8 @@ export class MemoryStore implements Store {
     return queued.slice(0, limit);
   }
 
-  async assignBatchToRequests(
-    ids: string[],
-    batchId: string,
-    status: "batched",
-  ): Promise<void> {
-    await Promise.all(
-      ids.map((id) => this.updateRequest(id, { batchId, status })),
-    );
+  async assignBatchToRequests(ids: string[], batchId: string, status: 'batched'): Promise<void> {
+    await Promise.all(ids.map((id) => this.updateRequest(id, { batchId, status })));
   }
 
   // -- API key lookup -------------------------------------------------------
@@ -117,7 +111,7 @@ export class MemoryStore implements Store {
       providerBatchId: null,
       apiKeyId: batch.apiKeyId,
       apiKeyLabel: batch.apiKeyLabel ?? null,
-      status: "pending",
+      status: 'pending',
       requestCount: batch.requestCount,
       succeededCount: 0,
       failedCount: 0,
@@ -153,7 +147,7 @@ export class MemoryStore implements Store {
   async getPendingBatches(): Promise<Batch[]> {
     const pending: Batch[] = [];
     for (const b of this.batches.values()) {
-      if (b.status === "pending") pending.push(structuredClone(b));
+      if (b.status === 'pending') pending.push(structuredClone(b));
     }
     pending.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
     return pending;
@@ -162,7 +156,7 @@ export class MemoryStore implements Store {
   async getInFlightBatches(): Promise<Batch[]> {
     const inFlight: Batch[] = [];
     for (const b of this.batches.values()) {
-      if (b.status === "submitted" || b.status === "processing") {
+      if (b.status === 'submitted' || b.status === 'processing') {
         inFlight.push(structuredClone(b));
       }
     }
@@ -191,7 +185,7 @@ export class MemoryStore implements Store {
       stopReason: result.stopReason ?? null,
       inputTokens: result.inputTokens ?? null,
       outputTokens: result.outputTokens ?? null,
-      deliveryStatus: "pending",
+      deliveryStatus: 'pending',
       deliveryAttempts: 0,
       maxDeliveryAttempts: 5,
       lastDeliveryError: null,
@@ -213,20 +207,14 @@ export class MemoryStore implements Store {
       ...existing,
       deliveryStatus: updates.deliveryStatus ?? existing.deliveryStatus,
       deliveryAttempts: updates.deliveryAttempts ?? existing.deliveryAttempts,
-      maxDeliveryAttempts:
-        updates.maxDeliveryAttempts ?? existing.maxDeliveryAttempts,
+      maxDeliveryAttempts: updates.maxDeliveryAttempts ?? existing.maxDeliveryAttempts,
       lastDeliveryError:
         updates.lastDeliveryError !== undefined
           ? updates.lastDeliveryError
           : existing.lastDeliveryError,
       nextDeliveryAt:
-        updates.nextDeliveryAt !== undefined
-          ? updates.nextDeliveryAt
-          : existing.nextDeliveryAt,
-      deliveredAt:
-        updates.deliveredAt !== undefined
-          ? updates.deliveredAt
-          : existing.deliveredAt,
+        updates.nextDeliveryAt !== undefined ? updates.nextDeliveryAt : existing.nextDeliveryAt,
+      deliveredAt: updates.deliveredAt !== undefined ? updates.deliveredAt : existing.deliveredAt,
       contentScrubbedAt:
         updates.contentScrubbedAt !== undefined
           ? updates.contentScrubbedAt
@@ -238,7 +226,7 @@ export class MemoryStore implements Store {
   async getUndeliveredResults(limit: number): Promise<Result[]> {
     const undelivered: Result[] = [];
     for (const r of this.results.values()) {
-      if (r.deliveryStatus === "pending" || r.deliveryStatus === "failed") {
+      if (r.deliveryStatus === 'pending' || r.deliveryStatus === 'failed') {
         undelivered.push(structuredClone(r));
       }
     }
@@ -249,7 +237,7 @@ export class MemoryStore implements Store {
   async markDelivered(id: string): Promise<void> {
     const existing = this.results.get(id);
     if (!existing) throw new Error(`Result not found: ${id}`);
-    existing.deliveryStatus = "delivered";
+    existing.deliveryStatus = 'delivered';
     existing.deliveredAt = new Date();
   }
 
@@ -283,7 +271,7 @@ export class MemoryStore implements Store {
       if (
         r.contentScrubbedAt === null &&
         r.createdAt < before &&
-        (r.status === "succeeded" || r.status === "failed" || r.status === "failed_final")
+        (r.status === 'succeeded' || r.status === 'failed' || r.status === 'failed_final')
       ) {
         r.params = { scrubbed: true, scrubbed_at: now.toISOString() };
         r.contentScrubbedAt = now;
@@ -312,7 +300,7 @@ export class MemoryStore implements Store {
         r.userId === userId &&
         r.contentScrubbedAt === null &&
         r.createdAt < before &&
-        (r.status === "succeeded" || r.status === "failed" || r.status === "failed_final")
+        (r.status === 'succeeded' || r.status === 'failed' || r.status === 'failed_final')
       ) {
         r.params = { scrubbed: true, scrubbed_at: now.toISOString() };
         r.contentScrubbedAt = now;
@@ -345,7 +333,7 @@ export class MemoryStore implements Store {
     // Build a set of request IDs for this user that have delivered results.
     const deliveredRequestIds = new Set<string>();
     for (const res of this.results.values()) {
-      if (res.deliveryStatus === "delivered" && res.contentScrubbedAt === null) {
+      if (res.deliveryStatus === 'delivered' && res.contentScrubbedAt === null) {
         const req = this.requests.get(res.requestId);
         if (req && req.userId === userId) {
           deliveredRequestIds.add(res.requestId);
@@ -377,7 +365,7 @@ export class MemoryStore implements Store {
     for (const r of this.requests.values()) {
       if (
         r.contentScrubbedAt === null &&
-        (r.status === "succeeded" || r.status === "failed" || r.status === "failed_final")
+        (r.status === 'succeeded' || r.status === 'failed' || r.status === 'failed_final')
       ) {
         userIds.add(r.userId);
       }
@@ -478,15 +466,10 @@ export class MemoryStore implements Store {
     const batchIds = new Set<string>();
 
     for (const r of this.requests.values()) {
-      if (
-        r.userId === userId &&
-        r.createdAt >= period.from &&
-        r.createdAt <= period.to
-      ) {
+      if (r.userId === userId && r.createdAt >= period.from && r.createdAt <= period.to) {
         totalRequests++;
-        if (r.status === "succeeded") succeededRequests++;
-        if (r.status === "failed" || r.status === "failed_final")
-          failedRequests++;
+        if (r.status === 'succeeded') succeededRequests++;
+        if (r.status === 'failed' || r.status === 'failed_final') failedRequests++;
         if (r.batchId) batchIds.add(r.batchId);
       }
     }
@@ -515,15 +498,11 @@ export class MemoryStore implements Store {
     };
   }
 
-  async getDetailedStats(
-    userId: string,
-    period: DateRange,
-  ): Promise<DetailedUsageStats> {
+  async getDetailedStats(userId: string, period: DateRange): Promise<DetailedUsageStats> {
     const basic = await this.getStats(userId, period);
 
     // Group by provider + model for cost breakdown.
-    const groupKey = (provider: string, model: string) =>
-      `${provider}::${model}`;
+    const groupKey = (provider: string, model: string) => `${provider}::${model}`;
     const groups = new Map<
       string,
       {
@@ -543,11 +522,7 @@ export class MemoryStore implements Store {
     }
 
     for (const r of this.requests.values()) {
-      if (
-        r.userId === userId &&
-        r.createdAt >= period.from &&
-        r.createdAt <= period.to
-      ) {
+      if (r.userId === userId && r.createdAt >= period.from && r.createdAt <= period.to) {
         const key = groupKey(r.provider, r.model);
         if (!groups.has(key)) {
           groups.set(key, {
@@ -570,21 +545,15 @@ export class MemoryStore implements Store {
       }
     }
 
-    const costBreakdown: CostBreakdownEntry[] = [...groups.values()].map(
-      (g) => ({
-        provider: g.provider as CostBreakdownEntry["provider"],
-        model: g.model,
-        inputTokens: g.inputTokens,
-        outputTokens: g.outputTokens,
-        batchCostUsd: batchCost(g.provider, g.inputTokens, g.outputTokens),
-        standardCostUsd: standardCost(
-          g.provider,
-          g.inputTokens,
-          g.outputTokens,
-        ),
-        requestCount: g.requestCount,
-      }),
-    );
+    const costBreakdown: CostBreakdownEntry[] = [...groups.values()].map((g) => ({
+      provider: g.provider as CostBreakdownEntry['provider'],
+      model: g.model,
+      inputTokens: g.inputTokens,
+      outputTokens: g.outputTokens,
+      batchCostUsd: batchCost(g.provider, g.inputTokens, g.outputTokens),
+      standardCostUsd: standardCost(g.provider, g.inputTokens, g.outputTokens),
+      requestCount: g.requestCount,
+    }));
 
     // Calculate batch turnaround times.
     const turnarounds: number[] = [];
@@ -602,18 +571,10 @@ export class MemoryStore implements Store {
       turnarounds.push(b.endedAt.getTime() - b.submittedAt.getTime());
     }
     const avgTurnaroundMs =
-      turnarounds.length > 0
-        ? turnarounds.reduce((a, b) => a + b, 0) / turnarounds.length
-        : null;
+      turnarounds.length > 0 ? turnarounds.reduce((a, b) => a + b, 0) / turnarounds.length : null;
 
-    const totalStandardCostUsd = costBreakdown.reduce(
-      (s, e) => s + e.standardCostUsd,
-      0,
-    );
-    const totalBatchCostUsd = costBreakdown.reduce(
-      (s, e) => s + e.batchCostUsd,
-      0,
-    );
+    const totalStandardCostUsd = costBreakdown.reduce((s, e) => s + e.standardCostUsd, 0);
+    const totalBatchCostUsd = costBreakdown.reduce((s, e) => s + e.batchCostUsd, 0);
 
     return {
       ...basic,
@@ -632,10 +593,7 @@ export class MemoryStore implements Store {
     return limits ? structuredClone(limits) : null;
   }
 
-  async upsertUserLimits(
-    userId: string,
-    input: UserLimitsInput,
-  ): Promise<UserLimits> {
+  async upsertUserLimits(userId: string, input: UserLimitsInput): Promise<UserLimits> {
     const now = new Date();
     const existing = this.userLimits.get(userId);
 
@@ -676,10 +634,7 @@ export class MemoryStore implements Store {
     return structuredClone(record);
   }
 
-  async incrementPeriodRequests(
-    userId: string,
-    count: number = 1,
-  ): Promise<void> {
+  async incrementPeriodRequests(userId: string, count: number = 1): Promise<void> {
     const limits = this.userLimits.get(userId);
     if (!limits) return;
     limits.currentPeriodRequests += count;
@@ -692,10 +647,14 @@ export class MemoryStore implements Store {
     effectiveLimit: number,
   ): Promise<boolean> {
     if (!Number.isFinite(count) || count <= 0 || !Number.isInteger(count)) {
-      throw new Error("count must be a positive integer");
+      throw new Error('count must be a positive integer');
     }
-    if (!Number.isFinite(effectiveLimit) || effectiveLimit < 0 || !Number.isInteger(effectiveLimit)) {
-      throw new Error("effectiveLimit must be a non-negative integer");
+    if (
+      !Number.isFinite(effectiveLimit) ||
+      effectiveLimit < 0 ||
+      !Number.isInteger(effectiveLimit)
+    ) {
+      throw new Error('effectiveLimit must be a non-negative integer');
     }
     const limits = this.userLimits.get(userId);
     if (!limits) return false;
@@ -705,10 +664,7 @@ export class MemoryStore implements Store {
     return true;
   }
 
-  async incrementPeriodTokens(
-    userId: string,
-    count: number,
-  ): Promise<void> {
+  async incrementPeriodTokens(userId: string, count: number): Promise<void> {
     const limits = this.userLimits.get(userId);
     if (!limits) return;
     limits.currentPeriodTokens += count;
@@ -734,10 +690,7 @@ export class MemoryStore implements Store {
     limits.updatedAt = new Date();
   }
 
-  async getSlidingWindow(
-    userId: string,
-    windowMs: number,
-  ): Promise<SlidingWindow> {
+  async getSlidingWindow(userId: string, windowMs: number): Promise<SlidingWindow> {
     const windowStart = new Date(Date.now() - windowMs);
     let succeeded = 0;
     let failed = 0;
@@ -753,12 +706,12 @@ export class MemoryStore implements Store {
       // Only count batches that ended within the window.
       if (!batch.endedAt || batch.endedAt < windowStart) continue;
 
-      if (batch.status === "ended" && batch.failedCount === 0) {
+      if (batch.status === 'ended' && batch.failedCount === 0) {
         succeeded++;
       } else if (
-        batch.status === "ended" ||
-        batch.status === "failed" ||
-        batch.status === "expired"
+        batch.status === 'ended' ||
+        batch.status === 'failed' ||
+        batch.status === 'expired'
       ) {
         failed++;
       }

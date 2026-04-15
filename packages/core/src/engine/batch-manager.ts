@@ -19,21 +19,13 @@
  *   to the next key. The key used is recorded on the batch record.
  */
 
-import type { Store } from "../interfaces/store.js";
-import type { Provider } from "../interfaces/provider.js";
-import type { TelemetryHook } from "../interfaces/telemetry.js";
-import type { BatchingConfig } from "../config/types.js";
-import type {
-  NorushRequest,
-  ProviderName,
-  Request,
-} from "../types.js";
-import { NoopTelemetry } from "../telemetry/noop.js";
-import {
-  selectKeys,
-  isFailoverEligibleError,
-  type ApiKeyInfo,
-} from "../keys/selector.js";
+import type { Store } from '../interfaces/store.js';
+import type { Provider } from '../interfaces/provider.js';
+import type { TelemetryHook } from '../interfaces/telemetry.js';
+import type { BatchingConfig } from '../config/types.js';
+import type { NorushRequest, ProviderName, Request } from '../types.js';
+import { NoopTelemetry } from '../telemetry/noop.js';
+import { selectKeys, isFailoverEligibleError, type ApiKeyInfo } from '../keys/selector.js';
 
 // ---------------------------------------------------------------------------
 // Provider size limits
@@ -214,13 +206,11 @@ export class BatchManager {
     let currentBytes = 0;
 
     for (const req of requests) {
-      const reqBytes = new TextEncoder().encode(
-        JSON.stringify(req.params),
-      ).byteLength;
+      const reqBytes = new TextEncoder().encode(JSON.stringify(req.params)).byteLength;
 
       // A request whose params alone exceed the limit can never fit in a batch.
       if (reqBytes > limits.maxBytes) {
-        this.telemetry.event("request_oversized", {
+        this.telemetry.event('request_oversized', {
           requestId: req.id,
           provider,
           reqBytes,
@@ -284,7 +274,7 @@ export class BatchManager {
     const adapter = this.providers.get(adapterKey) ?? this.providers.get(provider);
 
     if (!adapter) {
-      this.telemetry.event("batch_submit_error", {
+      this.telemetry.event('batch_submit_error', {
         provider,
         userId,
         error: `No provider adapter found for ${adapterKey}`,
@@ -307,7 +297,7 @@ export class BatchManager {
     await this.store.assignBatchToRequests(
       requests.map((req) => req.id),
       batch.id,
-      "batched",
+      'batched',
     );
 
     // Step 2: Increment submission_attempts and call provider.
@@ -330,16 +320,16 @@ export class BatchManager {
       // Step 3: Success — update batch with provider reference.
       await this.store.updateBatch(batch.id, {
         providerBatchId: ref.providerBatchId,
-        status: "submitted",
+        status: 'submitted',
         submittedAt: new Date(),
       });
 
-      this.telemetry.counter("batches_submitted", 1, {
+      this.telemetry.counter('batches_submitted', 1, {
         provider,
-        status: "success",
+        status: 'success',
       });
 
-      this.telemetry.event("batch_submitted", {
+      this.telemetry.event('batch_submitted', {
         batchId: batch.id,
         provider,
         providerBatchId: ref.providerBatchId,
@@ -351,16 +341,16 @@ export class BatchManager {
       // providerBatchId for observability / orphan tracking (task 1-07).
       await Promise.all(
         requests.map((req) =>
-          this.store.updateRequest(req.id, { batchId: null, status: "queued" }),
+          this.store.updateRequest(req.id, { batchId: null, status: 'queued' }),
         ),
       );
 
-      this.telemetry.counter("batches_submitted", 1, {
+      this.telemetry.counter('batches_submitted', 1, {
         provider,
-        status: "failure",
+        status: 'failure',
       });
 
-      this.telemetry.event("batch_submit_error", {
+      this.telemetry.event('batch_submit_error', {
         batchId: batch.id,
         provider,
         error: error instanceof Error ? error.message : String(error),
@@ -389,10 +379,10 @@ export class BatchManager {
     const candidates = selectKeys(keys);
 
     if (candidates.length === 0) {
-      this.telemetry.event("batch_submit_error", {
+      this.telemetry.event('batch_submit_error', {
         provider,
         userId,
-        error: "No active API keys found for user/provider",
+        error: 'No active API keys found for user/provider',
       });
       return;
     }
@@ -415,7 +405,7 @@ export class BatchManager {
 
         // Success — record telemetry if failover was used.
         if (i > 0) {
-          this.telemetry.event("failover_used", {
+          this.telemetry.event('failover_used', {
             provider,
             userId,
             fromKeyId: candidates[0].id,
@@ -431,7 +421,7 @@ export class BatchManager {
         if (!isFailoverEligibleError(error)) {
           // Non-failover error: stop trying. The batch has already been
           // created and left in pending for orphan recovery.
-          this.telemetry.event("batch_submit_error", {
+          this.telemetry.event('batch_submit_error', {
             provider,
             userId,
             keyId: candidate.id,
@@ -442,7 +432,7 @@ export class BatchManager {
         }
 
         // Log the failover attempt.
-        this.telemetry.event("failover_attempt", {
+        this.telemetry.event('failover_attempt', {
           provider,
           userId,
           keyId: candidate.id,
@@ -454,10 +444,10 @@ export class BatchManager {
     }
 
     // All keys exhausted — log and return.
-    this.telemetry.event("batch_submit_error", {
+    this.telemetry.event('batch_submit_error', {
       provider,
       userId,
-      error: "All API keys exhausted during failover",
+      error: 'All API keys exhausted during failover',
       lastError: lastError instanceof Error ? lastError.message : String(lastError),
       keysAttempted: candidates.length,
     });
@@ -489,7 +479,7 @@ export class BatchManager {
     for (const req of requests) {
       await this.store.updateRequest(req.id, {
         batchId: batch.id,
-        status: "batched",
+        status: 'batched',
       });
     }
 
@@ -513,16 +503,16 @@ export class BatchManager {
       // Step 3: Success — update batch with provider reference.
       await this.store.updateBatch(batch.id, {
         providerBatchId: ref.providerBatchId,
-        status: "submitted",
+        status: 'submitted',
         submittedAt: new Date(),
       });
 
-      this.telemetry.counter("batches_submitted", 1, {
+      this.telemetry.counter('batches_submitted', 1, {
         provider,
-        status: "success",
+        status: 'success',
       });
 
-      this.telemetry.event("batch_submitted", {
+      this.telemetry.event('batch_submitted', {
         batchId: batch.id,
         provider,
         providerBatchId: ref.providerBatchId,
@@ -537,11 +527,11 @@ export class BatchManager {
         for (const req of requests) {
           await this.store.updateRequest(req.id, {
             batchId: null,
-            status: "queued",
+            status: 'queued',
           });
         }
         await this.store.updateBatch(batch.id, {
-          status: "failed",
+          status: 'failed',
         });
       }
       // Non-failover error (network, 500, etc.): leave batch in 'pending' with
@@ -549,12 +539,12 @@ export class BatchManager {
       // 'batched' to avoid duplicate submissions — the provider may have accepted
       // the batch even though an error was thrown on our end.
 
-      this.telemetry.counter("batches_submitted", 1, {
+      this.telemetry.counter('batches_submitted', 1, {
         provider,
-        status: "failure",
+        status: 'failure',
       });
 
-      this.telemetry.event("batch_submit_error", {
+      this.telemetry.event('batch_submit_error', {
         batchId: batch.id,
         provider,
         apiKeyId,

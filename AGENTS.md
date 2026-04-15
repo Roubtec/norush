@@ -2,17 +2,17 @@
 
 ## Verification Checklist
 
-Before committing any changes, run the following commands in order and fix any issues before proceeding:
+Before committing any changes, run the following commands in order (or choose ones that apply based on the extent of the changes). Fix any issues before proceeding:
 
 ```bash
+pnpm format        # Prettier — unifies code style
 pnpm lint          # ESLint — catches style/rule violations
 pnpm typecheck     # tsc --noEmit — catches type errors
 pnpm test          # Vitest — catches failing tests
 pnpm build         # Final build smoke-test
 ```
 
-This is the same order CI uses.
-Do not commit until all four pass.
+This is the same order CI uses. We want to avoid having to revisit code due to failed CI runs. Iterate if there are issues.
 
 ## Documentation Practices
 

@@ -5,16 +5,16 @@
   savings from batch processing, and spend limit utilization.
 -->
 <script>
-  import StatsCard from "$lib/components/StatsCard.svelte";
-  import UsageChart from "$lib/components/UsageChart.svelte";
-  import LimitBar from "$lib/components/LimitBar.svelte";
+  import StatsCard from '$lib/components/StatsCard.svelte';
+  import UsageChart from '$lib/components/UsageChart.svelte';
+  import LimitBar from '$lib/components/LimitBar.svelte';
 
   let { data } = $props();
 
   const periods = [
-    { value: "24h", label: "Last 24 hours" },
-    { value: "7d", label: "Last 7 days" },
-    { value: "30d", label: "Last 30 days" },
+    { value: '24h', label: 'Last 24 hours' },
+    { value: '7d', label: 'Last 7 days' },
+    { value: '30d', label: 'Last 30 days' },
   ];
 
   let stats = $derived(data.stats);
@@ -26,7 +26,7 @@
    * @returns {string}
    */
   function fmtUsd(value) {
-    if (value < 0.01 && value > 0) return "< $0.01";
+    if (value < 0.01 && value > 0) return '< $0.01';
     return `$${value.toFixed(2)}`;
   }
 
@@ -45,7 +45,7 @@
    * @returns {string}
    */
   function fmtDuration(ms) {
-    if (ms == null) return "N/A";
+    if (ms == null) return 'N/A';
     if (ms < 1000) return `${Math.round(ms)}ms`;
     if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
     if (ms < 3_600_000) return `${(ms / 60_000).toFixed(1)}m`;
@@ -56,7 +56,7 @@
   let successRate = $derived(
     stats.totalRequests > 0
       ? `${((stats.succeededRequests / stats.totalRequests) * 100).toFixed(1)}%`
-      : "N/A",
+      : 'N/A',
   );
 
   /** Cost breakdown chart bars. */
@@ -64,7 +64,7 @@
     stats.costBreakdown.map((entry) => ({
       label: `${entry.provider}/${entry.model}`,
       value: entry.batchCostUsd,
-      color: entry.provider === "openai" ? "#10b981" : "#2563eb",
+      color: entry.provider === 'openai' ? '#10b981' : '#2563eb',
     })),
   );
 
@@ -73,7 +73,7 @@
     stats.costBreakdown.map((entry) => ({
       label: `${entry.provider}/${entry.model}`,
       value: entry.inputTokens + entry.outputTokens,
-      color: entry.provider === "openai" ? "#10b981" : "#2563eb",
+      color: entry.provider === 'openai' ? '#10b981' : '#2563eb',
     })),
   );
 
@@ -100,7 +100,7 @@
 </script>
 
 <svelte:head>
-  <title>Dashboard - norush.chat</title>
+  <title>Dashboard - norush chat</title>
 </svelte:head>
 
 <section class="dashboard">
@@ -160,16 +160,8 @@
 
   <!-- Charts -->
   <div class="charts-grid">
-    <UsageChart
-      title="Cost by Provider / Model"
-      bars={costBars}
-      formatValue={fmtUsd}
-    />
-    <UsageChart
-      title="Tokens by Provider / Model"
-      bars={tokenBars}
-      formatValue={fmtTokens}
-    />
+    <UsageChart title="Cost by Provider / Model" bars={costBars} formatValue={fmtUsd} />
+    <UsageChart title="Tokens by Provider / Model" bars={tokenBars} formatValue={fmtTokens} />
   </div>
 
   <!-- Spend Limits -->
@@ -255,7 +247,9 @@
     color: var(--color-text-muted);
     text-decoration: none;
     white-space: nowrap;
-    transition: background 0.15s, color 0.15s;
+    transition:
+      background 0.15s,
+      color 0.15s;
   }
 
   .period-btn:hover {

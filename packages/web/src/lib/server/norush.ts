@@ -5,8 +5,8 @@
  * Import this module from any server route to interact with the engine.
  */
 
-import postgres from "postgres";
-import { PostgresStore, migrate, createNorush, type NorushEngine } from "@norush/core";
+import postgres from 'postgres';
+import { PostgresStore, migrate, createNorush, type NorushEngine } from '@norush/core';
 
 let store: PostgresStore | undefined;
 let sql: postgres.Sql | undefined;
@@ -19,7 +19,7 @@ export function getSql(): postgres.Sql {
   if (!sql) {
     const url = process.env.DATABASE_URL;
     if (!url) {
-      throw new Error("DATABASE_URL environment variable is required");
+      throw new Error('DATABASE_URL environment variable is required');
     }
     sql = postgres(url);
   }
@@ -56,7 +56,7 @@ export async function getEngine(): Promise<NorushEngine> {
  */
 export function getStore(): PostgresStore {
   if (!store) {
-    throw new Error("Store not initialized. Call getEngine() first.");
+    throw new Error('Store not initialized. Call getEngine() first.');
   }
   return store;
 }

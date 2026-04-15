@@ -5,15 +5,15 @@
  * which in turn redirects the user back to /login.
  */
 
-import { redirect } from "@sveltejs/kit";
-import type { RequestHandler } from "./$types";
-import { getLogoutUrl, SESSION_COOKIE } from "$lib/server/auth";
+import { redirect } from '@sveltejs/kit';
+import type { RequestHandler } from './$types';
+import { getLogoutUrl, SESSION_COOKIE } from '$lib/server/auth';
 
 export const GET: RequestHandler = async ({ locals, cookies }) => {
   const sessionId = locals.user?.sessionId;
 
   // Clear the session cookie regardless.
-  cookies.delete(SESSION_COOKIE, { path: "/" });
+  cookies.delete(SESSION_COOKIE, { path: '/' });
 
   if (sessionId) {
     // Redirect to WorkOS to revoke the session server-side.
@@ -22,5 +22,5 @@ export const GET: RequestHandler = async ({ locals, cookies }) => {
   }
 
   // No active session — just go to login.
-  redirect(302, "/login");
+  redirect(302, '/login');
 };

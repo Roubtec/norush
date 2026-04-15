@@ -3,8 +3,8 @@
 All public types and classes are exported from `@norush/core`.
 
 ```typescript
-import { createNorush, MemoryStore, NoopTelemetry } from "@norush/core";
-import type { TelemetryHook, Provider, Store } from "@norush/core";
+import { createNorush, MemoryStore, NoopTelemetry } from '@norush/core';
+import type { TelemetryHook, Provider, Store } from '@norush/core';
 ```
 
 ## Engine
@@ -18,33 +18,33 @@ Wires together all components: RequestQueue, BatchManager, StatusTracker, Result
 
 The public engine interface returned by `createNorush()`.
 
-| Method | Description |
-|--------|-------------|
-| `enqueue(request: NewRequest): Promise<Request>` | Queue a request for deferred processing. |
-| `flush(): Promise<void>` | Force-flush the queue, forming and submitting batches. |
-| `tick(): Promise<void>` | Run one cycle of all loops (flush, poll, deliver, retention). For serverless/cron. |
-| `start(): void` | Start all interval loops. For long-running processes. |
-| `stop(): Promise<void>` | Stop all loops and perform a final flush. |
-| `on(event, handler): void` | Register an event handler. |
-| `off(event, handler): void` | Remove an event handler. |
-| `addDeliveryCallback(cb): void` | Register a delivery callback. |
-| `removeDeliveryCallback(cb): void` | Remove a delivery callback. |
-| `config: ResolvedConfig` | The resolved configuration (read-only). |
+| Method                                           | Description                                                                        |
+| ------------------------------------------------ | ---------------------------------------------------------------------------------- |
+| `enqueue(request: NewRequest): Promise<Request>` | Queue a request for deferred processing.                                           |
+| `flush(): Promise<void>`                         | Force-flush the queue, forming and submitting batches.                             |
+| `tick(): Promise<void>`                          | Run one cycle of all loops (flush, poll, deliver, retention). For serverless/cron. |
+| `start(): void`                                  | Start all interval loops. For long-running processes.                              |
+| `stop(): Promise<void>`                          | Stop all loops and perform a final flush.                                          |
+| `on(event, handler): void`                       | Register an event handler.                                                         |
+| `off(event, handler): void`                      | Remove an event handler.                                                           |
+| `addDeliveryCallback(cb): void`                  | Register a delivery callback.                                                      |
+| `removeDeliveryCallback(cb): void`               | Remove a delivery callback.                                                        |
+| `config: ResolvedConfig`                         | The resolved configuration (read-only).                                            |
 
 ### `NorushConfig`
 
 Configuration object for `createNorush()`:
 
-| Property | Type | Required | Description |
-|----------|------|----------|-------------|
-| `store` | `Store` | Yes | Storage backend (MemoryStore or PostgresStore). |
-| `providers` | `Map<string, Provider>` or `Record` | Yes | Provider adapters or key configs. |
-| `batching` | `object` | No | Batching overrides (maxRequests, maxBytes, flushIntervalMs). |
-| `polling` | `object` | No | Polling overrides (intervalMs, maxRetries). |
-| `delivery` | `object` | No | Delivery overrides (tickIntervalMs, maxDeliveryAttempts, batchSize). |
-| `retention` | `object` | No | Retention config (defaultPolicy, hardCapDays, intervalMs). |
-| `circuitBreaker` | `object` | No | Circuit breaker config (threshold, cooldownMs). |
-| `telemetry` | `TelemetryHook` | No | Telemetry adapter. Defaults to NoopTelemetry. |
+| Property         | Type                                | Required | Description                                                          |
+| ---------------- | ----------------------------------- | -------- | -------------------------------------------------------------------- |
+| `store`          | `Store`                             | Yes      | Storage backend (MemoryStore or PostgresStore).                      |
+| `providers`      | `Map<string, Provider>` or `Record` | Yes      | Provider adapters or key configs.                                    |
+| `batching`       | `object`                            | No       | Batching overrides (maxRequests, maxBytes, flushIntervalMs).         |
+| `polling`        | `object`                            | No       | Polling overrides (intervalMs, maxRetries).                          |
+| `delivery`       | `object`                            | No       | Delivery overrides (tickIntervalMs, maxDeliveryAttempts, batchSize). |
+| `retention`      | `object`                            | No       | Retention config (defaultPolicy, hardCapDays, intervalMs).           |
+| `circuitBreaker` | `object`                            | No       | Circuit breaker config (threshold, cooldownMs).                      |
+| `telemetry`      | `TelemetryHook`                     | No       | Telemetry adapter. Defaults to NoopTelemetry.                        |
 
 ## Data Types
 
@@ -54,13 +54,13 @@ Submit a new request for deferred processing:
 
 ```typescript
 interface NewRequest {
-  provider: ProviderName;  // "claude" | "openai"
+  provider: ProviderName; // "claude" | "openai"
   model: string;
   params: Record<string, unknown>;
-  userId?: string;
-  webhookUrl?: string;
-  webhookSecret?: string;
-  externalId?: string;
+  userId: string;
+  callbackUrl?: string | null;
+  webhookSecret?: string | null;
+  maxRetries?: number;
 }
 ```
 
@@ -71,16 +71,18 @@ A persisted request with its full lifecycle state:
 ```typescript
 interface Request {
   id: NorushId;
-  externalId?: string;
+  externalId: string | null;
   provider: ProviderName;
   model: string;
   params: Record<string, unknown>;
   status: RequestStatus;
-  batchId?: string;
-  userId?: string;
-  webhookUrl?: string;
-  webhookSecret?: string;
+  batchId: BatchId | null;
+  userId: string;
+  callbackUrl: string | null;
+  webhookSecret: string | null;
   retryCount: number;
+  maxRetries: number;
+  contentScrubbedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -90,38 +92,57 @@ interface Request {
 
 ```typescript
 type RequestStatus =
-  | "queued"      // Waiting to be batched
-  | "batched"     // Assigned to a batch, not yet submitted
-  | "processing"  // Batch submitted and in progress
-  | "completed"   // Result received
-  | "failed"      // Permanently failed
-  | "expired"     // Batch expired, may be retried
-  | "delivered"   // Result delivered to callback/webhook
-  ;
+  | 'queued' // Waiting to be batched
+  | 'batched' // Assigned to a batch, not yet submitted
+  | 'processing' // Batch submitted and in progress
+  | 'succeeded' // Result received successfully
+  | 'failed' // Failed, may be retried
+  | 'expired' // Batch expired, may be retried
+  | 'failed_final' // Permanently failed, no more retries
+  | 'canceled'; // Canceled before completion
 ```
 
 ### `BatchStatus`
 
 ```typescript
 type BatchStatus =
-  | "pending"     // Created, not yet submitted
-  | "submitted"   // Sent to provider
-  | "processing"  // Provider is processing
-  | "completed"   // All results available
-  | "failed"      // Provider reported failure
-  | "expired"     // Timed out
-  | "cancelled"   // Cancelled by user or system
-  ;
+  | 'pending' // Created, not yet submitted
+  | 'submitted' // Sent to provider
+  | 'processing' // Provider is processing
+  | 'ended' // All results available
+  | 'failed' // Provider reported failure
+  | 'expired' // Timed out
+  | 'cancelled'; // Cancelled by user or system
 ```
 
 ### `NorushResult`
 
+Provider-level result returned by adapter `fetchResults()`:
+
 ```typescript
 interface NorushResult {
-  requestId: string;
+  requestId: NorushId;
   response: Record<string, unknown>;
   success: boolean;
-  error?: string;
+  stopReason?: string | null;
+  inputTokens?: number | null;
+  outputTokens?: number | null;
+}
+```
+
+### `WebhookPayload`
+
+JSON body POSTed to `callbackUrl` on result delivery:
+
+```typescript
+interface WebhookPayload {
+  norush_id: string; // norush request ID (for deduplication)
+  status: 'succeeded' | 'failed';
+  response: Record<string, unknown>;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  model: string;
+  provider: string;
 }
 ```
 
@@ -187,7 +208,7 @@ In-memory store for testing and development.
 All data is lost on process exit.
 
 ```typescript
-import { MemoryStore } from "@norush/core";
+import { MemoryStore } from '@norush/core';
 const store = new MemoryStore();
 ```
 
@@ -197,8 +218,8 @@ PostgreSQL-backed store for production use.
 Requires a `postgres` (postgres.js) connection.
 
 ```typescript
-import postgres from "postgres";
-import { PostgresStore, migrate } from "@norush/core";
+import postgres from 'postgres';
+import { PostgresStore, migrate } from '@norush/core';
 
 const sql = postgres(process.env.DATABASE_URL!);
 await migrate(sql); // Run schema migrations
@@ -218,8 +239,8 @@ Idempotent -- safe to call on every startup.
 Anthropic Message Batches API adapter.
 
 ```typescript
-import { ClaudeAdapter } from "@norush/core";
-const adapter = new ClaudeAdapter({ apiKey: "sk-ant-..." });
+import { ClaudeAdapter } from '@norush/core';
+const adapter = new ClaudeAdapter({ apiKey: 'sk-ant-...' });
 ```
 
 ### `OpenAIBatchAdapter`
@@ -227,8 +248,8 @@ const adapter = new ClaudeAdapter({ apiKey: "sk-ant-..." });
 OpenAI Batch API adapter (JSONL file upload).
 
 ```typescript
-import { OpenAIBatchAdapter } from "@norush/core";
-const adapter = new OpenAIBatchAdapter({ apiKey: "sk-..." });
+import { OpenAIBatchAdapter } from '@norush/core';
+const adapter = new OpenAIBatchAdapter({ apiKey: 'sk-...' });
 ```
 
 ### `OpenAIFlexAdapter`
@@ -236,8 +257,8 @@ const adapter = new OpenAIBatchAdapter({ apiKey: "sk-..." });
 OpenAI Flex Processing adapter (synchronous, batch pricing).
 
 ```typescript
-import { OpenAIFlexAdapter } from "@norush/core";
-const adapter = new OpenAIFlexAdapter({ apiKey: "sk-..." });
+import { OpenAIFlexAdapter } from '@norush/core';
+const adapter = new OpenAIFlexAdapter({ apiKey: 'sk-...' });
 ```
 
 ## Telemetry Adapters
@@ -247,7 +268,7 @@ const adapter = new OpenAIFlexAdapter({ apiKey: "sk-..." });
 Default adapter. Silently discards all metrics and events.
 
 ```typescript
-import { NoopTelemetry } from "@norush/core";
+import { NoopTelemetry } from '@norush/core';
 const telemetry = new NoopTelemetry();
 ```
 
@@ -256,7 +277,7 @@ const telemetry = new NoopTelemetry();
 Logs all metrics and events to stdout with a `[norush]` prefix.
 
 ```typescript
-import { ConsoleTelemetry } from "@norush/core";
+import { ConsoleTelemetry } from '@norush/core';
 const telemetry = new ConsoleTelemetry();
 // Output: [norush] counter requests_queued=5 {provider=claude}
 ```
@@ -267,8 +288,8 @@ Maps counters and histograms to `prom-client` instruments.
 Events are silently dropped (Prometheus has no event concept).
 
 ```typescript
-import { PrometheusTelemetry } from "@norush/core";
-import { Registry } from "prom-client";
+import { PrometheusTelemetry } from '@norush/core';
+import { Registry } from 'prom-client';
 
 // Use a dedicated registry (recommended)
 const registry = new Registry();
@@ -279,8 +300,8 @@ const telemetry2 = new PrometheusTelemetry();
 const registry2 = telemetry2.registry;
 
 // Expose metrics at GET /metrics
-app.get("/metrics", async (_req, res) => {
-  res.set("Content-Type", registry.contentType);
+app.get('/metrics', async (_req, res) => {
+  res.set('Content-Type', registry.contentType);
   res.end(await registry.metrics());
 });
 ```
@@ -294,10 +315,10 @@ Maps counters and histograms to `@opentelemetry/api` instruments.
 Compatible with any OTLP backend (Datadog, Grafana, New Relic, etc.).
 
 ```typescript
-import { OpenTelemetryTelemetry } from "@norush/core";
+import { OpenTelemetryTelemetry } from '@norush/core';
 
 // Requires an OpenTelemetry SDK MeterProvider to be registered globally
-const telemetry = new OpenTelemetryTelemetry("norush");
+const telemetry = new OpenTelemetryTelemetry('norush');
 ```
 
 Events are logged as structured JSON lines for log collectors to capture.
@@ -311,10 +332,10 @@ import {
   DeadlineAwareStrategy,
   EagerStrategy,
   getStrategy,
-} from "@norush/core";
+} from '@norush/core';
 
 // Get a strategy by name
-const strategy = getStrategy("backoff");
+const strategy = getStrategy('backoff');
 
 // Or instantiate directly
 const eager = new EagerStrategy();
@@ -324,38 +345,41 @@ const eager = new EagerStrategy();
 
 These are exported for advanced use cases where you need to compose the engine yourself:
 
-| Component | Description |
-|-----------|-------------|
-| `RequestQueue` | Buffers and flushes requests into batches. |
-| `BatchManager` | Submits batches to provider adapters. |
-| `StatusTracker` | Polls batch statuses and emits events. |
-| `ResultIngester` | Fetches and persists results from completed batches. |
-| `DeliveryWorker` | Delivers results to callbacks and webhooks. |
-| `Repackager` | Re-queues failed/expired requests for retry. |
+| Component         | Description                                          |
+| ----------------- | ---------------------------------------------------- |
+| `RequestQueue`    | Buffers and flushes requests into batches.           |
+| `BatchManager`    | Submits batches to provider adapters.                |
+| `StatusTracker`   | Polls batch statuses and emits events.               |
+| `ResultIngester`  | Fetches and persists results from completed batches. |
+| `DeliveryWorker`  | Delivers results to callbacks and webhooks.          |
+| `Repackager`      | Re-queues failed/expired requests for retry.         |
 | `RetentionWorker` | Scrubs expired data according to retention policies. |
-| `CircuitBreaker` | Protects against cascading provider failures. |
-| `OrphanRecovery` | Recovers batches stuck in intermediate states. |
+| `CircuitBreaker`  | Protects against cascading provider failures.        |
+| `OrphanRecovery`  | Recovers batches stuck in intermediate states.       |
 
 ## Utility Functions
 
 ### Crypto Vault
 
 ```typescript
-import { deriveKey, encrypt, decrypt, maskApiKey } from "@norush/core";
+import { deriveKey, encrypt, decrypt, maskApiKey } from '@norush/core';
 
-const key = await deriveKey("master-password");
-const encrypted = await encrypt(key, "sk-ant-secret-key");
-const decrypted = await decrypt(key, encrypted);
-console.log(maskApiKey("sk-ant-secret-key")); // "sk-ant-***key"
+const key = await deriveKey('master-password'); // async: derives 32-byte AES key
+const { blob } = encrypt('sk-ant-secret-key', key); // sync: plaintext, then key
+const plaintext = decrypt(blob, key); // sync: blob, then key
+console.log(maskApiKey('sk-ant-secret-key')); // "sk-ant-...****"
 ```
 
 ### Webhooks
 
 ```typescript
-import { signWebhookPayload, verifyWebhookSignature } from "@norush/core";
+import { signWebhookPayload, verifyWebhookSignature } from '@norush/core';
 
-const signature = await signWebhookPayload(payload, secret);
-const valid = await verifyWebhookSignature(payload, signature, secret);
+// Sign a payload (sync). Signing input is "${timestamp}.${body}" for replay protection.
+const signature = signWebhookPayload(secret, signingInput);
+
+// Verify on the consumer side (sync). Accepts "sha256=<hex>" or raw hex.
+const valid = verifyWebhookSignature(secret, signingInput, signature);
 ```
 
 ### Rate Limiting
@@ -366,7 +390,7 @@ import {
   buildRateLimitHeaders,
   computeHealth,
   computeEffectiveLimit,
-} from "@norush/core";
+} from '@norush/core';
 
 const result = checkRateLimit(userLimits, window);
 const headers = buildRateLimitHeaders(userLimits);
@@ -375,9 +399,9 @@ const headers = buildRateLimitHeaders(userLimits);
 ### Pricing
 
 ```typescript
-import { standardCost, batchCost, pricingSavings, getRates } from "@norush/core";
+import { standardCost, batchCost, pricingSavings, getRates } from '@norush/core';
 
-const rates = getRates("claude", "claude-sonnet-4-6");
+const rates = getRates('claude', 'claude-sonnet-4-6');
 const standard = standardCost(rates, 1000, 500);
 const batch = batchCost(rates, 1000, 500);
 const saved = pricingSavings(rates, 1000, 500);
@@ -387,25 +411,25 @@ const saved = pricingSavings(rates, 1000, 500);
 
 The engine emits events for lifecycle transitions:
 
-| Event | Emitted when |
-|-------|-------------|
-| `batch:submitted` | A batch is submitted to the provider. |
-| `batch:processing` | Provider confirms the batch is being processed. |
-| `batch:completed` | All results are available. |
-| `batch:expired` | The batch timed out. |
-| `batch:error` | A provider error occurred. |
-| `batch:failed` | The batch permanently failed. |
-| `circuit_breaker:tripped` | The circuit breaker opened. |
-| `delivery:success` | A result was successfully delivered. |
-| `delivery:failure` | A delivery attempt failed. |
-| `delivery:exhausted` | All delivery attempts exhausted. |
+| Event                     | Emitted when                                    |
+| ------------------------- | ----------------------------------------------- |
+| `batch:submitted`         | A batch is submitted to the provider.           |
+| `batch:processing`        | Provider confirms the batch is being processed. |
+| `batch:completed`         | All results are available.                      |
+| `batch:expired`           | The batch timed out.                            |
+| `batch:error`             | A provider error occurred.                      |
+| `batch:failed`            | The batch permanently failed.                   |
+| `circuit_breaker:tripped` | The circuit breaker opened.                     |
+| `delivery:success`        | A result was successfully delivered.            |
+| `delivery:failure`        | A delivery attempt failed.                      |
+| `delivery:exhausted`      | All delivery attempts exhausted.                |
 
 ```typescript
-engine.on("batch:completed", (data) => {
-  console.log("Batch completed:", data.batchId);
+engine.on('batch:completed', (data) => {
+  console.log('Batch completed:', data.batchId);
 });
 
-engine.on("delivery:success", (data) => {
-  console.log("Delivered:", data.requestId);
+engine.on('delivery:success', (data) => {
+  console.log('Delivered:', data.requestId);
 });
 ```

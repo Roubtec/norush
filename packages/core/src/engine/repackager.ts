@@ -10,10 +10,10 @@
  * Requests exceeding the retry budget transition to `status: 'failed_final'`.
  */
 
-import type { Store } from "../interfaces/store.js";
-import type { TelemetryHook } from "../interfaces/telemetry.js";
-import type { Batch, RequestStatus } from "../types.js";
-import { NoopTelemetry } from "../telemetry/noop.js";
+import type { Store } from '../interfaces/store.js';
+import type { TelemetryHook } from '../interfaces/telemetry.js';
+import type { Batch, RequestStatus } from '../types.js';
+import { NoopTelemetry } from '../telemetry/noop.js';
 
 // ---------------------------------------------------------------------------
 // Options
@@ -42,10 +42,7 @@ export interface RepackageResult {
 // Eligible statuses for repackaging
 // ---------------------------------------------------------------------------
 
-const REPACKAGEABLE_STATUSES: Set<RequestStatus> = new Set([
-  "failed",
-  "expired",
-]);
+const REPACKAGEABLE_STATUSES: Set<RequestStatus> = new Set(['failed', 'expired']);
 
 // ---------------------------------------------------------------------------
 // Repackager
@@ -86,7 +83,7 @@ export class Repackager {
         // Re-queue for retry: increment retryCount, reset status to 'queued',
         // clear batchId so it gets picked up by the next flush.
         await this.store.updateRequest(request.id, {
-          status: "queued",
+          status: 'queued',
           retryCount: request.retryCount + 1,
           batchId: null,
         });
@@ -94,24 +91,24 @@ export class Repackager {
       } else {
         // Retry budget exhausted — mark as permanently failed.
         await this.store.updateRequest(request.id, {
-          status: "failed_final",
+          status: 'failed_final',
         });
         result.exhausted++;
       }
     }
 
     if (result.requeued > 0 || result.exhausted > 0) {
-      this.telemetry.counter("requests_requeued", result.requeued, {
+      this.telemetry.counter('requests_requeued', result.requeued, {
         batchId: batch.id,
         provider: batch.provider,
       });
-      this.telemetry.counter("requests_exhausted", result.exhausted, {
+      this.telemetry.counter('requests_exhausted', result.exhausted, {
         batchId: batch.id,
         provider: batch.provider,
       });
     }
 
-    this.telemetry.event("repackage_complete", {
+    this.telemetry.event('repackage_complete', {
       batchId: batch.id,
       scanned: result.scanned,
       requeued: result.requeued,

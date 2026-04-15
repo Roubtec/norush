@@ -12,7 +12,7 @@
  *   4. Revoked keys (revokedAt !== null) are excluded.
  */
 
-import type { ProviderName } from "../types.js";
+import type { ProviderName } from '../types.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -52,7 +52,7 @@ export function isFailoverEligibleError(error: unknown): boolean {
   const message = error.message.toLowerCase();
 
   // HTTP 429 — rate limited
-  if (message.includes("429") || message.includes("rate limit")) {
+  if (message.includes('429') || message.includes('rate limit')) {
     return true;
   }
 
@@ -63,10 +63,10 @@ export function isFailoverEligibleError(error: unknown): boolean {
   // These patterns reflect Anthropic and OpenAI billing/quota error messages.
   // If providers add new phrasing, extend this list and link to their docs.
   if (
-    message.includes("insufficient") ||
-    message.includes("quota") ||
-    message.includes("credit") ||
-    message.includes("billing")
+    message.includes('insufficient') ||
+    message.includes('quota') ||
+    message.includes('credit') ||
+    message.includes('billing')
   ) {
     return true;
   }

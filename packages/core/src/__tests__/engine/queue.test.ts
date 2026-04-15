@@ -1,8 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { MemoryStore } from "../../store/memory.js";
-import { RequestQueue, estimateBytes } from "../../engine/queue.js";
-import type { BatchingConfig } from "../../config/types.js";
-import type { NewRequest } from "../../types.js";
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MemoryStore } from '../../store/memory.js';
+import { RequestQueue, estimateBytes } from '../../engine/queue.js';
+import type { BatchingConfig } from '../../config/types.js';
+import type { NewRequest } from '../../types.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -10,13 +10,13 @@ import type { NewRequest } from "../../types.js";
 
 function makeNewRequest(overrides: Partial<NewRequest> = {}): NewRequest {
   return {
-    provider: "claude",
-    model: "claude-sonnet-4-5-20250929",
+    provider: 'claude',
+    model: 'claude-sonnet-4-5-20250929',
     params: {
       max_tokens: 1024,
-      messages: [{ role: "user", content: "Hello" }],
+      messages: [{ role: 'user', content: 'Hello' }],
     },
-    userId: "user_01",
+    userId: 'user_01',
     ...overrides,
   };
 }
@@ -34,7 +34,7 @@ function defaultBatching(overrides: Partial<BatchingConfig> = {}): BatchingConfi
 // Tests
 // ---------------------------------------------------------------------------
 
-describe("RequestQueue", () => {
+describe('RequestQueue', () => {
   let store: MemoryStore;
   let flushSpy: ReturnType<typeof vi.fn>;
 
@@ -51,7 +51,7 @@ describe("RequestQueue", () => {
   // enqueue
   // -------------------------------------------------------------------------
 
-  describe("enqueue", () => {
+  describe('enqueue', () => {
     it("persists a request with status 'queued'", async () => {
       const queue = new RequestQueue({
         store,
@@ -61,18 +61,18 @@ describe("RequestQueue", () => {
 
       const result = await queue.enqueue(makeNewRequest());
 
-      expect(result.status).toBe("queued");
+      expect(result.status).toBe('queued');
       expect(result.id).toBeTruthy();
-      expect(result.provider).toBe("claude");
-      expect(result.model).toBe("claude-sonnet-4-5-20250929");
+      expect(result.provider).toBe('claude');
+      expect(result.model).toBe('claude-sonnet-4-5-20250929');
 
       // Verify it's actually in the store.
       const stored = await store.getRequest(result.id);
       expect(stored).toBeTruthy();
-      expect(stored?.status).toBe("queued");
+      expect(stored?.status).toBe('queued');
     });
 
-    it("assigns a ULID id to each request", async () => {
+    it('assigns a ULID id to each request', async () => {
       const queue = new RequestQueue({
         store,
         batching: defaultBatching(),
@@ -88,7 +88,7 @@ describe("RequestQueue", () => {
       expect(r1.id).not.toBe(r2.id);
     });
 
-    it("tracks pending count and bytes", async () => {
+    it('tracks pending count and bytes', async () => {
       const queue = new RequestQueue({
         store,
         batching: defaultBatching(),
@@ -109,8 +109,8 @@ describe("RequestQueue", () => {
   // Flush triggers — count
   // -------------------------------------------------------------------------
 
-  describe("count-based flush trigger", () => {
-    it("triggers flush when maxRequests is reached", async () => {
+  describe('count-based flush trigger', () => {
+    it('triggers flush when maxRequests is reached', async () => {
       const queue = new RequestQueue({
         store,
         batching: defaultBatching({ maxRequests: 3 }),
@@ -125,7 +125,7 @@ describe("RequestQueue", () => {
       expect(flushSpy).toHaveBeenCalledOnce();
     });
 
-    it("resets pending counters after flush", async () => {
+    it('resets pending counters after flush', async () => {
       const queue = new RequestQueue({
         store,
         batching: defaultBatching({ maxRequests: 2 }),
@@ -143,7 +143,7 @@ describe("RequestQueue", () => {
       expect(queue.pending.count).toBe(1);
     });
 
-    it("flushes once at exactly maxRequests", async () => {
+    it('flushes once at exactly maxRequests', async () => {
       const queue = new RequestQueue({
         store,
         batching: defaultBatching({ maxRequests: 1 }),
@@ -162,8 +162,8 @@ describe("RequestQueue", () => {
   // Flush triggers — bytes
   // -------------------------------------------------------------------------
 
-  describe("byte-based flush trigger", () => {
-    it("triggers flush when maxBytes is reached", async () => {
+  describe('byte-based flush trigger', () => {
+    it('triggers flush when maxBytes is reached', async () => {
       const req = makeNewRequest();
       const reqBytes = estimateBytes(req);
 
@@ -182,9 +182,9 @@ describe("RequestQueue", () => {
       expect(flushSpy).toHaveBeenCalledOnce();
     });
 
-    it("triggers flush on first request if it exceeds maxBytes", async () => {
+    it('triggers flush on first request if it exceeds maxBytes', async () => {
       const req = makeNewRequest({
-        params: { messages: [{ role: "user", content: "x".repeat(1000) }] },
+        params: { messages: [{ role: 'user', content: 'x'.repeat(1000) }] },
       });
 
       const queue = new RequestQueue({
@@ -202,8 +202,8 @@ describe("RequestQueue", () => {
   // Flush triggers — time
   // -------------------------------------------------------------------------
 
-  describe("time-based flush trigger", () => {
-    it("tick() triggers flush when there are pending requests", async () => {
+  describe('time-based flush trigger', () => {
+    it('tick() triggers flush when there are pending requests', async () => {
       const queue = new RequestQueue({
         store,
         batching: defaultBatching(),
@@ -217,7 +217,7 @@ describe("RequestQueue", () => {
       expect(flushSpy).toHaveBeenCalledOnce();
     });
 
-    it("tick() always triggers a flush attempt even with no in-memory pending requests", async () => {
+    it('tick() always triggers a flush attempt even with no in-memory pending requests', async () => {
       const queue = new RequestQueue({
         store,
         batching: defaultBatching(),
@@ -230,7 +230,7 @@ describe("RequestQueue", () => {
       expect(flushSpy).toHaveBeenCalledOnce();
     });
 
-    it("start() enables periodic flush via setInterval", async () => {
+    it('start() enables periodic flush via setInterval', async () => {
       vi.useFakeTimers();
 
       const queue = new RequestQueue({
@@ -252,7 +252,7 @@ describe("RequestQueue", () => {
       vi.useRealTimers();
     });
 
-    it("stop() clears the interval timer", async () => {
+    it('stop() clears the interval timer', async () => {
       vi.useFakeTimers();
 
       const queue = new RequestQueue({
@@ -272,7 +272,7 @@ describe("RequestQueue", () => {
       vi.useRealTimers();
     });
 
-    it("stop({ finalFlush: true }) performs a final flush", async () => {
+    it('stop({ finalFlush: true }) performs a final flush', async () => {
       const queue = new RequestQueue({
         store,
         batching: defaultBatching(),
@@ -289,8 +289,8 @@ describe("RequestQueue", () => {
   // Manual flush
   // -------------------------------------------------------------------------
 
-  describe("manual flush", () => {
-    it("flush() fires onFlush regardless of thresholds", async () => {
+  describe('manual flush', () => {
+    it('flush() fires onFlush regardless of thresholds', async () => {
       const queue = new RequestQueue({
         store,
         batching: defaultBatching({ maxRequests: 100 }),
@@ -302,7 +302,7 @@ describe("RequestQueue", () => {
       expect(flushSpy).toHaveBeenCalledOnce();
     });
 
-    it("flush() resets pending counters", async () => {
+    it('flush() resets pending counters', async () => {
       const queue = new RequestQueue({
         store,
         batching: defaultBatching(),
@@ -323,8 +323,8 @@ describe("RequestQueue", () => {
   // Concurrent flush guard
   // -------------------------------------------------------------------------
 
-  describe("concurrent flush guard", () => {
-    it("prevents overlapping flush calls", async () => {
+  describe('concurrent flush guard', () => {
+    it('prevents overlapping flush calls', async () => {
       let resolveFlush: () => void = () => {};
       const slowFlush = vi.fn(
         () =>
@@ -364,8 +364,8 @@ describe("RequestQueue", () => {
   // Telemetry
   // -------------------------------------------------------------------------
 
-  describe("telemetry", () => {
-    it("emits requests_queued counter on enqueue", async () => {
+  describe('telemetry', () => {
+    it('emits requests_queued counter on enqueue', async () => {
       const counterSpy = vi.fn();
       const telemetry = {
         counter: counterSpy,
@@ -380,11 +380,11 @@ describe("RequestQueue", () => {
         telemetry,
       });
 
-      await queue.enqueue(makeNewRequest({ provider: "openai", model: "gpt-4o" }));
+      await queue.enqueue(makeNewRequest({ provider: 'openai', model: 'gpt-4o' }));
 
-      expect(counterSpy).toHaveBeenCalledWith("requests_queued", 1, {
-        provider: "openai",
-        model: "gpt-4o",
+      expect(counterSpy).toHaveBeenCalledWith('requests_queued', 1, {
+        provider: 'openai',
+        model: 'gpt-4o',
       });
     });
   });
@@ -393,21 +393,19 @@ describe("RequestQueue", () => {
   // estimateBytes
   // -------------------------------------------------------------------------
 
-  describe("estimateBytes", () => {
-    it("returns byte length of serialized params", () => {
+  describe('estimateBytes', () => {
+    it('returns byte length of serialized params', () => {
       const req = makeNewRequest({
-        params: { messages: [{ role: "user", content: "hi" }] },
+        params: { messages: [{ role: 'user', content: 'hi' }] },
       });
       const bytes = estimateBytes(req);
-      const expected = new TextEncoder().encode(
-        JSON.stringify(req.params),
-      ).byteLength;
+      const expected = new TextEncoder().encode(JSON.stringify(req.params)).byteLength;
       expect(bytes).toBe(expected);
     });
 
-    it("handles unicode correctly", () => {
+    it('handles unicode correctly', () => {
       const req = makeNewRequest({
-        params: { messages: [{ role: "user", content: "\u{1F600}" }] },
+        params: { messages: [{ role: 'user', content: '\u{1F600}' }] },
       });
       const bytes = estimateBytes(req);
       // The emoji is 4 bytes in UTF-8.

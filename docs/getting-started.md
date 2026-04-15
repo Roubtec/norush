@@ -22,11 +22,7 @@ The fastest way to try norush is with the in-memory store.
 This requires no database and is suitable for development and testing.
 
 ```typescript
-import {
-  createNorush,
-  MemoryStore,
-  ConsoleTelemetry,
-} from "@norush/core";
+import { createNorush, MemoryStore, ConsoleTelemetry } from '@norush/core';
 
 const engine = createNorush({
   store: new MemoryStore(),
@@ -38,15 +34,15 @@ const engine = createNorush({
 
 // Enqueue a request
 const request = await engine.enqueue({
-  provider: "claude",
-  model: "claude-sonnet-4-6",
+  provider: 'claude',
+  model: 'claude-sonnet-4-6',
   params: {
-    messages: [{ role: "user", content: "Summarise the benefits of batch processing." }],
+    messages: [{ role: 'user', content: 'Summarise the benefits of batch processing.' }],
     max_tokens: 1024,
   },
 });
 
-console.log("Queued request:", request.id);
+console.log('Queued request:', request.id);
 
 // Flush queued requests into a batch and submit to the provider
 await engine.flush();
@@ -60,13 +56,8 @@ await engine.tick();
 For production use, norush persists state in PostgreSQL so that nothing is lost across restarts.
 
 ```typescript
-import postgres from "postgres";
-import {
-  createNorush,
-  PostgresStore,
-  migrate,
-  ConsoleTelemetry,
-} from "@norush/core";
+import postgres from 'postgres';
+import { createNorush, PostgresStore, migrate, ConsoleTelemetry } from '@norush/core';
 
 const sql = postgres(process.env.DATABASE_URL!);
 
@@ -89,15 +80,15 @@ engine.start();
 
 // Enqueue work
 await engine.enqueue({
-  provider: "openai",
-  model: "gpt-4o",
+  provider: 'openai',
+  model: 'gpt-4o',
   params: {
-    messages: [{ role: "user", content: "Explain batch APIs in one paragraph." }],
+    messages: [{ role: 'user', content: 'Explain batch APIs in one paragraph.' }],
   },
 });
 
 // Later, gracefully shut down
-process.on("SIGTERM", async () => {
+process.on('SIGTERM', async () => {
   await engine.stop();
   await sql.end();
 });

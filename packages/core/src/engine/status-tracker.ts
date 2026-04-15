@@ -14,34 +14,28 @@
  * externally via `tracker.tick()` (serverless / cron).
  */
 
-import type { Store } from "../interfaces/store.js";
-import type { Provider } from "../interfaces/provider.js";
-import type { PollingStrategy } from "../interfaces/polling.js";
-import type { TelemetryHook } from "../interfaces/telemetry.js";
-import type {
-  Batch,
-  BatchStatus,
-  PollContext,
-  ProviderBatchRef,
-  ProviderName,
-} from "../types.js";
-import { NoopTelemetry } from "../telemetry/noop.js";
-import { getClampedStrategy } from "../polling/index.js";
-import { CircuitBreaker, type CircuitBreakerOptions } from "./circuit-breaker.js";
-import { OrphanRecovery } from "./orphan-recovery.js";
+import type { Store } from '../interfaces/store.js';
+import type { Provider } from '../interfaces/provider.js';
+import type { PollingStrategy } from '../interfaces/polling.js';
+import type { TelemetryHook } from '../interfaces/telemetry.js';
+import type { Batch, BatchStatus, PollContext, ProviderBatchRef, ProviderName } from '../types.js';
+import { NoopTelemetry } from '../telemetry/noop.js';
+import { getClampedStrategy } from '../polling/index.js';
+import { CircuitBreaker, type CircuitBreakerOptions } from './circuit-breaker.js';
+import { OrphanRecovery } from './orphan-recovery.js';
 
 // ---------------------------------------------------------------------------
 // Event types
 // ---------------------------------------------------------------------------
 
 export type StatusTrackerEventName =
-  | "batch:submitted"
-  | "batch:processing"
-  | "batch:completed"
-  | "batch:expired"
-  | "batch:error"
-  | "batch:failed"
-  | "circuit_breaker:tripped";
+  | 'batch:submitted'
+  | 'batch:processing'
+  | 'batch:completed'
+  | 'batch:expired'
+  | 'batch:error'
+  | 'batch:failed'
+  | 'circuit_breaker:tripped';
 
 export type StatusTrackerEventHandler = (data: Record<string, unknown>) => void;
 
@@ -107,7 +101,7 @@ export class StatusTracker {
   constructor(options: StatusTrackerOptions) {
     this.store = options.store;
     this.providers = options.providers;
-    this.defaultPollingStrategy = options.defaultPollingStrategy ?? "linear";
+    this.defaultPollingStrategy = options.defaultPollingStrategy ?? 'linear';
     this.defaultCompletionWindowMs = options.defaultCompletionWindowMs ?? 86_400_000;
     this.tickIntervalMs = options.tickIntervalMs ?? 60_000;
     this.telemetry = options.telemetry ?? new NoopTelemetry();
@@ -182,7 +176,7 @@ export class StatusTracker {
       });
     }, this.tickIntervalMs);
     // Unref so the timer doesn't prevent process exit.
-    if (typeof this.tickTimer === "object" && "unref" in this.tickTimer) {
+    if (typeof this.tickTimer === 'object' && 'unref' in this.tickTimer) {
       this.tickTimer.unref();
     }
   }
@@ -220,8 +214,8 @@ export class StatusTracker {
     // Step 1: Orphan recovery.
     const orphanResult = await this.orphanRecovery.recover();
     if (orphanResult.recovered > 0 || orphanResult.failed > 0) {
-      this.telemetry.counter("orphans_recovered", orphanResult.recovered);
-      this.telemetry.counter("orphans_failed", orphanResult.failed);
+      this.telemetry.counter('orphans_recovered', orphanResult.recovered);
+      this.telemetry.counter('orphans_failed', orphanResult.failed);
     }
 
     // Report recovered orphans to circuit breaker (successful submissions).
@@ -254,14 +248,14 @@ export class StatusTracker {
 
     // In-flight batches should always have a provider batch ID.
     if (!batch.providerBatchId) {
-      this.telemetry.event("status_check_error", {
+      this.telemetry.event('status_check_error', {
         batchId: batch.id,
         provider: batch.provider,
-        error: "Invariant violated: in-flight batch is missing providerBatchId",
+        error: 'Invariant violated: in-flight batch is missing providerBatchId',
       });
-      this.telemetry.counter("status_check_invariant_violations", 1, {
+      this.telemetry.counter('status_check_invariant_violations', 1, {
         provider: batch.provider,
-        invariant: "missing_provider_batch_id",
+        invariant: 'missing_provider_batch_id',
       });
       pollState.lastPolledAt = this.now();
       pollState.pollCount++;
@@ -276,7 +270,7 @@ export class StatusTracker {
     // Resolve provider adapter.
     const adapter = this.resolveAdapter(batch.provider, batch.apiKeyId);
     if (!adapter) {
-      this.telemetry.event("status_check_error", {
+      this.telemetry.event('status_check_error', {
         batchId: batch.id,
         error: `No provider adapter found for ${batch.provider}`,
       });
@@ -288,7 +282,7 @@ export class StatusTracker {
     try {
       newStatus = await adapter.checkStatus(ref);
     } catch (error) {
-      this.telemetry.event("status_check_error", {
+      this.telemetry.event('status_check_error', {
         batchId: batch.id,
         provider: batch.provider,
         error: error instanceof Error ? error.message : String(error),
@@ -303,7 +297,7 @@ export class StatusTracker {
     pollState.lastPolledAt = this.now();
     pollState.pollCount++;
 
-    this.telemetry.counter("batches_polled", 1, { provider: batch.provider });
+    this.telemetry.counter('batches_polled', 1, { provider: batch.provider });
 
     // Apply status transition.
     await this.applyStatusTransition(batch, newStatus);
@@ -340,10 +334,7 @@ export class StatusTracker {
   /**
    * Apply a status transition to a batch.
    */
-  private async applyStatusTransition(
-    batch: Batch,
-    newStatus: BatchStatus,
-  ): Promise<void> {
+  private async applyStatusTransition(batch: Batch, newStatus: BatchStatus): Promise<void> {
     // No change — nothing to do.
     if (newStatus === batch.status) return;
 
@@ -366,30 +357,30 @@ export class StatusTracker {
     };
 
     switch (newStatus) {
-      case "submitted":
-        this.emit("batch:submitted", eventData);
+      case 'submitted':
+        this.emit('batch:submitted', eventData);
         break;
-      case "processing":
-        this.emit("batch:processing", eventData);
+      case 'processing':
+        this.emit('batch:processing', eventData);
         break;
-      case "ended":
-        this.emit("batch:completed", eventData);
+      case 'ended':
+        this.emit('batch:completed', eventData);
         break;
-      case "expired":
-        this.emit("batch:expired", eventData);
+      case 'expired':
+        this.emit('batch:expired', eventData);
         break;
-      case "failed": {
-        this.emit("batch:failed", eventData);
+      case 'failed': {
+        this.emit('batch:failed', eventData);
         const justTripped = this.circuitBreaker.recordFailure();
         if (justTripped) {
-          this.emit("circuit_breaker:tripped", {
+          this.emit('circuit_breaker:tripped', {
             consecutiveFailures: this.circuitBreaker.consecutiveFailures,
           });
         }
         break;
       }
-      case "cancelled":
-        this.emit("batch:error", eventData);
+      case 'cancelled':
+        this.emit('batch:error', eventData);
         break;
     }
   }
@@ -428,14 +419,8 @@ export class StatusTracker {
   // Provider adapter resolution
   // -------------------------------------------------------------------------
 
-  private resolveAdapter(
-    provider: ProviderName,
-    apiKeyId: string,
-  ): Provider | undefined {
-    return (
-      this.providers.get(`${provider}::${apiKeyId}`) ??
-      this.providers.get(provider)
-    );
+  private resolveAdapter(provider: ProviderName, apiKeyId: string): Provider | undefined {
+    return this.providers.get(`${provider}::${apiKeyId}`) ?? this.providers.get(provider);
   }
 }
 
@@ -445,9 +430,6 @@ export class StatusTracker {
 
 function isTerminalStatus(status: BatchStatus): boolean {
   return (
-    status === "ended" ||
-    status === "expired" ||
-    status === "failed" ||
-    status === "cancelled"
+    status === 'ended' || status === 'expired' || status === 'failed' || status === 'cancelled'
   );
 }

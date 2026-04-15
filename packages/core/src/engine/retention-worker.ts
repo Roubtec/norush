@@ -16,16 +16,16 @@
  * user preference — user values are clamped via Math.min.
  */
 
-import type { Store } from "../interfaces/store.js";
-import type { TelemetryHook } from "../interfaces/telemetry.js";
-import { NoopTelemetry } from "../telemetry/noop.js";
+import type { Store } from '../interfaces/store.js';
+import type { TelemetryHook } from '../interfaces/telemetry.js';
+import { NoopTelemetry } from '../telemetry/noop.js';
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
 /** Supported retention policy values. */
-export type RetentionPolicy = "on_ack" | `${number}d`;
+export type RetentionPolicy = 'on_ack' | `${number}d`;
 
 /**
  * Resolves the retention policy for a given user.
@@ -75,7 +75,7 @@ export interface RetentionSweepResult {
 // Constants
 // ---------------------------------------------------------------------------
 
-export const DEFAULT_RETENTION_POLICY: RetentionPolicy = "7d";
+export const DEFAULT_RETENTION_POLICY: RetentionPolicy = '7d';
 export const DEFAULT_HARD_CAP_DAYS = 90;
 export const DEFAULT_INTERVAL_MS = 3_600_000; // 1 hour
 const MS_PER_DAY = 86_400_000;
@@ -91,10 +91,8 @@ const MS_PER_DAY = 86_400_000;
  * successful delivery attempt before scrubbing, making them equivalent.
  * Returns `null` for unrecognised values.
  */
-export function parseRetentionPolicy(
-  policy: string,
-): number | null {
-  if (policy === "on_ack") return 0;
+export function parseRetentionPolicy(policy: string): number | null {
+  if (policy === 'on_ack') return 0;
 
   const match = /^(\d+)d$/.exec(policy);
   if (!match) return null;
@@ -151,13 +149,13 @@ export class RetentionWorker {
     if (this.timer) return;
     this.timer = setInterval(() => {
       void this.sweep().catch((err) => {
-        this.telemetry.event("retention_sweep_error", {
+        this.telemetry.event('retention_sweep_error', {
           error: err instanceof Error ? err.message : String(err),
         });
       });
     }, this.intervalMs);
     // Unref so the timer doesn't prevent process exit.
-    if (typeof this.timer === "object" && "unref" in this.timer) {
+    if (typeof this.timer === 'object' && 'unref' in this.timer) {
       this.timer.unref();
     }
   }
@@ -210,23 +208,21 @@ export class RetentionWorker {
     try {
       // Step 1: Hard cap enforcement.
       try {
-        const hardCapCutoff = new Date(
-          now.getTime() - this.hardCapDays * MS_PER_DAY,
-        );
+        const hardCapCutoff = new Date(now.getTime() - this.hardCapDays * MS_PER_DAY);
         const hardCapCount = await this.store.scrubExpiredContent(hardCapCutoff);
         result.hardCapScrubbed = hardCapCount;
         result.totalScrubbed += hardCapCount;
 
         if (hardCapCount > 0) {
-          this.telemetry.counter("retention.hard_cap_scrubbed", hardCapCount);
-          this.telemetry.event("retention_hard_cap", {
+          this.telemetry.counter('retention.hard_cap_scrubbed', hardCapCount);
+          this.telemetry.event('retention_hard_cap', {
             scrubbed: hardCapCount,
             cutoff: hardCapCutoff.toISOString(),
           });
         }
       } catch (err) {
         result.errors++;
-        this.telemetry.event("retention_hard_cap_error", {
+        this.telemetry.event('retention_hard_cap_error', {
           error: err instanceof Error ? err.message : String(err),
         });
       }
@@ -239,7 +235,7 @@ export class RetentionWorker {
         result.errors += policyResult.errors;
       } catch (err) {
         result.errors++;
-        this.telemetry.event("retention_policy_error", {
+        this.telemetry.event('retention_policy_error', {
           error: err instanceof Error ? err.message : String(err),
         });
       }
@@ -248,11 +244,10 @@ export class RetentionWorker {
       // hard cap (step 1) or per-user policy (step 2), including any that were
       // scrubbed in previous sweeps but whose event logs were not yet cleaned up.
       try {
-        result.eventLogScrubbed =
-          await this.store.scrubEventLogsForScrubbedContent();
+        result.eventLogScrubbed = await this.store.scrubEventLogsForScrubbedContent();
       } catch (err) {
         result.errors++;
-        this.telemetry.event("retention_event_log_error", {
+        this.telemetry.event('retention_event_log_error', {
           error: err instanceof Error ? err.message : String(err),
         });
       }
@@ -261,7 +256,7 @@ export class RetentionWorker {
     }
 
     if (result.totalScrubbed > 0 || result.eventLogScrubbed > 0) {
-      this.telemetry.event("retention_sweep_complete", {
+      this.telemetry.event('retention_sweep_complete', {
         totalScrubbed: result.totalScrubbed,
         hardCapScrubbed: result.hardCapScrubbed,
         policyScrubbed: result.policyScrubbed,
@@ -281,9 +276,7 @@ export class RetentionWorker {
    * handled separately in sweep() step 3 so it covers hard-cap-scrubbed users
    * too.
    */
-  private async scrubByPolicy(
-    now: Date,
-  ): Promise<{ scrubbed: number; errors: number }> {
+  private async scrubByPolicy(now: Date): Promise<{ scrubbed: number; errors: number }> {
     let scrubbed = 0;
     let errors = 0;
 
@@ -298,7 +291,7 @@ export class RetentionWorker {
 
         const policyDays = parseRetentionPolicy(policy);
         if (policyDays === null) {
-          this.telemetry.event("retention_invalid_policy", {
+          this.telemetry.event('retention_invalid_policy', {
             userId,
             policy,
           });
@@ -312,7 +305,7 @@ export class RetentionWorker {
           scrubbed += count;
 
           if (count > 0) {
-            this.telemetry.counter("retention.on_ack_scrubbed", count, {
+            this.telemetry.counter('retention.on_ack_scrubbed', count, {
               userId,
             });
           }
@@ -325,7 +318,7 @@ export class RetentionWorker {
           scrubbed += count;
 
           if (count > 0) {
-            this.telemetry.counter("retention.policy_scrubbed", count, {
+            this.telemetry.counter('retention.policy_scrubbed', count, {
               userId,
               policy,
             });
@@ -333,7 +326,7 @@ export class RetentionWorker {
         }
       } catch (err) {
         errors++;
-        this.telemetry.event("retention_user_error", {
+        this.telemetry.event('retention_user_error', {
           userId,
           error: err instanceof Error ? err.message : String(err),
         });

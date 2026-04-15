@@ -8,9 +8,9 @@
  * Callers receive masked representations for display.
  */
 
-import type postgres from "postgres";
-import { encrypt, decrypt, deriveKey, maskApiKey } from "@norush/core";
-import { ulid } from "ulidx";
+import type postgres from 'postgres';
+import { encrypt, decrypt, deriveKey, maskApiKey } from '@norush/core';
+import { ulid } from 'ulidx';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -53,9 +53,7 @@ async function getMasterKey(): Promise<Buffer> {
 
   const raw = process.env.NORUSH_MASTER_KEY;
   if (!raw) {
-    throw new Error(
-      "NORUSH_MASTER_KEY environment variable is required for API key encryption",
-    );
+    throw new Error('NORUSH_MASTER_KEY environment variable is required for API key encryption');
   }
 
   _masterKeyBuffer = await deriveKey(raw);
@@ -71,12 +69,12 @@ export function resetMasterKey(): void {
 // Validation
 // ---------------------------------------------------------------------------
 
-const VALID_PROVIDERS = ["claude", "openai"] as const;
+const VALID_PROVIDERS = ['claude', 'openai'] as const;
 
 /** Known API key prefixes per provider for basic validation. */
 const KEY_PREFIXES: Record<string, string[]> = {
-  claude: ["sk-ant-"],
-  openai: ["sk-"],
+  claude: ['sk-ant-'],
+  openai: ['sk-'],
 };
 
 export interface ValidationError {
@@ -97,35 +95,35 @@ export function validateApiKeyInput(input: {
 
   // Provider
   if (!input.provider) {
-    errors.push({ field: "provider", message: "Provider is required" });
+    errors.push({ field: 'provider', message: 'Provider is required' });
   } else if (!VALID_PROVIDERS.includes(input.provider as (typeof VALID_PROVIDERS)[number])) {
     errors.push({
-      field: "provider",
-      message: `Invalid provider. Must be one of: ${VALID_PROVIDERS.join(", ")}`,
+      field: 'provider',
+      message: `Invalid provider. Must be one of: ${VALID_PROVIDERS.join(', ')}`,
     });
   }
 
   // Label — validate the trimmed value (consistent with what is stored)
-  const label = input.label?.trim() ?? "";
+  const label = input.label?.trim() ?? '';
   if (label.length === 0) {
-    errors.push({ field: "label", message: "Label is required" });
+    errors.push({ field: 'label', message: 'Label is required' });
   } else if (label.length > 100) {
-    errors.push({ field: "label", message: "Label must be 100 characters or fewer" });
+    errors.push({ field: 'label', message: 'Label must be 100 characters or fewer' });
   }
 
   // API key — normalize before all checks (consistent with what is stored)
-  const apiKey = input.apiKey?.trim() ?? "";
+  const apiKey = input.apiKey?.trim() ?? '';
   if (apiKey.length === 0) {
-    errors.push({ field: "apiKey", message: "API key is required" });
+    errors.push({ field: 'apiKey', message: 'API key is required' });
   } else if (apiKey.length < 10) {
-    errors.push({ field: "apiKey", message: "API key appears too short" });
+    errors.push({ field: 'apiKey', message: 'API key appears too short' });
   } else if (input.provider && KEY_PREFIXES[input.provider]) {
     const prefixes = KEY_PREFIXES[input.provider];
     const hasValidPrefix = prefixes.some((p) => apiKey.startsWith(p));
     if (!hasValidPrefix) {
       errors.push({
-        field: "apiKey",
-        message: `API key should start with one of: ${prefixes.join(", ")}`,
+        field: 'apiKey',
+        message: `API key should start with one of: ${prefixes.join(', ')}`,
       });
     }
   }
@@ -140,10 +138,7 @@ export function validateApiKeyInput(input: {
 /**
  * List all API keys for a user (masked — no plaintext returned).
  */
-export async function listApiKeys(
-  sql: postgres.Sql,
-  userId: string,
-): Promise<ApiKeyRecord[]> {
+export async function listApiKeys(sql: postgres.Sql, userId: string): Promise<ApiKeyRecord[]> {
   const masterKey = await getMasterKey();
 
   const rows = await sql`
@@ -157,14 +152,11 @@ export async function listApiKeys(
   return rows.map((row) => {
     const maskedKey = (() => {
       try {
-        const plaintext = decrypt(
-          Buffer.from(row.api_key_encrypted as Uint8Array),
-          masterKey,
-        );
+        const plaintext = decrypt(Buffer.from(row.api_key_encrypted as Uint8Array), masterKey);
         return maskApiKey(plaintext);
       } catch {
         // If decryption fails (e.g. key rotated), show a generic mask
-        return "[decryption error]";
+        return '[decryption error]';
       }
     })();
 

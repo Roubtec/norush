@@ -13,14 +13,9 @@
  * - Results are available immediately after submitBatch returns.
  */
 
-import OpenAI from "openai";
-import type { Provider } from "../interfaces/provider.js";
-import type {
-  BatchStatus,
-  NorushRequest,
-  NorushResult,
-  ProviderBatchRef,
-} from "../types.js";
+import OpenAI from 'openai';
+import type { Provider } from '../interfaces/provider.js';
+import type { BatchStatus, NorushRequest, NorushResult, ProviderBatchRef } from '../types.js';
 
 // ---------------------------------------------------------------------------
 // Options
@@ -90,9 +85,7 @@ function extractUsage(response: Record<string, unknown>): {
  * Extract the stop/finish reason from an OpenAI chat completion response.
  */
 function extractStopReason(response: Record<string, unknown>): string | null {
-  const choices = response.choices as
-    | Array<{ finish_reason?: string }>
-    | undefined;
+  const choices = response.choices as Array<{ finish_reason?: string }> | undefined;
   if (choices?.[0]?.finish_reason) return choices[0].finish_reason;
   return null;
 }
@@ -108,8 +101,8 @@ function is429Error(err: unknown): boolean {
   // OpenAI SDK throws APIError with a `status` property
   if (
     err != null &&
-    typeof err === "object" &&
-    "status" in err &&
+    typeof err === 'object' &&
+    'status' in err &&
     (err as { status: unknown }).status === 429
   ) {
     return true;
@@ -154,8 +147,7 @@ export class OpenAIFlexAdapter implements Provider {
     });
     this.maxRetries = options.maxRetries ?? DEFAULT_MAX_RETRIES;
     this.baseDelayMs = options.baseDelayMs ?? DEFAULT_BASE_DELAY_MS;
-    this._sleep =
-      options.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
+    this._sleep = options.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
   }
 
   /**
@@ -179,7 +171,7 @@ export class OpenAIFlexAdapter implements Provider {
 
     return {
       providerBatchId: batchId,
-      provider: "openai",
+      provider: 'openai',
     };
   }
 
@@ -197,7 +189,7 @@ export class OpenAIFlexAdapter implements Provider {
         `OpenAI Flex batch results are unavailable for providerBatchId: ${ref.providerBatchId}`,
       );
     }
-    return "ended";
+    return 'ended';
   }
 
   /**
@@ -243,7 +235,7 @@ export class OpenAIFlexAdapter implements Provider {
         const response = await this.client.chat.completions.create({
           ...req.params,
           model: req.model,
-          service_tier: "flex",
+          service_tier: 'flex',
           stream: false,
         } as OpenAI.ChatCompletionCreateParamsNonStreaming);
 
@@ -276,9 +268,8 @@ export class OpenAIFlexAdapter implements Provider {
     }
 
     // All attempts failed — return an error result
-    const errorResponse: Record<string, unknown> = lastError instanceof Error
-      ? { error: lastError.message }
-      : { error: "unknown_error" };
+    const errorResponse: Record<string, unknown> =
+      lastError instanceof Error ? { error: lastError.message } : { error: 'unknown_error' };
 
     return {
       requestId: req.id,

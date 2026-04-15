@@ -5,7 +5,7 @@
  * session validation to verify unauthenticated access is properly redirected.
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // ---------------------------------------------------------------------------
 // Mock WorkOS SDK
@@ -13,7 +13,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const mockAuthenticateWithSessionCookie = vi.fn();
 
-vi.mock("@workos-inc/node", () => ({
+vi.mock('@workos-inc/node', () => ({
   WorkOS: vi.fn().mockImplementation(() => ({
     userManagement: {
       authenticateWithSessionCookie: mockAuthenticateWithSessionCookie,
@@ -26,10 +26,10 @@ vi.mock("@workos-inc/node", () => ({
 
 beforeEach(() => {
   vi.unstubAllEnvs();
-  vi.stubEnv("WORKOS_API_KEY", "sk_test_1234");
-  vi.stubEnv("WORKOS_CLIENT_ID", "client_test_1234");
-  vi.stubEnv("WORKOS_COOKIE_PASSWORD", "a_very_long_secret_password_for_testing_32chars!");
-  vi.stubEnv("WORKOS_REDIRECT_URI", "http://localhost:5173/auth/callback");
+  vi.stubEnv('WORKOS_API_KEY', 'sk_test_1234');
+  vi.stubEnv('WORKOS_CLIENT_ID', 'client_test_1234');
+  vi.stubEnv('WORKOS_COOKIE_PASSWORD', 'a_very_long_secret_password_for_testing_32chars!');
+  vi.stubEnv('WORKOS_REDIRECT_URI', 'http://localhost:5173/auth/callback');
 
   mockAuthenticateWithSessionCookie.mockReset();
 });
@@ -45,7 +45,7 @@ beforeEach(() => {
 function simulateProtectedLayoutLoad(locals: App.Locals) {
   if (!locals.user) {
     // SvelteKit redirect() throws a Redirect object
-    throw { status: 302, location: "/login" };
+    throw { status: 302, location: '/login' };
   }
 
   return {
@@ -72,7 +72,7 @@ async function simulateHook(
   const locals: App.Locals = {};
 
   if (sessionCookie) {
-    const { validateSession, resetWorkOS } = await import("$lib/server/auth");
+    const { validateSession, resetWorkOS } = await import('$lib/server/auth');
     resetWorkOS();
 
     const session = await validateSession(sessionCookie);
@@ -95,131 +95,131 @@ async function simulateHook(
 // Tests
 // ---------------------------------------------------------------------------
 
-describe("protected route redirect logic", () => {
-  it("redirects unauthenticated users to /login", () => {
+describe('protected route redirect logic', () => {
+  it('redirects unauthenticated users to /login', () => {
     const locals: App.Locals = {}; // no user
 
     expect(() => simulateProtectedLayoutLoad(locals)).toThrow(
       expect.objectContaining({
         status: 302,
-        location: "/login",
+        location: '/login',
       }),
     );
   });
 
-  it("allows authenticated users through", () => {
+  it('allows authenticated users through', () => {
     const locals: App.Locals = {
       user: {
-        id: "user_01AUTH",
-        email: "auth@example.com",
-        firstName: "Auth",
-        lastName: "User",
-        sessionId: "sess_123",
+        id: 'user_01AUTH',
+        email: 'auth@example.com',
+        firstName: 'Auth',
+        lastName: 'User',
+        sessionId: 'sess_123',
       },
     };
 
     const data = simulateProtectedLayoutLoad(locals);
-    expect(data.user.id).toBe("user_01AUTH");
-    expect(data.user.email).toBe("auth@example.com");
+    expect(data.user.id).toBe('user_01AUTH');
+    expect(data.user.email).toBe('auth@example.com');
   });
 
-  it("hooks populate locals.user for valid session on protected routes", async () => {
+  it('hooks populate locals.user for valid session on protected routes', async () => {
     mockAuthenticateWithSessionCookie.mockResolvedValueOnce({
       authenticated: true,
-      sessionId: "sess_valid",
+      sessionId: 'sess_valid',
       user: {
-        id: "user_01HOOK",
-        email: "hook@example.com",
-        firstName: "Hook",
-        lastName: "Test",
+        id: 'user_01HOOK',
+        email: 'hook@example.com',
+        firstName: 'Hook',
+        lastName: 'Test',
       },
     });
 
-    const locals = await simulateHook("/dashboard", "valid_sealed_session");
+    const locals = await simulateHook('/dashboard', 'valid_sealed_session');
 
     expect(locals.user).toBeDefined();
-    expect(locals.user?.id).toBe("user_01HOOK");
-    expect(locals.user?.email).toBe("hook@example.com");
-    expect(locals.user?.sessionId).toBe("sess_valid");
+    expect(locals.user?.id).toBe('user_01HOOK');
+    expect(locals.user?.email).toBe('hook@example.com');
+    expect(locals.user?.sessionId).toBe('sess_valid');
   });
 
-  it("hooks do NOT populate locals.user for invalid session", async () => {
+  it('hooks do NOT populate locals.user for invalid session', async () => {
     mockAuthenticateWithSessionCookie.mockResolvedValueOnce({
       authenticated: false,
-      reason: "invalid_jwt",
+      reason: 'invalid_jwt',
     });
 
-    const locals = await simulateHook("/dashboard", "expired_session");
+    const locals = await simulateHook('/dashboard', 'expired_session');
 
     expect(locals.user).toBeUndefined();
   });
 
-  it("hooks do not call WorkOS when no session cookie is present on /login", async () => {
-    const locals = await simulateHook("/login", undefined);
+  it('hooks do not call WorkOS when no session cookie is present on /login', async () => {
+    const locals = await simulateHook('/login', undefined);
 
     expect(locals.user).toBeUndefined();
     expect(mockAuthenticateWithSessionCookie).not.toHaveBeenCalled();
   });
 
-  it("hooks populate locals.user on /login when a valid session cookie is present", async () => {
+  it('hooks populate locals.user on /login when a valid session cookie is present', async () => {
     mockAuthenticateWithSessionCookie.mockResolvedValueOnce({
       authenticated: true,
-      sessionId: "sess_login",
+      sessionId: 'sess_login',
       user: {
-        id: "user_01LOGIN",
-        email: "login@example.com",
-        firstName: "Login",
-        lastName: "Test",
+        id: 'user_01LOGIN',
+        email: 'login@example.com',
+        firstName: 'Login',
+        lastName: 'Test',
       },
     });
 
-    const locals = await simulateHook("/login", "valid_sealed_session");
+    const locals = await simulateHook('/login', 'valid_sealed_session');
 
     expect(locals.user).toBeDefined();
-    expect(locals.user?.id).toBe("user_01LOGIN");
-    expect(locals.user?.sessionId).toBe("sess_login");
+    expect(locals.user?.id).toBe('user_01LOGIN');
+    expect(locals.user?.sessionId).toBe('sess_login');
   });
 
-  it("hooks populate locals.user on /auth/logout when a valid session cookie is present", async () => {
+  it('hooks populate locals.user on /auth/logout when a valid session cookie is present', async () => {
     mockAuthenticateWithSessionCookie.mockResolvedValueOnce({
       authenticated: true,
-      sessionId: "sess_logout",
+      sessionId: 'sess_logout',
       user: {
-        id: "user_01LOGOUT",
-        email: "logout@example.com",
-        firstName: "Logout",
-        lastName: "Test",
+        id: 'user_01LOGOUT',
+        email: 'logout@example.com',
+        firstName: 'Logout',
+        lastName: 'Test',
       },
     });
 
-    const locals = await simulateHook("/auth/logout", "valid_sealed_session");
+    const locals = await simulateHook('/auth/logout', 'valid_sealed_session');
 
     expect(locals.user).toBeDefined();
-    expect(locals.user?.sessionId).toBe("sess_logout");
+    expect(locals.user?.sessionId).toBe('sess_logout');
   });
 
-  it("hooks do not call WorkOS when no session cookie is present on /auth/callback", async () => {
-    const locals = await simulateHook("/auth/callback?code=abc", undefined);
+  it('hooks do not call WorkOS when no session cookie is present on /auth/callback', async () => {
+    const locals = await simulateHook('/auth/callback?code=abc', undefined);
 
     expect(locals.user).toBeUndefined();
     expect(mockAuthenticateWithSessionCookie).not.toHaveBeenCalled();
   });
 
-  it("hooks do not call WorkOS when no session cookie is present on /api/health", async () => {
-    const locals = await simulateHook("/api/health", undefined);
+  it('hooks do not call WorkOS when no session cookie is present on /api/health', async () => {
+    const locals = await simulateHook('/api/health', undefined);
 
     expect(locals.user).toBeUndefined();
     expect(mockAuthenticateWithSessionCookie).not.toHaveBeenCalled();
   });
 
-  it("end-to-end: unauthenticated user on protected route gets redirected", async () => {
-    const locals = await simulateHook("/dashboard", undefined);
+  it('end-to-end: unauthenticated user on protected route gets redirected', async () => {
+    const locals = await simulateHook('/dashboard', undefined);
 
     expect(locals.user).toBeUndefined();
     expect(() => simulateProtectedLayoutLoad(locals)).toThrow(
       expect.objectContaining({
         status: 302,
-        location: "/login",
+        location: '/login',
       }),
     );
   });

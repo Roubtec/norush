@@ -14,9 +14,9 @@
  * Requires DATABASE_URL environment variable.
  */
 
-import { basename } from "node:path";
-import type postgres from "postgres";
-import { deriveKey, encrypt, decrypt } from "../crypto/vault.js";
+import { basename } from 'node:path';
+import type postgres from 'postgres';
+import { deriveKey, encrypt, decrypt } from '../crypto/vault.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -56,7 +56,7 @@ export async function rotateKeys(
   opts: RotateKeyOptions,
 ): Promise<RotateKeyResult> {
   if (opts.oldKey === opts.newKey) {
-    throw new Error("Old key and new key must be different");
+    throw new Error('Old key and new key must be different');
   }
 
   const oldDerivedKey = await deriveKey(opts.oldKey);
@@ -96,7 +96,7 @@ export async function rotateKeys(
         } catch {
           throw new Error(
             `Failed to decrypt key id=${row.id} with the provided old key. ` +
-              "Aborting rotation — no keys were modified.",
+              'Aborting rotation — no keys were modified.',
           );
         }
 
@@ -138,17 +138,17 @@ export function parseArgs(argv: string[]): ParsedArgs {
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
-    if (arg === "--old-key") {
+    if (arg === '--old-key') {
       if (i + 1 >= argv.length) {
-        throw new Error("Missing value for argument: --old-key <key>");
+        throw new Error('Missing value for argument: --old-key <key>');
       }
       oldKey = argv[++i];
-    } else if (arg === "--new-key") {
+    } else if (arg === '--new-key') {
       if (i + 1 >= argv.length) {
-        throw new Error("Missing value for argument: --new-key <key>");
+        throw new Error('Missing value for argument: --new-key <key>');
       }
       newKey = argv[++i];
-    } else if (arg === "--dry-run") {
+    } else if (arg === '--dry-run') {
       dryRun = true;
     } else {
       throw new Error(`Unknown argument: ${arg}`);
@@ -156,10 +156,10 @@ export function parseArgs(argv: string[]): ParsedArgs {
   }
 
   if (!oldKey) {
-    throw new Error("Missing required argument: --old-key <key>");
+    throw new Error('Missing required argument: --old-key <key>');
   }
   if (!newKey) {
-    throw new Error("Missing required argument: --new-key <key>");
+    throw new Error('Missing required argument: --new-key <key>');
   }
 
   return { oldKey, newKey, dryRun };
@@ -169,31 +169,29 @@ export function parseArgs(argv: string[]): ParsedArgs {
 // CLI entry point
 // ---------------------------------------------------------------------------
 
-async function main(): Promise<void> {
+export async function main(): Promise<void> {
   let args: ParsedArgs;
   try {
     args = parseArgs(process.argv.slice(2));
   } catch (err) {
-    console.error(
-      `Usage: rotate-key --old-key <key> --new-key <key> [--dry-run]\n`,
-    );
+    console.error(`Usage: rotate-key --old-key <key> --new-key <key> [--dry-run]\n`);
     console.error((err as Error).message);
     process.exit(1);
   }
 
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) {
-    console.error("DATABASE_URL environment variable is required.");
+    console.error('DATABASE_URL environment variable is required.');
     process.exit(1);
   }
 
   // Dynamic import so the module can be tested without postgres being
   // connected at import time.
-  const pg = await import("postgres");
+  const pg = await import('postgres');
   const sql = pg.default(databaseUrl);
 
   try {
-    const modeLabel = args.dryRun ? "[DRY RUN] " : "";
+    const modeLabel = args.dryRun ? '[DRY RUN] ' : '';
     console.log(`${modeLabel}Starting master key rotation...`);
 
     const result = await rotateKeys(sql, {
@@ -212,7 +210,7 @@ async function main(): Promise<void> {
       );
     }
   } catch (err) {
-    console.error("Key rotation failed:", (err as Error).message);
+    console.error('Key rotation failed:', (err as Error).message);
     process.exit(1);
   } finally {
     await sql.end();
@@ -221,10 +219,9 @@ async function main(): Promise<void> {
 
 // Run when executed directly (not imported as a module).
 // Uses path.basename so the check works on both Unix and Windows paths.
-const scriptName = process.argv[1] ? basename(process.argv[1]) : "";
-const isDirectRun =
-  scriptName === "rotate-key.ts" || scriptName === "rotate-key.js";
+const scriptName = process.argv[1] ? basename(process.argv[1]) : '';
+const isDirectRun = scriptName === 'rotate-key.ts' || scriptName === 'rotate-key.js';
 
 if (isDirectRun) {
-  main();
+  void main();
 }

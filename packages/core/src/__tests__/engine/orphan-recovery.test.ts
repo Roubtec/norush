@@ -1,8 +1,8 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { MemoryStore } from "../../store/memory.js";
-import { OrphanRecovery } from "../../engine/orphan-recovery.js";
-import type { Provider } from "../../interfaces/provider.js";
-import type { NewRequest, ProviderBatchRef } from "../../types.js";
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { MemoryStore } from '../../store/memory.js';
+import { OrphanRecovery } from '../../engine/orphan-recovery.js';
+import type { Provider } from '../../interfaces/provider.js';
+import type { NewRequest, ProviderBatchRef } from '../../types.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -10,13 +10,13 @@ import type { NewRequest, ProviderBatchRef } from "../../types.js";
 
 function makeNewRequest(overrides: Partial<NewRequest> = {}): NewRequest {
   return {
-    provider: "claude",
-    model: "claude-sonnet-4-5-20250929",
+    provider: 'claude',
+    model: 'claude-sonnet-4-5-20250929',
     params: {
       max_tokens: 1024,
-      messages: [{ role: "user", content: "Hello" }],
+      messages: [{ role: 'user', content: 'Hello' }],
     },
-    userId: "user_01",
+    userId: 'user_01',
     ...overrides,
   };
 }
@@ -24,10 +24,10 @@ function makeNewRequest(overrides: Partial<NewRequest> = {}): NewRequest {
 function mockProvider(overrides: Partial<Provider> = {}): Provider {
   return {
     submitBatch: vi.fn().mockResolvedValue({
-      providerBatchId: "provider_batch_recovered",
-      provider: "claude",
+      providerBatchId: 'provider_batch_recovered',
+      provider: 'claude',
     } satisfies ProviderBatchRef),
-    checkStatus: vi.fn().mockResolvedValue("processing"),
+    checkStatus: vi.fn().mockResolvedValue('processing'),
     fetchResults: vi.fn(),
     cancelBatch: vi.fn(),
     ...overrides,
@@ -38,7 +38,7 @@ function mockProvider(overrides: Partial<Provider> = {}): Provider {
 // Tests
 // ---------------------------------------------------------------------------
 
-describe("OrphanRecovery", () => {
+describe('OrphanRecovery', () => {
   let store: MemoryStore;
 
   beforeEach(() => {
@@ -49,12 +49,12 @@ describe("OrphanRecovery", () => {
   // No orphans
   // -----------------------------------------------------------------------
 
-  describe("no orphans", () => {
-    it("does nothing when there are no pending batches", async () => {
+  describe('no orphans', () => {
+    it('does nothing when there are no pending batches', async () => {
       const provider = mockProvider();
       const recovery = new OrphanRecovery({
         store,
-        providers: new Map([["claude", provider]]),
+        providers: new Map([['claude', provider]]),
       });
 
       const result = await recovery.recover();
@@ -63,23 +63,23 @@ describe("OrphanRecovery", () => {
       expect(provider.submitBatch).not.toHaveBeenCalled();
     });
 
-    it("ignores pending batches that already have a provider batch ID", async () => {
+    it('ignores pending batches that already have a provider batch ID', async () => {
       // Create a batch that is pending but has a provider batch ID (not an orphan).
       const req = await store.createRequest(makeNewRequest());
       const batch = await store.createBatch({
-        provider: "claude",
-        apiKeyId: "user_01",
+        provider: 'claude',
+        apiKeyId: 'user_01',
         requestCount: 1,
       });
-      await store.updateRequest(req.id, { batchId: batch.id, status: "batched" });
+      await store.updateRequest(req.id, { batchId: batch.id, status: 'batched' });
       await store.updateBatch(batch.id, {
-        providerBatchId: "some_provider_id",
+        providerBatchId: 'some_provider_id',
       });
 
       const provider = mockProvider();
       const recovery = new OrphanRecovery({
         store,
-        providers: new Map([["claude", provider]]),
+        providers: new Map([['claude', provider]]),
         gracePeriodMs: 0, // no grace period for test
       });
 
@@ -89,21 +89,21 @@ describe("OrphanRecovery", () => {
       expect(provider.submitBatch).not.toHaveBeenCalled();
     });
 
-    it("ignores batches that are too recent (within grace period)", async () => {
+    it('ignores batches that are too recent (within grace period)', async () => {
       const req = await store.createRequest(makeNewRequest());
       const batch = await store.createBatch({
-        provider: "claude",
-        apiKeyId: "user_01",
+        provider: 'claude',
+        apiKeyId: 'user_01',
         requestCount: 1,
       });
-      await store.updateRequest(req.id, { batchId: batch.id, status: "batched" });
+      await store.updateRequest(req.id, { batchId: batch.id, status: 'batched' });
       await store.updateBatch(batch.id, { submissionAttempts: 1 });
 
       const provider = mockProvider();
       // Grace period is 5 minutes, batch was just created — should skip.
       const recovery = new OrphanRecovery({
         store,
-        providers: new Map([["claude", provider]]),
+        providers: new Map([['claude', provider]]),
         gracePeriodMs: 300_000,
       });
 
@@ -118,15 +118,15 @@ describe("OrphanRecovery", () => {
   // Orphan detection and recovery
   // -----------------------------------------------------------------------
 
-  describe("orphan recovery", () => {
-    it("resubmits an orphaned batch", async () => {
+  describe('orphan recovery', () => {
+    it('resubmits an orphaned batch', async () => {
       const req = await store.createRequest(makeNewRequest());
       const batch = await store.createBatch({
-        provider: "claude",
-        apiKeyId: "user_01",
+        provider: 'claude',
+        apiKeyId: 'user_01',
         requestCount: 1,
       });
-      await store.updateRequest(req.id, { batchId: batch.id, status: "batched" });
+      await store.updateRequest(req.id, { batchId: batch.id, status: 'batched' });
       await store.updateBatch(batch.id, { submissionAttempts: 1 });
 
       const provider = mockProvider();
@@ -136,7 +136,7 @@ describe("OrphanRecovery", () => {
       const futureNow = new Date(Date.now() + 10 * 60 * 1000);
       const recovery = new OrphanRecovery({
         store,
-        providers: new Map([["claude", provider]]),
+        providers: new Map([['claude', provider]]),
         gracePeriodMs: 300_000,
         telemetry,
         now: () => futureNow,
@@ -149,28 +149,28 @@ describe("OrphanRecovery", () => {
 
       // Batch should be updated to 'submitted' with provider batch ID.
       const updated = await store.getBatch(batch.id);
-      expect(updated?.status).toBe("submitted");
-      expect(updated?.providerBatchId).toBe("provider_batch_recovered");
+      expect(updated?.status).toBe('submitted');
+      expect(updated?.providerBatchId).toBe('provider_batch_recovered');
       expect(updated?.submissionAttempts).toBe(2);
 
       // Telemetry event should be emitted.
       expect(telemetry.event).toHaveBeenCalledWith(
-        "orphan_recovered",
+        'orphan_recovered',
         expect.objectContaining({
           batchId: batch.id,
-          providerBatchId: "provider_batch_recovered",
+          providerBatchId: 'provider_batch_recovered',
         }),
       );
     });
 
-    it("increments submission attempts before calling provider", async () => {
+    it('increments submission attempts before calling provider', async () => {
       const req = await store.createRequest(makeNewRequest());
       const batch = await store.createBatch({
-        provider: "claude",
-        apiKeyId: "user_01",
+        provider: 'claude',
+        apiKeyId: 'user_01',
         requestCount: 1,
       });
-      await store.updateRequest(req.id, { batchId: batch.id, status: "batched" });
+      await store.updateRequest(req.id, { batchId: batch.id, status: 'batched' });
       await store.updateBatch(batch.id, { submissionAttempts: 1 });
 
       let attemptsDuringSubmit: number | undefined;
@@ -178,14 +178,14 @@ describe("OrphanRecovery", () => {
         submitBatch: vi.fn().mockImplementation(async () => {
           const b = await store.getBatch(batch.id);
           attemptsDuringSubmit = b?.submissionAttempts;
-          return { providerBatchId: "pb_001", provider: "claude" as const };
+          return { providerBatchId: 'pb_001', provider: 'claude' as const };
         }),
       });
 
       const futureNow = new Date(Date.now() + 10 * 60 * 1000);
       const recovery = new OrphanRecovery({
         store,
-        providers: new Map([["claude", provider]]),
+        providers: new Map([['claude', provider]]),
         gracePeriodMs: 0,
         now: () => futureNow,
       });
@@ -195,25 +195,25 @@ describe("OrphanRecovery", () => {
       expect(attemptsDuringSubmit).toBe(2); // was 1, incremented to 2 before call
     });
 
-    it("passes correct NorushRequest to provider", async () => {
+    it('passes correct NorushRequest to provider', async () => {
       const req = await store.createRequest(
         makeNewRequest({
-          params: { max_tokens: 2048, messages: [{ role: "user", content: "test" }] },
+          params: { max_tokens: 2048, messages: [{ role: 'user', content: 'test' }] },
         }),
       );
       const batch = await store.createBatch({
-        provider: "claude",
-        apiKeyId: "user_01",
+        provider: 'claude',
+        apiKeyId: 'user_01',
         requestCount: 1,
       });
-      await store.updateRequest(req.id, { batchId: batch.id, status: "batched" });
+      await store.updateRequest(req.id, { batchId: batch.id, status: 'batched' });
       await store.updateBatch(batch.id, { submissionAttempts: 1 });
 
       const provider = mockProvider();
       const futureNow = new Date(Date.now() + 10 * 60 * 1000);
       const recovery = new OrphanRecovery({
         store,
-        providers: new Map([["claude", provider]]),
+        providers: new Map([['claude', provider]]),
         gracePeriodMs: 0,
         now: () => futureNow,
       });
@@ -223,10 +223,10 @@ describe("OrphanRecovery", () => {
       const submitted = (provider.submitBatch as ReturnType<typeof vi.fn>).mock.calls[0][0];
       expect(submitted).toHaveLength(1);
       expect(submitted[0].id).toBe(req.id);
-      expect(submitted[0].provider).toBe("claude");
+      expect(submitted[0].provider).toBe('claude');
       expect(submitted[0].params).toEqual({
         max_tokens: 2048,
-        messages: [{ role: "user", content: "test" }],
+        messages: [{ role: 'user', content: 'test' }],
       });
     });
   });
@@ -235,16 +235,16 @@ describe("OrphanRecovery", () => {
   // Max attempts cap
   // -----------------------------------------------------------------------
 
-  describe("max attempts cap", () => {
-    it("marks batch as failed when submission attempts are at max", async () => {
+  describe('max attempts cap', () => {
+    it('marks batch as failed when submission attempts are at max', async () => {
       const req = await store.createRequest(makeNewRequest());
       const batch = await store.createBatch({
-        provider: "claude",
-        apiKeyId: "user_01",
+        provider: 'claude',
+        apiKeyId: 'user_01',
         requestCount: 1,
         maxSubmissionAttempts: 3,
       });
-      await store.updateRequest(req.id, { batchId: batch.id, status: "batched" });
+      await store.updateRequest(req.id, { batchId: batch.id, status: 'batched' });
       await store.updateBatch(batch.id, { submissionAttempts: 3 }); // at max
 
       const provider = mockProvider();
@@ -252,7 +252,7 @@ describe("OrphanRecovery", () => {
       const futureNow = new Date(Date.now() + 10 * 60 * 1000);
       const recovery = new OrphanRecovery({
         store,
-        providers: new Map([["claude", provider]]),
+        providers: new Map([['claude', provider]]),
         gracePeriodMs: 0,
         telemetry,
         now: () => futureNow,
@@ -265,15 +265,15 @@ describe("OrphanRecovery", () => {
 
       // Batch should be marked failed with endedAt set.
       const updated = await store.getBatch(batch.id);
-      expect(updated?.status).toBe("failed");
+      expect(updated?.status).toBe('failed');
       expect(updated?.endedAt).toEqual(futureNow);
 
       // Request should also be failed.
       const updatedReq = await store.getRequest(req.id);
-      expect(updatedReq?.status).toBe("failed");
+      expect(updatedReq?.status).toBe('failed');
 
       expect(telemetry.event).toHaveBeenCalledWith(
-        "orphan_failed",
+        'orphan_failed',
         expect.objectContaining({
           batchId: batch.id,
           submissionAttempts: 3,
@@ -282,25 +282,25 @@ describe("OrphanRecovery", () => {
       );
     });
 
-    it("fails batch when resubmit error pushes attempts to max", async () => {
+    it('fails batch when resubmit error pushes attempts to max', async () => {
       const req = await store.createRequest(makeNewRequest());
       const batch = await store.createBatch({
-        provider: "claude",
-        apiKeyId: "user_01",
+        provider: 'claude',
+        apiKeyId: 'user_01',
         requestCount: 1,
         maxSubmissionAttempts: 2,
       });
-      await store.updateRequest(req.id, { batchId: batch.id, status: "batched" });
+      await store.updateRequest(req.id, { batchId: batch.id, status: 'batched' });
       await store.updateBatch(batch.id, { submissionAttempts: 1 }); // one away from max
 
       const provider = mockProvider({
-        submitBatch: vi.fn().mockRejectedValue(new Error("API down")),
+        submitBatch: vi.fn().mockRejectedValue(new Error('API down')),
       });
 
       const futureNow = new Date(Date.now() + 10 * 60 * 1000);
       const recovery = new OrphanRecovery({
         store,
-        providers: new Map([["claude", provider]]),
+        providers: new Map([['claude', provider]]),
         gracePeriodMs: 0,
         now: () => futureNow,
       });
@@ -310,7 +310,7 @@ describe("OrphanRecovery", () => {
       expect(result).toEqual({ recovered: 0, failed: 1 });
 
       const updated = await store.getBatch(batch.id);
-      expect(updated?.status).toBe("failed");
+      expect(updated?.status).toBe('failed');
       expect(updated?.submissionAttempts).toBe(2);
     });
   });
@@ -319,27 +319,27 @@ describe("OrphanRecovery", () => {
   // Resubmission failure
   // -----------------------------------------------------------------------
 
-  describe("resubmission failure", () => {
-    it("leaves batch pending when resubmit fails but not at max", async () => {
+  describe('resubmission failure', () => {
+    it('leaves batch pending when resubmit fails but not at max', async () => {
       const req = await store.createRequest(makeNewRequest());
       const batch = await store.createBatch({
-        provider: "claude",
-        apiKeyId: "user_01",
+        provider: 'claude',
+        apiKeyId: 'user_01',
         requestCount: 1,
         maxSubmissionAttempts: 5,
       });
-      await store.updateRequest(req.id, { batchId: batch.id, status: "batched" });
+      await store.updateRequest(req.id, { batchId: batch.id, status: 'batched' });
       await store.updateBatch(batch.id, { submissionAttempts: 1 });
 
       const provider = mockProvider({
-        submitBatch: vi.fn().mockRejectedValue(new Error("Temporary failure")),
+        submitBatch: vi.fn().mockRejectedValue(new Error('Temporary failure')),
       });
 
       const telemetry = { counter: vi.fn(), histogram: vi.fn(), event: vi.fn() };
       const futureNow = new Date(Date.now() + 10 * 60 * 1000);
       const recovery = new OrphanRecovery({
         store,
-        providers: new Map([["claude", provider]]),
+        providers: new Map([['claude', provider]]),
         gracePeriodMs: 0,
         telemetry,
         now: () => futureNow,
@@ -351,33 +351,35 @@ describe("OrphanRecovery", () => {
       expect(result).toEqual({ recovered: 0, failed: 0 });
 
       const updated = await store.getBatch(batch.id);
-      expect(updated?.status).toBe("pending"); // still pending
+      expect(updated?.status).toBe('pending'); // still pending
       expect(updated?.submissionAttempts).toBe(2);
 
       expect(telemetry.event).toHaveBeenCalledWith(
-        "orphan_recovery_error",
+        'orphan_recovery_error',
         expect.objectContaining({
           batchId: batch.id,
-          error: "Temporary failure",
+          error: 'Temporary failure',
         }),
       );
     });
 
-    it("emits error when no provider adapter is found", async () => {
-      const req = await store.createRequest(makeNewRequest({ provider: "openai", model: "gpt-4o" }));
+    it('emits error when no provider adapter is found', async () => {
+      const req = await store.createRequest(
+        makeNewRequest({ provider: 'openai', model: 'gpt-4o' }),
+      );
       const batch = await store.createBatch({
-        provider: "openai",
-        apiKeyId: "user_01",
+        provider: 'openai',
+        apiKeyId: 'user_01',
         requestCount: 1,
       });
-      await store.updateRequest(req.id, { batchId: batch.id, status: "batched" });
+      await store.updateRequest(req.id, { batchId: batch.id, status: 'batched' });
       await store.updateBatch(batch.id, { submissionAttempts: 1 });
 
       const telemetry = { counter: vi.fn(), histogram: vi.fn(), event: vi.fn() };
       // No openai provider registered.
       const recovery = new OrphanRecovery({
         store,
-        providers: new Map([["claude", mockProvider()]]),
+        providers: new Map([['claude', mockProvider()]]),
         gracePeriodMs: 0,
         telemetry,
         now: () => new Date(Date.now() + 10 * 60 * 1000),
@@ -386,9 +388,9 @@ describe("OrphanRecovery", () => {
       await recovery.recover();
 
       expect(telemetry.event).toHaveBeenCalledWith(
-        "orphan_recovery_error",
+        'orphan_recovery_error',
         expect.objectContaining({
-          error: expect.stringContaining("No provider adapter"),
+          error: expect.stringContaining('No provider adapter'),
         }),
       );
     });
@@ -398,15 +400,15 @@ describe("OrphanRecovery", () => {
   // Provider adapter resolution
   // -----------------------------------------------------------------------
 
-  describe("adapter resolution", () => {
-    it("resolves adapter by provider::apiKeyId first", async () => {
+  describe('adapter resolution', () => {
+    it('resolves adapter by provider::apiKeyId first', async () => {
       const req = await store.createRequest(makeNewRequest());
       const batch = await store.createBatch({
-        provider: "claude",
-        apiKeyId: "user_01",
+        provider: 'claude',
+        apiKeyId: 'user_01',
         requestCount: 1,
       });
-      await store.updateRequest(req.id, { batchId: batch.id, status: "batched" });
+      await store.updateRequest(req.id, { batchId: batch.id, status: 'batched' });
       await store.updateBatch(batch.id, { submissionAttempts: 1 });
 
       const specificProvider = mockProvider();
@@ -415,8 +417,8 @@ describe("OrphanRecovery", () => {
       const recovery = new OrphanRecovery({
         store,
         providers: new Map([
-          ["claude::user_01", specificProvider],
-          ["claude", fallbackProvider],
+          ['claude::user_01', specificProvider],
+          ['claude', fallbackProvider],
         ]),
         gracePeriodMs: 0,
         now: () => new Date(Date.now() + 10 * 60 * 1000),
@@ -433,15 +435,15 @@ describe("OrphanRecovery", () => {
   // Concurrent resubmission prevention
   // -----------------------------------------------------------------------
 
-  describe("concurrent resubmission prevention", () => {
-    it("skips a batch already claimed by a concurrent recovery instance", async () => {
+  describe('concurrent resubmission prevention', () => {
+    it('skips a batch already claimed by a concurrent recovery instance', async () => {
       const req = await store.createRequest(makeNewRequest());
       const batch = await store.createBatch({
-        provider: "claude",
-        apiKeyId: "user_01",
+        provider: 'claude',
+        apiKeyId: 'user_01',
         requestCount: 1,
       });
-      await store.updateRequest(req.id, { batchId: batch.id, status: "batched" });
+      await store.updateRequest(req.id, { batchId: batch.id, status: 'batched' });
       await store.updateBatch(batch.id, { submissionAttempts: 1 });
 
       const telemetry1 = { counter: vi.fn(), histogram: vi.fn(), event: vi.fn() };
@@ -461,13 +463,13 @@ describe("OrphanRecovery", () => {
         submitBatch: vi.fn().mockImplementationOnce(async () => {
           resolveFirstSubmit();
           await firstSubmitBlock;
-          return { providerBatchId: "pb_001", provider: "claude" as const };
+          return { providerBatchId: 'pb_001', provider: 'claude' as const };
         }),
       });
 
       const recovery1 = new OrphanRecovery({
         store,
-        providers: new Map([["claude", provider]]),
+        providers: new Map([['claude', provider]]),
         gracePeriodMs: 0,
         telemetry: telemetry1,
         now: () => new Date(Date.now() + 10 * 60 * 1000),
@@ -475,7 +477,7 @@ describe("OrphanRecovery", () => {
 
       const recovery2 = new OrphanRecovery({
         store,
-        providers: new Map([["claude", provider]]),
+        providers: new Map([['claude', provider]]),
         gracePeriodMs: 0,
         telemetry: telemetry2,
         now: () => new Date(Date.now() + 10 * 60 * 1000),
@@ -499,8 +501,8 @@ describe("OrphanRecovery", () => {
       // Provider should only have been called once.
       expect(provider.submitBatch).toHaveBeenCalledTimes(1);
       expect(telemetry2.event).toHaveBeenCalledWith(
-        "orphan_recovery_skipped",
-        expect.objectContaining({ batchId: batch.id, reason: "recovery_already_in_progress" }),
+        'orphan_recovery_skipped',
+        expect.objectContaining({ batchId: batch.id, reason: 'recovery_already_in_progress' }),
       );
     });
   });
@@ -509,17 +511,17 @@ describe("OrphanRecovery", () => {
   // Multiple orphans
   // -----------------------------------------------------------------------
 
-  describe("multiple orphans", () => {
-    it("processes multiple orphans in one recovery cycle", async () => {
+  describe('multiple orphans', () => {
+    it('processes multiple orphans in one recovery cycle', async () => {
       // Create 3 orphaned batches.
       for (let i = 0; i < 3; i++) {
         const req = await store.createRequest(makeNewRequest());
         const batch = await store.createBatch({
-          provider: "claude",
-          apiKeyId: "user_01",
+          provider: 'claude',
+          apiKeyId: 'user_01',
           requestCount: 1,
         });
-        await store.updateRequest(req.id, { batchId: batch.id, status: "batched" });
+        await store.updateRequest(req.id, { batchId: batch.id, status: 'batched' });
         await store.updateBatch(batch.id, { submissionAttempts: 1 });
       }
 
@@ -529,14 +531,14 @@ describe("OrphanRecovery", () => {
           callCount++;
           return {
             providerBatchId: `pb_${callCount}`,
-            provider: "claude" as const,
+            provider: 'claude' as const,
           };
         }),
       });
 
       const recovery = new OrphanRecovery({
         store,
-        providers: new Map([["claude", provider]]),
+        providers: new Map([['claude', provider]]),
         gracePeriodMs: 0,
         now: () => new Date(Date.now() + 10 * 60 * 1000),
       });

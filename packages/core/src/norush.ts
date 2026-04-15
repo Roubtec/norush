@@ -8,22 +8,30 @@
  * and on(event, handler) for event subscription.
  */
 
-import type { Store } from "./interfaces/store.js";
-import type { Provider } from "./interfaces/provider.js";
-import type { TelemetryHook } from "./interfaces/telemetry.js";
-import type { ProviderName, NewRequest, Request } from "./types.js";
-import type { ProviderKeyConfig, ResolvedConfig } from "./config/types.js";
-import { resolveConfig } from "./config/resolve.js";
-import { NoopTelemetry } from "./telemetry/noop.js";
-import { RequestQueue } from "./engine/queue.js";
-import { BatchManager } from "./engine/batch-manager.js";
-import { StatusTracker, type StatusTrackerEventName } from "./engine/status-tracker.js";
-import { ResultIngester } from "./engine/result-ingester.js";
-import { DeliveryWorker, type DeliveryCallback, type DeliveryEventName } from "./engine/delivery-worker.js";
-import { Repackager } from "./engine/repackager.js";
-import { RetentionWorker, type RetentionPolicy, type RetentionPolicyResolver } from "./engine/retention-worker.js";
-import { ClaudeAdapter } from "./providers/claude.js";
-import { OpenAIBatchAdapter } from "./providers/openai-batch.js";
+import type { Store } from './interfaces/store.js';
+import type { Provider } from './interfaces/provider.js';
+import type { TelemetryHook } from './interfaces/telemetry.js';
+import type { ProviderName, NewRequest, Request } from './types.js';
+import type { ProviderKeyConfig, ResolvedConfig } from './config/types.js';
+import { resolveConfig } from './config/resolve.js';
+import { NoopTelemetry } from './telemetry/noop.js';
+import { RequestQueue } from './engine/queue.js';
+import { BatchManager } from './engine/batch-manager.js';
+import { StatusTracker, type StatusTrackerEventName } from './engine/status-tracker.js';
+import { ResultIngester } from './engine/result-ingester.js';
+import {
+  DeliveryWorker,
+  type DeliveryCallback,
+  type DeliveryEventName,
+} from './engine/delivery-worker.js';
+import { Repackager } from './engine/repackager.js';
+import {
+  RetentionWorker,
+  type RetentionPolicy,
+  type RetentionPolicyResolver,
+} from './engine/retention-worker.js';
+import { ClaudeAdapter } from './providers/claude.js';
+import { OpenAIBatchAdapter } from './providers/openai-batch.js';
 
 // ---------------------------------------------------------------------------
 // Config for createNorush()
@@ -44,9 +52,7 @@ export interface NorushConfig {
    * - A pre-built Map<string, Provider> (keyed by provider name or "provider::apiKeyId").
    * - An object with provider names mapped to key configs, from which adapters are built.
    */
-  providers:
-    | Map<string, Provider>
-    | Partial<Record<ProviderName, ProviderKeyConfig[]>>;
+  providers: Map<string, Provider> | Partial<Record<ProviderName, ProviderKeyConfig[]>>;
 
   /** Batching configuration overrides (merged with defaults via resolveConfig). */
   batching?: {
@@ -101,9 +107,7 @@ export interface NorushConfig {
 // ---------------------------------------------------------------------------
 
 /** All event names the engine can emit. */
-export type NorushEventName =
-  | StatusTrackerEventName
-  | DeliveryEventName;
+export type NorushEventName = StatusTrackerEventName | DeliveryEventName;
 
 /** Unified event handler type. */
 export type NorushEventHandler = (data: Record<string, unknown>) => void;
@@ -233,7 +237,7 @@ export function createNorush(options: NorushConfig): NorushEngine {
   // intentional — the ingest+repackage pipeline is crash-safe and idempotent,
   // so any in-flight work that is lost on shutdown will be re-triggered on the
   // next tick when the store still shows the batch as "ended".
-  statusTracker.on("batch:completed", (data) => {
+  statusTracker.on('batch:completed', (data) => {
     const batchId = data.batchId as string;
     void (async () => {
       try {
@@ -249,9 +253,9 @@ export function createNorush(options: NorushConfig): NorushEngine {
           await repackager.repackage(updatedBatch);
         }
       } catch (error) {
-        telemetry.event("pipeline_error", {
+        telemetry.event('pipeline_error', {
           batchId,
-          phase: "ingest_or_repackage",
+          phase: 'ingest_or_repackage',
           error: error instanceof Error ? error.message : String(error),
         });
       }
@@ -260,7 +264,7 @@ export function createNorush(options: NorushConfig): NorushEngine {
 
   // Also handle expired batches — repackage their requests.
   // Fire-and-forget for the same reasons as batch:completed above.
-  statusTracker.on("batch:expired", (data) => {
+  statusTracker.on('batch:expired', (data) => {
     const batchId = data.batchId as string;
     void (async () => {
       try {
@@ -272,15 +276,15 @@ export function createNorush(options: NorushConfig): NorushEngine {
         const requests = await store.getRequestsByBatchId(batchId);
         await Promise.all(
           requests
-            .filter((req) => req.status === "batched" || req.status === "processing")
-            .map((req) => store.updateRequest(req.id, { status: "expired" })),
+            .filter((req) => req.status === 'batched' || req.status === 'processing')
+            .map((req) => store.updateRequest(req.id, { status: 'expired' })),
         );
 
         await repackager.repackage(batch);
       } catch (error) {
-        telemetry.event("pipeline_error", {
+        telemetry.event('pipeline_error', {
           batchId,
-          phase: "expire_repackage",
+          phase: 'expire_repackage',
           error: error instanceof Error ? error.message : String(error),
         });
       }
@@ -383,8 +387,8 @@ function buildProviderMap(
       // Register as "claude" fallback only — the engine resolves adapters by
       // "claude::userId", not "claude::label". Per-user routing requires a
       // pre-built Map keyed by "claude::userId".
-      if (!map.has("claude")) {
-        map.set("claude", adapter);
+      if (!map.has('claude')) {
+        map.set('claude', adapter);
       }
     }
   }
@@ -392,8 +396,8 @@ function buildProviderMap(
   if (input.openai) {
     for (const keyConfig of input.openai) {
       const adapter = new OpenAIBatchAdapter({ apiKey: keyConfig.apiKey });
-      if (!map.has("openai")) {
-        map.set("openai", adapter);
+      if (!map.has('openai')) {
+        map.set('openai', adapter);
       }
     }
   }
@@ -402,19 +406,19 @@ function buildProviderMap(
 }
 
 const STATUS_TRACKER_EVENTS: Set<string> = new Set([
-  "batch:submitted",
-  "batch:processing",
-  "batch:completed",
-  "batch:expired",
-  "batch:error",
-  "batch:failed",
-  "circuit_breaker:tripped",
+  'batch:submitted',
+  'batch:processing',
+  'batch:completed',
+  'batch:expired',
+  'batch:error',
+  'batch:failed',
+  'circuit_breaker:tripped',
 ]);
 
 const DELIVERY_EVENTS: Set<string> = new Set([
-  "delivery:success",
-  "delivery:failure",
-  "delivery:exhausted",
+  'delivery:success',
+  'delivery:failure',
+  'delivery:exhausted',
 ]);
 
 function isStatusTrackerEvent(event: string): event is StatusTrackerEventName {

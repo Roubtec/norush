@@ -14,10 +14,10 @@
  * Authentication: Bearer token in Authorization header.
  */
 
-import { json } from "@sveltejs/kit";
-import type { RequestHandler } from "./$types";
-import { getSql } from "$lib/server/norush";
-import { authenticateApiRequest } from "$lib/server/api-auth";
+import { json } from '@sveltejs/kit';
+import type { RequestHandler } from './$types';
+import { getSql } from '$lib/server/norush';
+import { authenticateApiRequest } from '$lib/server/api-auth';
 
 // ---------------------------------------------------------------------------
 // Error helpers
@@ -31,7 +31,7 @@ function apiError(code: string, message: string, status: number) {
 // Terminal statuses eligible for retry
 // ---------------------------------------------------------------------------
 
-const RETRYABLE_STATUSES = new Set(["failed_final", "canceled"]);
+const RETRYABLE_STATUSES = new Set(['failed_final', 'canceled']);
 
 // ---------------------------------------------------------------------------
 // POST — user-triggered retry
@@ -39,9 +39,9 @@ const RETRYABLE_STATUSES = new Set(["failed_final", "canceled"]);
 
 export const POST: RequestHandler = async ({ params, request }) => {
   const sql = getSql();
-  const caller = await authenticateApiRequest(sql, request.headers.get("authorization"));
+  const caller = await authenticateApiRequest(sql, request.headers.get('authorization'));
   if (!caller) {
-    return apiError("unauthorized", "Invalid or missing API token", 401);
+    return apiError('unauthorized', 'Invalid or missing API token', 401);
   }
 
   const { id } = params;
@@ -54,7 +54,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
   `;
 
   if (rows.length === 0) {
-    return apiError("not_found", "Request not found", 404);
+    return apiError('not_found', 'Request not found', 404);
   }
 
   const row = rows[0];
@@ -63,7 +63,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
   // Only terminal states can be retried.
   if (!RETRYABLE_STATUSES.has(currentStatus)) {
     return apiError(
-      "invalid_state",
+      'invalid_state',
       `Request cannot be retried from status '${currentStatus}'. Only requests in 'failed_final' or 'canceled' status can be retried.`,
       400,
     );
@@ -87,20 +87,20 @@ export const POST: RequestHandler = async ({ params, request }) => {
 
   if (updated.length === 0) {
     return apiError(
-      "conflict",
-      "Request status changed before the update could be applied. Please check the current status and try again.",
+      'conflict',
+      'Request status changed before the update could be applied. Please check the current status and try again.',
       409,
     );
   }
 
   return json({
-    message: "Request re-queued for processing",
+    message: 'Request re-queued for processing',
     request: {
       id: row.id as string,
       provider: row.provider as string,
       model: row.model as string,
       previousStatus: currentStatus,
-      status: "queued",
+      status: 'queued',
       retryCount: 0,
     },
   });

@@ -5,11 +5,10 @@
  * drops that schema afterwards.
  */
 
-import postgres from "postgres";
-import { migrate } from "../../store/migrate.js";
+import postgres from 'postgres';
+import { migrate } from '../../store/migrate.js';
 
-const DEFAULT_DATABASE_URL =
-  "postgres://postgres:dev@localhost:5432/norush";
+const DEFAULT_DATABASE_URL = 'postgres://postgres:dev@localhost:5432/norush';
 
 /**
  * Create a postgres.js connection for testing.

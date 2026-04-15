@@ -6,13 +6,13 @@
  * order inside a transaction. Idempotent — safe to call on every startup.
  */
 
-import { readdir, readFile } from "node:fs/promises";
-import { join } from "node:path";
-import { fileURLToPath } from "node:url";
-import type postgres from "postgres";
+import { readdir, readFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import type postgres from 'postgres';
 
 /** Path to the migrations directory (relative to package root). */
-const MIGRATIONS_DIR = new URL("../../migrations", import.meta.url);
+const MIGRATIONS_DIR = new URL('../../migrations', import.meta.url);
 
 /**
  * Run all pending migrations against the given postgres.js connection.
@@ -22,10 +22,7 @@ const MIGRATIONS_DIR = new URL("../../migrations", import.meta.url);
  *
  * @returns Names of the migration files that were applied (empty if up-to-date).
  */
-export async function migrate(
-  sql: postgres.Sql,
-  migrationsDir?: string,
-): Promise<string[]> {
+export async function migrate(sql: postgres.Sql, migrationsDir?: string): Promise<string[]> {
   const dir = migrationsDir ?? fileURLToPath(MIGRATIONS_DIR);
 
   // Ensure tracking table exists (outside the main transaction so it's
@@ -38,9 +35,7 @@ export async function migrate(
   `;
 
   // Read migration files, sorted by filename.
-  const files = (await readdir(dir))
-    .filter((f) => f.endsWith(".sql"))
-    .sort();
+  const files = (await readdir(dir)).filter((f) => f.endsWith('.sql')).sort();
 
   if (files.length === 0) return [];
 
@@ -64,7 +59,7 @@ export async function migrate(
 
     const appliedNow: string[] = [];
     for (const file of pending) {
-      const content = await readFile(join(dir, file), "utf-8");
+      const content = await readFile(join(dir, file), 'utf-8');
       await tx.unsafe(content);
       await tx`
         INSERT INTO schema_migrations (name) VALUES (${file})

@@ -9,7 +9,7 @@
  * See PLAN.md Section 6.4 (Adaptive Rate Limiting with Health Scores).
  */
 
-import type { HealthScore, SlidingWindow } from "../types.js";
+import type { HealthScore, SlidingWindow } from '../types.js';
 
 /**
  * Compute a health score from a sliding window of batch outcomes.
@@ -25,14 +25,14 @@ import type { HealthScore, SlidingWindow } from "../types.js";
 export function computeHealth(window: SlidingWindow): HealthScore {
   const { succeeded, total } = window;
 
-  if (total === 0) return { factor: 1.0, reason: "healthy" };
+  if (total === 0) return { factor: 1.0, reason: 'healthy' };
 
   const successRate = succeeded / total;
 
-  if (successRate >= 0.9) return { factor: 1.0, reason: "healthy" };
-  if (successRate >= 0.5) return { factor: 0.5, reason: "partial_failures" };
-  if (successRate > 0) return { factor: 0.25, reason: "mostly_failing" };
-  return { factor: 0.1, reason: "critical" };
+  if (successRate >= 0.9) return { factor: 1.0, reason: 'healthy' };
+  if (successRate >= 0.5) return { factor: 0.5, reason: 'partial_failures' };
+  if (successRate > 0) return { factor: 0.25, reason: 'mostly_failing' };
+  return { factor: 0.1, reason: 'critical' };
 }
 
 /**
@@ -41,10 +41,7 @@ export function computeHealth(window: SlidingWindow): HealthScore {
  * Guarantees a minimum throughput of 1 request per period even at critical
  * health, so users always have an avenue to prove recovery.
  */
-export function computeEffectiveLimit(
-  baseLimit: number,
-  health: HealthScore,
-): number {
+export function computeEffectiveLimit(baseLimit: number, health: HealthScore): number {
   const raw = Math.floor(baseLimit * health.factor);
   // Minimum throughput guarantee: at least 1 per period.
   return Math.max(raw, 1);

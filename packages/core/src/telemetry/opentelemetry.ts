@@ -1,5 +1,5 @@
-import { metrics, type Counter, type Histogram, type Meter } from "@opentelemetry/api";
-import type { TelemetryHook } from "../interfaces/telemetry.js";
+import { metrics, type Counter, type Histogram, type Meter } from '@opentelemetry/api';
+import type { TelemetryHook } from '../interfaces/telemetry.js';
 
 /**
  * OpenTelemetry telemetry adapter.
@@ -31,7 +31,7 @@ export class OpenTelemetryTelemetry implements TelemetryHook {
    * @param meterName - Name used to create the OpenTelemetry Meter.
    *   Defaults to "norush".
    */
-  constructor(meterName = "norush") {
+  constructor(meterName = 'norush') {
     this.meter = metrics.getMeter(meterName);
   }
 
@@ -61,7 +61,7 @@ export class OpenTelemetryTelemetry implements TelemetryHook {
     // The OpenTelemetry Metrics API does not have a native events
     // concept. Log a structured JSON line so that any log collector
     // (e.g. OTLP log exporter) can capture it.
-    const payload = data ? ` ${JSON.stringify(data)}` : "";
+    const payload = data ? ` ${JSON.stringify(data)}` : '';
     console.log(`[norush:otel] event ${name}${payload}`);
   }
 }

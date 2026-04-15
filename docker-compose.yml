@@ -4,14 +4,14 @@ services:
     container_name: norush-db
     restart: unless-stopped
     ports:
-      - "5432:5432"
+      - '5432:5432'
     environment:
       POSTGRES_DB: norush
       POSTGRES_PASSWORD: dev
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
       interval: 5s
       timeout: 3s
       retries: 5
@@ -22,25 +22,35 @@ services:
     container_name: norush-web
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - '3000:3000'
     depends_on:
       postgres:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgres://postgres:dev@postgres:5432/norush
+      # DATABASE_URL default points at the `postgres` service on the compose
+      # network. Override in .env only if you know the container can reach it
+      # (e.g. `localhost` from within a container resolves to the container
+      # itself, not the host DB — use `host.docker.internal` on Mac/Windows).
+      DATABASE_URL: ${DATABASE_URL:-postgres://postgres:dev@postgres:5432/norush}
       NORUSH_MASTER_KEY: ${NORUSH_MASTER_KEY:-dev-master-key-change-me}
       ORIGIN: ${ORIGIN:-http://localhost:3000}
+      NODE_ENV: ${NODE_ENV:-development}
+      NORUSH_DEV_AUTH_BYPASS: ${NORUSH_DEV_AUTH_BYPASS:-}
+      WORKOS_API_KEY: ${WORKOS_API_KEY:-}
+      WORKOS_CLIENT_ID: ${WORKOS_CLIENT_ID:-}
+      WORKOS_COOKIE_PASSWORD: ${WORKOS_COOKIE_PASSWORD:-}
+      WORKOS_REDIRECT_URI: ${WORKOS_REDIRECT_URI:-}
 
   worker:
     image: norush
     container_name: norush-worker
     restart: unless-stopped
-    command: ["node", "packages/core/dist/worker.js"]
+    command: ['node', 'packages/core/dist/worker.js']
     depends_on:
       postgres:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgres://postgres:dev@postgres:5432/norush
+      DATABASE_URL: ${DATABASE_URL:-postgres://postgres:dev@postgres:5432/norush}
       NORUSH_MASTER_KEY: ${NORUSH_MASTER_KEY:-dev-master-key-change-me}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}

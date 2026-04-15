@@ -9,11 +9,11 @@
  *   DATABASE_URL=postgres://postgres:dev@localhost:5432/norush pnpm test
  */
 
-import { afterAll, beforeAll, describe, it, expect } from "vitest";
-import { PostgresStore } from "../../store/postgres.js";
-import { isDatabaseAvailable, setupTestDatabase } from "../helpers/db.js";
-import { runStoreContractTests } from "./store-contract.test.js";
-import type postgres from "postgres";
+import { afterAll, beforeAll, describe, it, expect } from 'vitest';
+import { PostgresStore } from '../../store/postgres.js';
+import { isDatabaseAvailable, setupTestDatabase } from '../helpers/db.js';
+import { runStoreContractTests } from './store-contract.test.js';
+import type postgres from 'postgres';
 
 // Probe DB availability before test collection. This must be synchronous
 // at the module level; we check it asynchronously in beforeAll and track
@@ -24,7 +24,7 @@ const state: {
   available: boolean;
 } = { available: false };
 
-describe("PostgresStore", () => {
+describe('PostgresStore', () => {
   beforeAll(async () => {
     state.available = await isDatabaseAvailable();
     if (!state.available) return;
@@ -38,7 +38,7 @@ describe("PostgresStore", () => {
     if (state.cleanup) await state.cleanup();
   });
 
-  it("database is available", ({ skip }) => {
+  it('database is available', ({ skip }) => {
     if (!state.available) {
       skip();
       return;
@@ -48,7 +48,7 @@ describe("PostgresStore", () => {
 
   runStoreContractTests(
     async () => {
-      if (!state.sql) throw new Error("Database not available");
+      if (!state.sql) throw new Error('Database not available');
       // Truncate all mutable tables so each contract test starts with an empty
       // store. Reference data (users, user_api_keys) is preserved.
       await state.sql`TRUNCATE results, requests, batches, event_log, user_limits`;

@@ -7,8 +7,8 @@
  * Clamping is applied externally (see clamp.ts), not inside these implementations.
  */
 
-import type { PollingStrategy } from "../interfaces/polling.js";
-import type { PollContext } from "../types.js";
+import type { PollingStrategy } from '../interfaces/polling.js';
+import type { PollContext } from '../types.js';
 
 // ---------------------------------------------------------------------------
 // Linear
@@ -96,10 +96,7 @@ export class DeadlineAwareStrategy implements PollingStrategy {
     const fractionRemaining = Math.max(0, Math.min(1, remaining / totalWindow));
 
     // Linear interpolation: high remaining -> slow, low remaining -> fast
-    return (
-      this.minIntervalMs +
-      fractionRemaining * (this.maxIntervalMs - this.minIntervalMs)
-    );
+    return this.minIntervalMs + fractionRemaining * (this.maxIntervalMs - this.minIntervalMs);
   }
 }
 
@@ -118,10 +115,7 @@ export class EagerStrategy implements PollingStrategy {
   private readonly eagerWindowMs: number;
   private readonly backoff: BackoffStrategy;
 
-  constructor(
-    eagerIntervalMs: number = 15_000,
-    eagerWindowMs: number = 300_000,
-  ) {
+  constructor(eagerIntervalMs: number = 15_000, eagerWindowMs: number = 300_000) {
     this.eagerIntervalMs = eagerIntervalMs;
     this.eagerWindowMs = eagerWindowMs;
     this.backoff = new BackoffStrategy();
@@ -143,4 +137,4 @@ export class EagerStrategy implements PollingStrategy {
 // ---------------------------------------------------------------------------
 
 /** Known preset strategy names. */
-export type PollingPreset = "linear" | "backoff" | "deadline-aware" | "eager";
+export type PollingPreset = 'linear' | 'backoff' | 'deadline-aware' | 'eager';

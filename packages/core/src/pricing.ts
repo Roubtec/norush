@@ -31,30 +31,18 @@ export function getRates(provider: string): TokenRates {
 }
 
 /** Calculate the standard (real-time) cost for a set of tokens. */
-export function standardCost(
-  provider: string,
-  inputTokens: number,
-  outputTokens: number,
-): number {
+export function standardCost(provider: string, inputTokens: number, outputTokens: number): number {
   const rates = getRates(provider);
   return inputTokens * rates.input + outputTokens * rates.output;
 }
 
 /** Calculate the batch (discounted) cost for a set of tokens. */
-export function batchCost(
-  provider: string,
-  inputTokens: number,
-  outputTokens: number,
-): number {
+export function batchCost(provider: string, inputTokens: number, outputTokens: number): number {
   return standardCost(provider, inputTokens, outputTokens) * BATCH_DISCOUNT;
 }
 
 /** Calculate savings (standard - batch). */
-export function savings(
-  provider: string,
-  inputTokens: number,
-  outputTokens: number,
-): number {
+export function savings(provider: string, inputTokens: number, outputTokens: number): number {
   const std = standardCost(provider, inputTokens, outputTokens);
   return std - std * BATCH_DISCOUNT;
 }

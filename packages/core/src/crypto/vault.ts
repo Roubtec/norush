@@ -8,7 +8,7 @@
  * a passphrase that is run through HKDF-SHA256 to derive a 32-byte key.
  */
 
-import { createCipheriv, createDecipheriv, randomBytes, hkdf } from "node:crypto";
+import { createCipheriv, createDecipheriv, randomBytes, hkdf } from 'node:crypto';
 
 /** Current envelope version — allows future format changes. */
 const ENVELOPE_VERSION = 0x01;
@@ -23,10 +23,10 @@ const AUTH_TAG_LENGTH = 16;
 const HEX_KEY_LENGTH = 64;
 
 /** HKDF info string for key derivation from passphrases. */
-const HKDF_INFO = "norush-api-key-vault";
+const HKDF_INFO = 'norush-api-key-vault';
 
 /** HKDF salt — using a fixed salt is acceptable here; the passphrase is the secret. */
-const HKDF_SALT = "norush";
+const HKDF_SALT = 'norush';
 
 // ---------------------------------------------------------------------------
 // Key derivation
@@ -40,27 +40,20 @@ const HKDF_SALT = "norush";
  */
 export async function deriveKey(masterKey: string): Promise<Buffer> {
   if (!masterKey || masterKey.length === 0) {
-    throw new Error("Master key must not be empty");
+    throw new Error('Master key must not be empty');
   }
 
   // Direct hex key (32 bytes = 64 hex chars)
   if (masterKey.length === HEX_KEY_LENGTH && /^[0-9a-fA-F]+$/.test(masterKey)) {
-    return Buffer.from(masterKey, "hex");
+    return Buffer.from(masterKey, 'hex');
   }
 
   // Passphrase — derive via HKDF
   return new Promise<Buffer>((resolve, reject) => {
-    hkdf(
-      "sha256",
-      masterKey,
-      HKDF_SALT,
-      HKDF_INFO,
-      32,
-      (err, derivedKey) => {
-        if (err) reject(err);
-        else resolve(Buffer.from(derivedKey));
-      },
-    );
+    hkdf('sha256', masterKey, HKDF_SALT, HKDF_INFO, 32, (err, derivedKey) => {
+      if (err) reject(err);
+      else resolve(Buffer.from(derivedKey));
+    });
   });
 }
 
@@ -84,28 +77,20 @@ export interface EncryptedPayload {
  */
 export function encrypt(plaintext: string, key: Buffer): EncryptedPayload {
   if (!plaintext || plaintext.length === 0) {
-    throw new Error("Plaintext must not be empty");
+    throw new Error('Plaintext must not be empty');
   }
   if (key.length !== 32) {
-    throw new Error("Key must be 32 bytes for AES-256");
+    throw new Error('Key must be 32 bytes for AES-256');
   }
 
   const iv = randomBytes(IV_LENGTH);
-  const cipher = createCipheriv("aes-256-gcm", key, iv);
+  const cipher = createCipheriv('aes-256-gcm', key, iv);
 
-  const encrypted = Buffer.concat([
-    cipher.update(plaintext, "utf8"),
-    cipher.final(),
-  ]);
+  const encrypted = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
   const authTag = cipher.getAuthTag();
 
   // Envelope: version(1) || iv(12) || ciphertext(N) || authTag(16)
-  const blob = Buffer.concat([
-    Buffer.from([ENVELOPE_VERSION]),
-    iv,
-    encrypted,
-    authTag,
-  ]);
+  const blob = Buffer.concat([Buffer.from([ENVELOPE_VERSION]), iv, encrypted, authTag]);
 
   return { blob };
 }
@@ -124,13 +109,13 @@ export function encrypt(plaintext: string, key: Buffer): EncryptedPayload {
  */
 export function decrypt(blob: Buffer, key: Buffer): string {
   if (key.length !== 32) {
-    throw new Error("Key must be 32 bytes for AES-256");
+    throw new Error('Key must be 32 bytes for AES-256');
   }
 
   // Minimum size: version(1) + IV(12) + authTag(16) + at least 1 byte ciphertext
   const minLength = 1 + IV_LENGTH + AUTH_TAG_LENGTH + 1;
   if (!blob || blob.length < minLength) {
-    throw new Error("Encrypted blob is too short or missing");
+    throw new Error('Encrypted blob is too short or missing');
   }
 
   const version = blob[0];
@@ -142,17 +127,14 @@ export function decrypt(blob: Buffer, key: Buffer): string {
   const authTag = blob.subarray(blob.length - AUTH_TAG_LENGTH);
   const ciphertext = blob.subarray(1 + IV_LENGTH, blob.length - AUTH_TAG_LENGTH);
 
-  const decipher = createDecipheriv("aes-256-gcm", key, iv);
+  const decipher = createDecipheriv('aes-256-gcm', key, iv);
   decipher.setAuthTag(authTag);
 
   try {
-    const decrypted = Buffer.concat([
-      decipher.update(ciphertext),
-      decipher.final(),
-    ]);
-    return decrypted.toString("utf8");
+    const decrypted = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+    return decrypted.toString('utf8');
   } catch {
-    throw new Error("Decryption failed — wrong key or corrupted data");
+    throw new Error('Decryption failed — wrong key or corrupted data');
   }
 }
 
@@ -172,7 +154,7 @@ export function decrypt(blob: Buffer, key: Buffer): string {
  */
 export function maskApiKey(key: string, prefixLength = 6): string {
   if (key.length <= prefixLength) {
-    return "****";
+    return '****';
   }
-  return key.slice(0, prefixLength) + "...****";
+  return key.slice(0, prefixLength) + '...****';
 }

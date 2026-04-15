@@ -19,8 +19,8 @@
  * can retry with exponential backoff.
  */
 
-import type { Request, Result } from "../types.js";
-import { signWebhookPayload } from "./sign.js";
+import type { Request, Result } from '../types.js';
+import { signWebhookPayload } from './sign.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -78,13 +78,10 @@ const DEFAULT_TIMEOUT_MS = 30_000;
 /**
  * Build the webhook payload from a result and its associated request.
  */
-export function buildWebhookPayload(
-  result: Result,
-  request: Request,
-): WebhookPayload {
+export function buildWebhookPayload(result: Result, request: Request): WebhookPayload {
   return {
     norush_id: request.id,
-    status: request.status === "succeeded" ? "succeeded" : "failed",
+    status: request.status === 'succeeded' ? 'succeeded' : 'failed',
     response: result.response,
     input_tokens: result.inputTokens,
     output_tokens: result.outputTokens,
@@ -103,9 +100,7 @@ export function buildWebhookPayload(
  * Throws an error on non-2xx responses or network failures so the
  * delivery worker can handle retry logic.
  */
-export async function deliverWebhook(
-  options: DeliverWebhookOptions,
-): Promise<DeliveryResult> {
+export async function deliverWebhook(options: DeliverWebhookOptions): Promise<DeliveryResult> {
   const {
     callbackUrl,
     payload,
@@ -121,10 +116,10 @@ export async function deliverWebhook(
 
   // Build headers.
   const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    "X-Norush-Attempt": String(attempt),
-    "X-Norush-Request-Id": requestId,
-    "X-Norush-Timestamp": timestamp,
+    'Content-Type': 'application/json',
+    'X-Norush-Attempt': String(attempt),
+    'X-Norush-Request-Id': requestId,
+    'X-Norush-Timestamp': timestamp,
   };
 
   // Sign a canonical string that binds the timestamp to the body so the
@@ -132,8 +127,7 @@ export async function deliverWebhook(
   // Signing input: "<timestamp>.<body>"
   if (webhookSecret) {
     const signingInput = `${timestamp}.${body}`;
-    headers["X-Norush-Signature"] =
-      `sha256=${signWebhookPayload(webhookSecret, signingInput)}`;
+    headers['X-Norush-Signature'] = `sha256=${signWebhookPayload(webhookSecret, signingInput)}`;
   }
 
   // Use AbortController for timeout.
@@ -142,7 +136,7 @@ export async function deliverWebhook(
 
   try {
     const response = await fetchFn(callbackUrl, {
-      method: "POST",
+      method: 'POST',
       headers,
       body,
       signal: controller.signal,
@@ -150,14 +144,12 @@ export async function deliverWebhook(
 
     if (!response.ok) {
       const statusText = response.statusText || `HTTP ${response.status}`;
-      throw new Error(
-        `Webhook delivery failed: ${statusText} (status ${response.status})`,
-      );
+      throw new Error(`Webhook delivery failed: ${statusText} (status ${response.status})`);
     }
 
     return { statusCode: response.status };
   } catch (error) {
-    if (error instanceof Error && error.name === "AbortError") {
+    if (error instanceof Error && error.name === 'AbortError') {
       throw new Error(`Webhook delivery timed out after ${timeoutMs}ms`, {
         cause: error,
       });

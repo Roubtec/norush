@@ -1,0 +1,17 @@
+# Build output and cache
+dist/
+.svelte-kit/
+
+# pnpm cache and lockfile
+node_modules/
+pnpm-lock.yaml
+
+# Markdown — markdownlint owns formatting here; avoid pipe-style conflicts
+*.md
+*.mdx
+
+# Auto-generated changelogs
+**/CHANGELOG.md
+
+# Database migrations — preserve exact formatting
+**/migrations/

@@ -10,11 +10,10 @@
  */
 
 /** Standard real-time API rates (USD per token). */
-export const STANDARD_RATES: Record<string, { input: number; output: number }> =
-  {
-    claude: { input: 3.0 / 1_000_000, output: 15.0 / 1_000_000 },
-    openai: { input: 2.5 / 1_000_000, output: 10.0 / 1_000_000 },
-  };
+export const STANDARD_RATES: Record<string, { input: number; output: number }> = {
+  claude: { input: 3.0 / 1_000_000, output: 15.0 / 1_000_000 },
+  openai: { input: 2.5 / 1_000_000, output: 10.0 / 1_000_000 },
+};
 
 /** Fraction of the standard cost saved when using batch APIs (50% discount). */
 export const SAVINGS_DISCOUNT = 0.5;

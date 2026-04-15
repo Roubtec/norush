@@ -6,13 +6,13 @@
  * to the authenticated user.
  */
 
-import type postgres from "postgres";
+import type postgres from 'postgres';
 import {
   standardCost,
   batchCost,
   type CostBreakdownEntry,
   type DetailedUsageStats,
-} from "@norush/core";
+} from '@norush/core';
 
 /** Serializable dashboard stats (same shape as DetailedUsageStats). */
 export type DashboardStats = DetailedUsageStats;
@@ -103,7 +103,7 @@ export async function getDetailedStatsFromDb(
     totalOutputTokens += outputTokens;
 
     return {
-      provider: provider as CostBreakdownEntry["provider"],
+      provider: provider as CostBreakdownEntry['provider'],
       model,
       inputTokens,
       outputTokens,
@@ -115,23 +115,14 @@ export async function getDetailedStatsFromDb(
 
   const turnaroundRow = turnaroundRows[0] as Record<string, unknown> | undefined;
   const avgTurnaroundMs =
-    turnaroundRow?.avg_turnaround_ms != null
-      ? Number(turnaroundRow.avg_turnaround_ms)
-      : null;
+    turnaroundRow?.avg_turnaround_ms != null ? Number(turnaroundRow.avg_turnaround_ms) : null;
 
-  const totalStandardCostUsd = costBreakdown.reduce(
-    (s, e) => s + e.standardCostUsd,
-    0,
-  );
-  const totalBatchCostUsd = costBreakdown.reduce(
-    (s, e) => s + e.batchCostUsd,
-    0,
-  );
+  const totalStandardCostUsd = costBreakdown.reduce((s, e) => s + e.standardCostUsd, 0);
+  const totalBatchCostUsd = costBreakdown.reduce((s, e) => s + e.batchCostUsd, 0);
 
   const batchCountRow = batchCountRows[0] as Record<string, unknown> | undefined;
-  const totalBatches = batchCountRow?.total_batches != null
-    ? (batchCountRow.total_batches as number)
-    : 0;
+  const totalBatches =
+    batchCountRow?.total_batches != null ? (batchCountRow.total_batches as number) : 0;
 
   return {
     totalRequests,

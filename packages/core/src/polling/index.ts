@@ -5,29 +5,29 @@
  * interval clamping as a wrapper around any strategy.
  */
 
-import type { PollingStrategy } from "../interfaces/polling.js";
-import type { PollContext } from "../types.js";
-import { clampInterval } from "./clamp.js";
+import type { PollingStrategy } from '../interfaces/polling.js';
+import type { PollContext } from '../types.js';
+import { clampInterval } from './clamp.js';
 import {
   BackoffStrategy,
   DeadlineAwareStrategy,
   EagerStrategy,
   LinearStrategy,
   type PollingPreset,
-} from "./strategies.js";
+} from './strategies.js';
 
 // ---------------------------------------------------------------------------
 // Re-exports
 // ---------------------------------------------------------------------------
 
-export { clampInterval, MAX_INTERVAL_MS, MIN_INTERVAL_MS } from "./clamp.js";
+export { clampInterval, MAX_INTERVAL_MS, MIN_INTERVAL_MS } from './clamp.js';
 export {
   BackoffStrategy,
   DeadlineAwareStrategy,
   EagerStrategy,
   LinearStrategy,
   type PollingPreset,
-} from "./strategies.js";
+} from './strategies.js';
 
 // ---------------------------------------------------------------------------
 // Registry
@@ -38,7 +38,7 @@ const presets: Record<PollingPreset, () => PollingStrategy> = Object.assign(
   {
     linear: () => new LinearStrategy(),
     backoff: () => new BackoffStrategy(),
-    "deadline-aware": () => new DeadlineAwareStrategy(),
+    'deadline-aware': () => new DeadlineAwareStrategy(),
     eager: () => new EagerStrategy(),
   },
 );
@@ -59,7 +59,7 @@ export function getStrategy(name: string): PollingStrategy {
   if (!isPollingPreset(name)) {
     throw new Error(
       `Unknown polling strategy "${name}". ` +
-        `Available presets: ${Object.keys(presets).join(", ")}`,
+        `Available presets: ${Object.keys(presets).join(', ')}`,
     );
   }
   return presets[name]();

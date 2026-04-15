@@ -1,14 +1,14 @@
-import { describe, expect, it } from "vitest";
-import { resolveConfig } from "../config/resolve.js";
-import type { EnvConfig, OperatorConfig, UserConfig } from "../config/types.js";
+import { describe, expect, it } from 'vitest';
+import { resolveConfig } from '../config/resolve.js';
+import type { EnvConfig, OperatorConfig, UserConfig } from '../config/types.js';
 
-describe("resolveConfig", () => {
+describe('resolveConfig', () => {
   // -------------------------------------------------------------------------
   // Defaults
   // -------------------------------------------------------------------------
 
-  describe("defaults", () => {
-    it("returns library defaults when no tiers are provided", () => {
+  describe('defaults', () => {
+    it('returns library defaults when no tiers are provided', () => {
       const config = resolveConfig();
 
       expect(config.retentionDays).toBe(7);
@@ -25,7 +25,7 @@ describe("resolveConfig", () => {
       expect(config.circuitBreakerCooldownMs).toBe(600_000);
     });
 
-    it("returns library defaults when all tiers are empty objects", () => {
+    it('returns library defaults when all tiers are empty objects', () => {
       const config = resolveConfig({}, {}, {});
 
       expect(config.retentionDays).toBe(7);
@@ -38,8 +38,8 @@ describe("resolveConfig", () => {
   // Operator overrides (Tier 2)
   // -------------------------------------------------------------------------
 
-  describe("operator overrides", () => {
-    it("uses operator defaults when user has no preferences", () => {
+  describe('operator overrides', () => {
+    it('uses operator defaults when user has no preferences', () => {
       const operator: OperatorConfig = {
         defaultRetentionDays: 30,
         batching: { maxRequests: 500, flushIntervalMs: 120_000 },
@@ -61,7 +61,7 @@ describe("resolveConfig", () => {
       expect(config.circuitBreakerCooldownMs).toBe(300_000);
     });
 
-    it("uses operator maxRetentionDays as cap when no default is set", () => {
+    it('uses operator maxRetentionDays as cap when no default is set', () => {
       const operator: OperatorConfig = {
         maxRetentionDays: 90,
         // no defaultRetentionDays, so library default (7) is used
@@ -78,8 +78,8 @@ describe("resolveConfig", () => {
   // User overrides (Tier 3)
   // -------------------------------------------------------------------------
 
-  describe("user overrides", () => {
-    it("uses user preferences when within operator caps", () => {
+  describe('user overrides', () => {
+    it('uses user preferences when within operator caps', () => {
       const operator: OperatorConfig = {
         maxRetentionDays: 90,
         batching: { maxRequests: 2000 },
@@ -103,8 +103,8 @@ describe("resolveConfig", () => {
   // Clamping
   // -------------------------------------------------------------------------
 
-  describe("clamping", () => {
-    it("clamps user retention to operator max", () => {
+  describe('clamping', () => {
+    it('clamps user retention to operator max', () => {
       const operator: OperatorConfig = { maxRetentionDays: 90 };
       const user: UserConfig = { retentionDays: 120 };
 
@@ -113,7 +113,7 @@ describe("resolveConfig", () => {
       expect(config.retentionDays).toBe(90);
     });
 
-    it("clamps user retention to exactly the operator max when equal", () => {
+    it('clamps user retention to exactly the operator max when equal', () => {
       const operator: OperatorConfig = { maxRetentionDays: 30 };
       const user: UserConfig = { retentionDays: 30 };
 
@@ -122,7 +122,7 @@ describe("resolveConfig", () => {
       expect(config.retentionDays).toBe(30);
     });
 
-    it("clamps user batching maxRequests to operator cap", () => {
+    it('clamps user batching maxRequests to operator cap', () => {
       const operator: OperatorConfig = { batching: { maxRequests: 500 } };
       const user: UserConfig = { batching: { maxRequests: 2000 } };
 
@@ -131,7 +131,7 @@ describe("resolveConfig", () => {
       expect(config.batching.maxRequests).toBe(500);
     });
 
-    it("clamps user batching maxBytes to operator cap", () => {
+    it('clamps user batching maxBytes to operator cap', () => {
       const operator: OperatorConfig = {
         batching: { maxBytes: 10_000_000 },
       };
@@ -142,7 +142,7 @@ describe("resolveConfig", () => {
       expect(config.batching.maxBytes).toBe(10_000_000);
     });
 
-    it("clamps user polling maxRetries to operator cap", () => {
+    it('clamps user polling maxRetries to operator cap', () => {
       const operator: OperatorConfig = { polling: { maxRetries: 3 } };
       const user: UserConfig = { polling: { maxRetries: 10 } };
 
@@ -151,7 +151,7 @@ describe("resolveConfig", () => {
       expect(config.polling.maxRetries).toBe(3);
     });
 
-    it("enforces minimum flush interval (user cannot flush more often than operator)", () => {
+    it('enforces minimum flush interval (user cannot flush more often than operator)', () => {
       const operator: OperatorConfig = {
         batching: { flushIntervalMs: 120_000 },
       };
@@ -163,7 +163,7 @@ describe("resolveConfig", () => {
       expect(config.batching.flushIntervalMs).toBe(120_000);
     });
 
-    it("enforces minimum polling interval (user cannot poll more aggressively than operator)", () => {
+    it('enforces minimum polling interval (user cannot poll more aggressively than operator)', () => {
       const operator: OperatorConfig = { polling: { intervalMs: 30_000 } };
       const user: UserConfig = { polling: { intervalMs: 5_000 } };
 
@@ -173,7 +173,7 @@ describe("resolveConfig", () => {
       expect(config.polling.intervalMs).toBe(30_000);
     });
 
-    it("allows user flush interval above operator floor", () => {
+    it('allows user flush interval above operator floor', () => {
       const operator: OperatorConfig = {
         batching: { flushIntervalMs: 60_000 },
       };
@@ -189,8 +189,8 @@ describe("resolveConfig", () => {
   // Edge cases
   // -------------------------------------------------------------------------
 
-  describe("edge cases", () => {
-    it("handles operator max retention lower than library default", () => {
+  describe('edge cases', () => {
+    it('handles operator max retention lower than library default', () => {
       const operator: OperatorConfig = { maxRetentionDays: 3 };
       // no user config, so library default (7) would be used
       // but operator cap is 3, so it should clamp
@@ -203,7 +203,7 @@ describe("resolveConfig", () => {
       expect(config.retentionDays).toBe(3);
     });
 
-    it("handles operator defaultRetentionDays exceeding maxRetentionDays", () => {
+    it('handles operator defaultRetentionDays exceeding maxRetentionDays', () => {
       // This is a misconfiguration, but resolveConfig should handle it gracefully
       const operator: OperatorConfig = {
         defaultRetentionDays: 90,
@@ -216,7 +216,7 @@ describe("resolveConfig", () => {
       expect(config.retentionDays).toBe(30);
     });
 
-    it("does not clamp when operator has no caps", () => {
+    it('does not clamp when operator has no caps', () => {
       const user: UserConfig = {
         retentionDays: 365,
         batching: { maxRequests: 50_000, maxBytes: 200_000_000 },
@@ -231,11 +231,11 @@ describe("resolveConfig", () => {
       expect(config.polling.maxRetries).toBe(100);
     });
 
-    it("env config is accepted without error (reserved for future use)", () => {
+    it('env config is accepted without error (reserved for future use)', () => {
       const env: EnvConfig = {
-        masterKey: "test-key",
-        databaseUrl: "postgres://localhost/norush",
-        nodeEnv: "test",
+        masterKey: 'test-key',
+        databaseUrl: 'postgres://localhost/norush',
+        nodeEnv: 'test',
       };
 
       // Should not throw
@@ -243,7 +243,7 @@ describe("resolveConfig", () => {
       expect(config.retentionDays).toBe(7);
     });
 
-    it("partially specified user batching merges with defaults", () => {
+    it('partially specified user batching merges with defaults', () => {
       const user: UserConfig = {
         batching: { maxRequests: 200 },
         // maxBytes and flushIntervalMs not specified
@@ -256,7 +256,7 @@ describe("resolveConfig", () => {
       expect(config.batching.flushIntervalMs).toBe(300_000);
     });
 
-    it("partially specified operator batching merges with defaults", () => {
+    it('partially specified operator batching merges with defaults', () => {
       const operator: OperatorConfig = {
         batching: { maxRequests: 500 },
       };

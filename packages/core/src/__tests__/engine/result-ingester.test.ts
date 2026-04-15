@@ -1,9 +1,9 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { MemoryStore } from "../../store/memory.js";
-import { ResultIngester } from "../../engine/result-ingester.js";
-import { checkRateLimit } from "../../rate-limit/limiter.js";
-import { batchCost } from "../../pricing.js";
-import type { Provider } from "../../interfaces/provider.js";
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MemoryStore } from '../../store/memory.js';
+import { ResultIngester } from '../../engine/result-ingester.js';
+import { checkRateLimit } from '../../rate-limit/limiter.js';
+import { batchCost } from '../../pricing.js';
+import type { Provider } from '../../interfaces/provider.js';
 import type {
   Batch,
   BatchStatus,
@@ -11,7 +11,7 @@ import type {
   NorushResult,
   ProviderBatchRef,
   SlidingWindow,
-} from "../../types.js";
+} from '../../types.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -19,13 +19,13 @@ import type {
 
 function makeNewRequest(overrides: Partial<NewRequest> = {}): NewRequest {
   return {
-    provider: "claude",
-    model: "claude-sonnet-4-5-20250929",
+    provider: 'claude',
+    model: 'claude-sonnet-4-5-20250929',
     params: {
       max_tokens: 1024,
-      messages: [{ role: "user", content: "Hello" }],
+      messages: [{ role: 'user', content: 'Hello' }],
     },
-    userId: "user_01",
+    userId: 'user_01',
     ...overrides,
   };
 }
@@ -33,10 +33,10 @@ function makeNewRequest(overrides: Partial<NewRequest> = {}): NewRequest {
 function mockProvider(overrides: Partial<Provider> = {}): Provider {
   return {
     submitBatch: vi.fn().mockResolvedValue({
-      providerBatchId: "provider_batch_001",
-      provider: "claude",
+      providerBatchId: 'provider_batch_001',
+      provider: 'claude',
     } satisfies ProviderBatchRef),
-    checkStatus: vi.fn().mockResolvedValue("ended" as BatchStatus),
+    checkStatus: vi.fn().mockResolvedValue('ended' as BatchStatus),
     fetchResults: vi.fn(),
     cancelBatch: vi.fn(),
     ...overrides,
@@ -50,24 +50,20 @@ async function createEndedBatch(
   store: MemoryStore,
   options: {
     requestCount?: number;
-    provider?: "claude" | "openai";
+    provider?: 'claude' | 'openai';
     providerBatchId?: string;
   } = {},
 ): Promise<{ batch: Batch; requestIds: string[] }> {
-  const {
-    requestCount = 3,
-    provider = "claude",
-    providerBatchId = "pb_001",
-  } = options;
+  const { requestCount = 3, provider = 'claude', providerBatchId = 'pb_001' } = options;
 
   const batch = await store.createBatch({
     provider,
-    apiKeyId: "user_01",
+    apiKeyId: 'user_01',
     requestCount,
   });
 
   await store.updateBatch(batch.id, {
-    status: "ended",
+    status: 'ended',
     providerBatchId,
     submittedAt: new Date(),
     endedAt: new Date(),
@@ -79,7 +75,7 @@ async function createEndedBatch(
     const req = await store.createRequest(makeNewRequest({ provider }));
     await store.updateRequest(req.id, {
       batchId: batch.id,
-      status: "batched",
+      status: 'batched',
     });
     requestIds.push(req.id);
   }
@@ -92,9 +88,7 @@ async function createEndedBatch(
 /**
  * Create an async iterable from an array of NorushResults.
  */
-async function* makeResultStream(
-  results: NorushResult[],
-): AsyncIterable<NorushResult> {
+async function* makeResultStream(results: NorushResult[]): AsyncIterable<NorushResult> {
   for (const r of results) {
     yield r;
   }
@@ -104,7 +98,7 @@ async function* makeResultStream(
 // Tests
 // ---------------------------------------------------------------------------
 
-describe("ResultIngester", () => {
+describe('ResultIngester', () => {
   let store: MemoryStore;
 
   beforeEach(() => {
@@ -119,17 +113,17 @@ describe("ResultIngester", () => {
   // Successful ingestion
   // -----------------------------------------------------------------------
 
-  describe("successful ingestion", () => {
-    it("ingests all results from a batch and persists them", async () => {
+  describe('successful ingestion', () => {
+    it('ingests all results from a batch and persists them', async () => {
       const { batch, requestIds } = await createEndedBatch(store, {
         requestCount: 3,
       });
 
       const norushResults: NorushResult[] = requestIds.map((id) => ({
         requestId: id,
-        response: { content: "Hello back!" },
+        response: { content: 'Hello back!' },
         success: true,
-        stopReason: "end_turn",
+        stopReason: 'end_turn',
         inputTokens: 10,
         outputTokens: 20,
       }));
@@ -140,7 +134,7 @@ describe("ResultIngester", () => {
 
       const ingester = new ResultIngester({
         store,
-        providers: new Map([["claude", provider]]),
+        providers: new Map([['claude', provider]]),
       });
 
       const result = await ingester.ingest(batch);
@@ -152,16 +146,16 @@ describe("ResultIngester", () => {
       expect(result.errors).toHaveLength(0);
     });
 
-    it("persists each result individually to the store", async () => {
+    it('persists each result individually to the store', async () => {
       const { batch, requestIds } = await createEndedBatch(store, {
         requestCount: 2,
       });
 
       const norushResults: NorushResult[] = requestIds.map((id) => ({
         requestId: id,
-        response: { content: "Response" },
+        response: { content: 'Response' },
         success: true,
-        stopReason: "end_turn",
+        stopReason: 'end_turn',
         inputTokens: 5,
         outputTokens: 15,
       }));
@@ -172,7 +166,7 @@ describe("ResultIngester", () => {
 
       const ingester = new ResultIngester({
         store,
-        providers: new Map([["claude", provider]]),
+        providers: new Map([['claude', provider]]),
       });
 
       await ingester.ingest(batch);
@@ -183,14 +177,14 @@ describe("ResultIngester", () => {
 
       for (const result of undelivered) {
         expect(result.batchId).toBe(batch.id);
-        expect(result.deliveryStatus).toBe("pending");
-        expect(result.stopReason).toBe("end_turn");
+        expect(result.deliveryStatus).toBe('pending');
+        expect(result.stopReason).toBe('end_turn');
         expect(result.inputTokens).toBe(5);
         expect(result.outputTokens).toBe(15);
       }
     });
 
-    it("updates request status to succeeded for successful results", async () => {
+    it('updates request status to succeeded for successful results', async () => {
       const { batch, requestIds } = await createEndedBatch(store, {
         requestCount: 1,
       });
@@ -198,7 +192,7 @@ describe("ResultIngester", () => {
       const norushResults: NorushResult[] = [
         {
           requestId: requestIds[0],
-          response: { content: "Hello" },
+          response: { content: 'Hello' },
           success: true,
         },
       ];
@@ -209,16 +203,16 @@ describe("ResultIngester", () => {
 
       const ingester = new ResultIngester({
         store,
-        providers: new Map([["claude", provider]]),
+        providers: new Map([['claude', provider]]),
       });
 
       await ingester.ingest(batch);
 
       const request = await store.getRequest(requestIds[0]);
-      expect(request?.status).toBe("succeeded");
+      expect(request?.status).toBe('succeeded');
     });
 
-    it("updates request status to failed for failed results", async () => {
+    it('updates request status to failed for failed results', async () => {
       const { batch, requestIds } = await createEndedBatch(store, {
         requestCount: 1,
       });
@@ -226,7 +220,7 @@ describe("ResultIngester", () => {
       const norushResults: NorushResult[] = [
         {
           requestId: requestIds[0],
-          response: { error: "rate_limit" },
+          response: { error: 'rate_limit' },
           success: false,
         },
       ];
@@ -237,16 +231,16 @@ describe("ResultIngester", () => {
 
       const ingester = new ResultIngester({
         store,
-        providers: new Map([["claude", provider]]),
+        providers: new Map([['claude', provider]]),
       });
 
       await ingester.ingest(batch);
 
       const request = await store.getRequest(requestIds[0]);
-      expect(request?.status).toBe("failed");
+      expect(request?.status).toBe('failed');
     });
 
-    it("handles mixed success and failure results", async () => {
+    it('handles mixed success and failure results', async () => {
       const { batch, requestIds } = await createEndedBatch(store, {
         requestCount: 3,
       });
@@ -254,17 +248,17 @@ describe("ResultIngester", () => {
       const norushResults: NorushResult[] = [
         {
           requestId: requestIds[0],
-          response: { content: "OK" },
+          response: { content: 'OK' },
           success: true,
         },
         {
           requestId: requestIds[1],
-          response: { error: "server_error" },
+          response: { error: 'server_error' },
           success: false,
         },
         {
           requestId: requestIds[2],
-          response: { content: "Also OK" },
+          response: { content: 'Also OK' },
           success: true,
         },
       ];
@@ -275,7 +269,7 @@ describe("ResultIngester", () => {
 
       const ingester = new ResultIngester({
         store,
-        providers: new Map([["claude", provider]]),
+        providers: new Map([['claude', provider]]),
       });
 
       const result = await ingester.ingest(batch);
@@ -285,7 +279,7 @@ describe("ResultIngester", () => {
       expect(result.failed).toBe(1);
     });
 
-    it("updates batch succeeded and failed counters", async () => {
+    it('updates batch succeeded and failed counters', async () => {
       const { batch, requestIds } = await createEndedBatch(store, {
         requestCount: 3,
       });
@@ -293,17 +287,17 @@ describe("ResultIngester", () => {
       const norushResults: NorushResult[] = [
         {
           requestId: requestIds[0],
-          response: { content: "OK" },
+          response: { content: 'OK' },
           success: true,
         },
         {
           requestId: requestIds[1],
-          response: { error: "err" },
+          response: { error: 'err' },
           success: false,
         },
         {
           requestId: requestIds[2],
-          response: { content: "OK" },
+          response: { content: 'OK' },
           success: true,
         },
       ];
@@ -314,7 +308,7 @@ describe("ResultIngester", () => {
 
       const ingester = new ResultIngester({
         store,
-        providers: new Map([["claude", provider]]),
+        providers: new Map([['claude', provider]]),
       });
 
       await ingester.ingest(batch);
@@ -329,15 +323,15 @@ describe("ResultIngester", () => {
   // Crash recovery / idempotency
   // -----------------------------------------------------------------------
 
-  describe("crash recovery", () => {
-    it("partial ingestion: already-persisted results survive", async () => {
+  describe('crash recovery', () => {
+    it('partial ingestion: already-persisted results survive', async () => {
       const { batch, requestIds } = await createEndedBatch(store, {
         requestCount: 3,
       });
 
       const norushResults: NorushResult[] = requestIds.map((id) => ({
         requestId: id,
-        response: { content: "Hello" },
+        response: { content: 'Hello' },
         success: true,
       }));
 
@@ -345,9 +339,9 @@ describe("ResultIngester", () => {
       await store.createResult({
         requestId: requestIds[0],
         batchId: batch.id,
-        response: { content: "Hello" },
+        response: { content: 'Hello' },
       });
-      await store.updateRequest(requestIds[0], { status: "succeeded" });
+      await store.updateRequest(requestIds[0], { status: 'succeeded' });
 
       // Create provider that streams all results (including the already-persisted one).
       // MemoryStore doesn't enforce uniqueness on requestId, so the duplicate
@@ -359,7 +353,7 @@ describe("ResultIngester", () => {
 
       const ingester = new ResultIngester({
         store,
-        providers: new Map([["claude", provider]]),
+        providers: new Map([['claude', provider]]),
       });
 
       const result = await ingester.ingest(batch);
@@ -374,24 +368,24 @@ describe("ResultIngester", () => {
       expect(allResults.length).toBe(4);
     });
 
-    it("handles duplicate detection when createResult throws", async () => {
+    it('handles duplicate detection when createResult throws', async () => {
       const { batch, requestIds } = await createEndedBatch(store, {
         requestCount: 2,
       });
 
       const norushResults: NorushResult[] = requestIds.map((id) => ({
         requestId: id,
-        response: { content: "Hello" },
+        response: { content: 'Hello' },
         success: true,
       }));
 
       // Mock createResult to throw duplicate error on first call.
       const originalCreateResult = store.createResult.bind(store);
       let callCount = 0;
-      vi.spyOn(store, "createResult").mockImplementation(async (res) => {
+      vi.spyOn(store, 'createResult').mockImplementation(async (res) => {
         callCount++;
         if (callCount === 1) {
-          throw new Error("duplicate key: unique constraint violation");
+          throw new Error('duplicate key: unique constraint violation');
         }
         return originalCreateResult(res);
       });
@@ -402,7 +396,7 @@ describe("ResultIngester", () => {
 
       const ingester = new ResultIngester({
         store,
-        providers: new Map([["claude", provider]]),
+        providers: new Map([['claude', provider]]),
       });
 
       const result = await ingester.ingest(batch);
@@ -413,10 +407,10 @@ describe("ResultIngester", () => {
 
       // Even the duplicate's request status should be updated idempotently.
       const req = await store.getRequest(requestIds[0]);
-      expect(req?.status).toBe("succeeded");
+      expect(req?.status).toBe('succeeded');
     });
 
-    it("recomputes batch counters from request statuses (idempotent on restart)", async () => {
+    it('recomputes batch counters from request statuses (idempotent on restart)', async () => {
       const { batch, requestIds } = await createEndedBatch(store, {
         requestCount: 3,
       });
@@ -426,23 +420,23 @@ describe("ResultIngester", () => {
       await store.createResult({
         requestId: requestIds[0],
         batchId: batch.id,
-        response: { content: "Hello" },
+        response: { content: 'Hello' },
       });
-      await store.updateRequest(requestIds[0], { status: "succeeded" });
+      await store.updateRequest(requestIds[0], { status: 'succeeded' });
 
       // Ingester streams all 3 results; requestIds[0] triggers a duplicate.
       const norushResults: NorushResult[] = requestIds.map((id) => ({
         requestId: id,
-        response: { content: "Hello" },
+        response: { content: 'Hello' },
         success: true,
       }));
 
       const originalCreateResult = store.createResult.bind(store);
       let callCount = 0;
-      vi.spyOn(store, "createResult").mockImplementation(async (res) => {
+      vi.spyOn(store, 'createResult').mockImplementation(async (res) => {
         callCount++;
         if (callCount === 1) {
-          throw new Error("duplicate key: unique constraint violation");
+          throw new Error('duplicate key: unique constraint violation');
         }
         return originalCreateResult(res);
       });
@@ -453,7 +447,7 @@ describe("ResultIngester", () => {
 
       const ingester = new ResultIngester({
         store,
-        providers: new Map([["claude", provider]]),
+        providers: new Map([['claude', provider]]),
       });
 
       await ingester.ingest(batch);
@@ -464,8 +458,8 @@ describe("ResultIngester", () => {
       expect(updatedBatch?.failedCount).toBe(0);
     });
 
-    it("updates usage counters on the duplicate path to guard against crash between createResult and counter update", async () => {
-      await store.upsertUserLimits("user_01", {
+    it('updates usage counters on the duplicate path to guard against crash between createResult and counter update', async () => {
+      await store.upsertUserLimits('user_01', {
         maxTokensPerPeriod: 1_000_000,
       });
 
@@ -476,7 +470,7 @@ describe("ResultIngester", () => {
       const norushResults: NorushResult[] = [
         {
           requestId: requestIds[0],
-          response: { content: "Hello" },
+          response: { content: 'Hello' },
           success: true,
           inputTokens: 100,
           outputTokens: 200,
@@ -486,8 +480,8 @@ describe("ResultIngester", () => {
       // Simulate restart after crash: createResult throws duplicate because the
       // result was already persisted in the prior run, but the counter update
       // never completed before the process died.
-      vi.spyOn(store, "createResult").mockRejectedValue(
-        new Error("duplicate key: unique constraint violation"),
+      vi.spyOn(store, 'createResult').mockRejectedValue(
+        new Error('duplicate key: unique constraint violation'),
       );
 
       const provider = mockProvider({
@@ -496,7 +490,7 @@ describe("ResultIngester", () => {
 
       const ingester = new ResultIngester({
         store,
-        providers: new Map([["claude", provider]]),
+        providers: new Map([['claude', provider]]),
       });
 
       const result = await ingester.ingest(batch);
@@ -509,29 +503,29 @@ describe("ResultIngester", () => {
       // Counters must still be updated even on the duplicate path so that
       // a crash between createResult() and the counter update on the previous
       // run does not permanently undercount usage.
-      const limits = await store.getUserLimits("user_01");
-      if (!limits) throw new Error("expected user limits to exist");
+      const limits = await store.getUserLimits('user_01');
+      if (!limits) throw new Error('expected user limits to exist');
       expect(limits.currentPeriodTokens).toBe(300); // 100 + 200
     });
 
-    it("captures non-duplicate errors without stopping ingestion", async () => {
+    it('captures non-duplicate errors without stopping ingestion', async () => {
       const { batch, requestIds } = await createEndedBatch(store, {
         requestCount: 3,
       });
 
       const norushResults: NorushResult[] = requestIds.map((id) => ({
         requestId: id,
-        response: { content: "Hello" },
+        response: { content: 'Hello' },
         success: true,
       }));
 
       // Mock createResult to throw a non-duplicate error on the second call.
       const originalCreateResult = store.createResult.bind(store);
       let callCount = 0;
-      vi.spyOn(store, "createResult").mockImplementation(async (res) => {
+      vi.spyOn(store, 'createResult').mockImplementation(async (res) => {
         callCount++;
         if (callCount === 2) {
-          throw new Error("disk full");
+          throw new Error('disk full');
         }
         return originalCreateResult(res);
       });
@@ -542,7 +536,7 @@ describe("ResultIngester", () => {
 
       const ingester = new ResultIngester({
         store,
-        providers: new Map([["claude", provider]]),
+        providers: new Map([['claude', provider]]),
       });
 
       const result = await ingester.ingest(batch);
@@ -550,7 +544,7 @@ describe("ResultIngester", () => {
       // First and third results should succeed, second should error.
       expect(result.ingested).toBe(2);
       expect(result.errors).toHaveLength(1);
-      expect(result.errors[0]).toContain("disk full");
+      expect(result.errors[0]).toContain('disk full');
     });
   });
 
@@ -558,17 +552,17 @@ describe("ResultIngester", () => {
   // Edge cases
   // -----------------------------------------------------------------------
 
-  describe("edge cases", () => {
-    it("returns error when batch has no provider batch ID", async () => {
+  describe('edge cases', () => {
+    it('returns error when batch has no provider batch ID', async () => {
       const batch = await store.createBatch({
-        provider: "claude",
-        apiKeyId: "user_01",
+        provider: 'claude',
+        apiKeyId: 'user_01',
         requestCount: 1,
       });
 
       const ingester = new ResultIngester({
         store,
-        providers: new Map([["claude", mockProvider()]]),
+        providers: new Map([['claude', mockProvider()]]),
       });
 
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
@@ -577,27 +571,27 @@ describe("ResultIngester", () => {
 
       expect(result.ingested).toBe(0);
       expect(result.errors).toHaveLength(1);
-      expect(result.errors[0]).toContain("no provider batch ID");
+      expect(result.errors[0]).toContain('no provider batch ID');
     });
 
-    it("returns error when no provider adapter found", async () => {
+    it('returns error when no provider adapter found', async () => {
       const { batch } = await createEndedBatch(store, {
-        provider: "openai",
+        provider: 'openai',
       });
 
       const ingester = new ResultIngester({
         store,
-        providers: new Map([["claude", mockProvider()]]), // no openai
+        providers: new Map([['claude', mockProvider()]]), // no openai
       });
 
       const result = await ingester.ingest(batch);
 
       expect(result.ingested).toBe(0);
       expect(result.errors).toHaveLength(1);
-      expect(result.errors[0]).toContain("No provider adapter");
+      expect(result.errors[0]).toContain('No provider adapter');
     });
 
-    it("handles empty result stream", async () => {
+    it('handles empty result stream', async () => {
       const { batch } = await createEndedBatch(store, { requestCount: 0 });
 
       const provider = mockProvider({
@@ -606,7 +600,7 @@ describe("ResultIngester", () => {
 
       const ingester = new ResultIngester({
         store,
-        providers: new Map([["claude", provider]]),
+        providers: new Map([['claude', provider]]),
       });
 
       const result = await ingester.ingest(batch);
@@ -616,7 +610,7 @@ describe("ResultIngester", () => {
       expect(result.failed).toBe(0);
     });
 
-    it("resolves provider by composite key (provider::apiKeyId)", async () => {
+    it('resolves provider by composite key (provider::apiKeyId)', async () => {
       const { batch, requestIds } = await createEndedBatch(store, {
         requestCount: 1,
       });
@@ -624,23 +618,21 @@ describe("ResultIngester", () => {
       const norushResults: NorushResult[] = [
         {
           requestId: requestIds[0],
-          response: { content: "OK" },
+          response: { content: 'OK' },
           success: true,
         },
       ];
 
       const specificProvider = mockProvider({
-        fetchResults: vi
-          .fn()
-          .mockReturnValue(makeResultStream(norushResults)),
+        fetchResults: vi.fn().mockReturnValue(makeResultStream(norushResults)),
       });
       const genericProvider = mockProvider();
 
       const ingester = new ResultIngester({
         store,
         providers: new Map([
-          ["claude", genericProvider],
-          ["claude::user_01", specificProvider],
+          ['claude', genericProvider],
+          ['claude::user_01', specificProvider],
         ]),
       });
 
@@ -656,15 +648,15 @@ describe("ResultIngester", () => {
   // Telemetry
   // -----------------------------------------------------------------------
 
-  describe("telemetry", () => {
-    it("emits results_ingested counter", async () => {
+  describe('telemetry', () => {
+    it('emits results_ingested counter', async () => {
       const { batch, requestIds } = await createEndedBatch(store, {
         requestCount: 2,
       });
 
       const norushResults: NorushResult[] = requestIds.map((id) => ({
         requestId: id,
-        response: { content: "Hello" },
+        response: { content: 'Hello' },
         success: true,
       }));
 
@@ -676,20 +668,20 @@ describe("ResultIngester", () => {
 
       const ingester = new ResultIngester({
         store,
-        providers: new Map([["claude", provider]]),
+        providers: new Map([['claude', provider]]),
         telemetry,
       });
 
       await ingester.ingest(batch);
 
       expect(telemetry.counter).toHaveBeenCalledWith(
-        "results_ingested",
+        'results_ingested',
         2,
-        expect.objectContaining({ provider: "claude" }),
+        expect.objectContaining({ provider: 'claude' }),
       );
     });
 
-    it("emits ingestion_complete event", async () => {
+    it('emits ingestion_complete event', async () => {
       const { batch } = await createEndedBatch(store, { requestCount: 0 });
 
       const provider = mockProvider({
@@ -700,14 +692,14 @@ describe("ResultIngester", () => {
 
       const ingester = new ResultIngester({
         store,
-        providers: new Map([["claude", provider]]),
+        providers: new Map([['claude', provider]]),
         telemetry,
       });
 
       await ingester.ingest(batch);
 
       expect(telemetry.event).toHaveBeenCalledWith(
-        "ingestion_complete",
+        'ingestion_complete',
         expect.objectContaining({
           batchId: batch.id,
         }),
@@ -719,10 +711,10 @@ describe("ResultIngester", () => {
   // Token and spend counter wiring
   // -----------------------------------------------------------------------
 
-  describe("token and spend counter wiring", () => {
-    it("increments currentPeriodTokens by inputTokens + outputTokens after ingestion", async () => {
+  describe('token and spend counter wiring', () => {
+    it('increments currentPeriodTokens by inputTokens + outputTokens after ingestion', async () => {
       // Set up user limits so counters exist.
-      await store.upsertUserLimits("user_01", {
+      await store.upsertUserLimits('user_01', {
         maxTokensPerPeriod: 1_000_000,
       });
 
@@ -733,14 +725,14 @@ describe("ResultIngester", () => {
       const norushResults: NorushResult[] = [
         {
           requestId: requestIds[0],
-          response: { content: "Hello" },
+          response: { content: 'Hello' },
           success: true,
           inputTokens: 100,
           outputTokens: 200,
         },
         {
           requestId: requestIds[1],
-          response: { content: "World" },
+          response: { content: 'World' },
           success: true,
           inputTokens: 150,
           outputTokens: 250,
@@ -753,19 +745,19 @@ describe("ResultIngester", () => {
 
       const ingester = new ResultIngester({
         store,
-        providers: new Map([["claude", provider]]),
+        providers: new Map([['claude', provider]]),
       });
 
       await ingester.ingest(batch);
 
-      const limits = await store.getUserLimits("user_01");
-      if (!limits) throw new Error("expected user limits to exist");
+      const limits = await store.getUserLimits('user_01');
+      if (!limits) throw new Error('expected user limits to exist');
       // Total tokens: (100+200) + (150+250) = 700
       expect(limits.currentPeriodTokens).toBe(700);
     });
 
-    it("increments currentSpendUsd using batch cost rates after ingestion", async () => {
-      await store.upsertUserLimits("user_01", {
+    it('increments currentSpendUsd using batch cost rates after ingestion', async () => {
+      await store.upsertUserLimits('user_01', {
         hardSpendLimitUsd: 100.0,
       });
 
@@ -776,7 +768,7 @@ describe("ResultIngester", () => {
       const norushResults: NorushResult[] = [
         {
           requestId: requestIds[0],
-          response: { content: "Hello" },
+          response: { content: 'Hello' },
           success: true,
           inputTokens: 1000,
           outputTokens: 500,
@@ -789,22 +781,22 @@ describe("ResultIngester", () => {
 
       const ingester = new ResultIngester({
         store,
-        providers: new Map([["claude", provider]]),
+        providers: new Map([['claude', provider]]),
       });
 
       await ingester.ingest(batch);
 
-      const limits = await store.getUserLimits("user_01");
-      if (!limits) throw new Error("expected user limits to exist");
+      const limits = await store.getUserLimits('user_01');
+      if (!limits) throw new Error('expected user limits to exist');
 
       // Expected cost using batch rates for claude provider.
-      const expectedCost = batchCost("claude", 1000, 500);
+      const expectedCost = batchCost('claude', 1000, 500);
       expect(expectedCost).toBeGreaterThan(0);
       expect(limits.currentSpendUsd).toBeCloseTo(expectedCost, 10);
     });
 
-    it("does not increment counters when token counts are null", async () => {
-      await store.upsertUserLimits("user_01", {
+    it('does not increment counters when token counts are null', async () => {
+      await store.upsertUserLimits('user_01', {
         maxTokensPerPeriod: 1_000_000,
         hardSpendLimitUsd: 100.0,
       });
@@ -816,7 +808,7 @@ describe("ResultIngester", () => {
       const norushResults: NorushResult[] = [
         {
           requestId: requestIds[0],
-          response: { content: "Hello" },
+          response: { content: 'Hello' },
           success: true,
           // No token counts — inputTokens and outputTokens default to null.
         },
@@ -828,19 +820,19 @@ describe("ResultIngester", () => {
 
       const ingester = new ResultIngester({
         store,
-        providers: new Map([["claude", provider]]),
+        providers: new Map([['claude', provider]]),
       });
 
       await ingester.ingest(batch);
 
-      const limits = await store.getUserLimits("user_01");
-      if (!limits) throw new Error("expected user limits to exist");
+      const limits = await store.getUserLimits('user_01');
+      if (!limits) throw new Error('expected user limits to exist');
       expect(limits.currentPeriodTokens).toBe(0);
       expect(limits.currentSpendUsd).toBe(0);
     });
 
-    it("increments counters for failed results that report tokens", async () => {
-      await store.upsertUserLimits("user_01", {
+    it('increments counters for failed results that report tokens', async () => {
+      await store.upsertUserLimits('user_01', {
         maxTokensPerPeriod: 1_000_000,
       });
 
@@ -852,7 +844,7 @@ describe("ResultIngester", () => {
       const norushResults: NorushResult[] = [
         {
           requestId: requestIds[0],
-          response: { error: "content_filter" },
+          response: { error: 'content_filter' },
           success: false,
           inputTokens: 50,
           outputTokens: 10,
@@ -865,18 +857,18 @@ describe("ResultIngester", () => {
 
       const ingester = new ResultIngester({
         store,
-        providers: new Map([["claude", provider]]),
+        providers: new Map([['claude', provider]]),
       });
 
       await ingester.ingest(batch);
 
-      const limits = await store.getUserLimits("user_01");
-      if (!limits) throw new Error("expected user limits to exist");
+      const limits = await store.getUserLimits('user_01');
+      if (!limits) throw new Error('expected user limits to exist');
       expect(limits.currentPeriodTokens).toBe(60);
     });
 
-    it("counter increment failure does not block result delivery", async () => {
-      await store.upsertUserLimits("user_01", {
+    it('counter increment failure does not block result delivery', async () => {
+      await store.upsertUserLimits('user_01', {
         maxTokensPerPeriod: 1_000_000,
       });
 
@@ -887,7 +879,7 @@ describe("ResultIngester", () => {
       const norushResults: NorushResult[] = [
         {
           requestId: requestIds[0],
-          response: { content: "Hello" },
+          response: { content: 'Hello' },
           success: true,
           inputTokens: 100,
           outputTokens: 200,
@@ -895,9 +887,7 @@ describe("ResultIngester", () => {
       ];
 
       // Make incrementPeriodTokens throw to simulate a store failure.
-      vi.spyOn(store, "incrementPeriodTokens").mockRejectedValue(
-        new Error("db connection lost"),
-      );
+      vi.spyOn(store, 'incrementPeriodTokens').mockRejectedValue(new Error('db connection lost'));
 
       const telemetry = { counter: vi.fn(), histogram: vi.fn(), event: vi.fn() };
 
@@ -907,7 +897,7 @@ describe("ResultIngester", () => {
 
       const ingester = new ResultIngester({
         store,
-        providers: new Map([["claude", provider]]),
+        providers: new Map([['claude', provider]]),
         telemetry,
       });
 
@@ -920,29 +910,28 @@ describe("ResultIngester", () => {
 
       // The error should be logged via telemetry.
       expect(telemetry.event).toHaveBeenCalledWith(
-        "usage_counter_error",
+        'usage_counter_error',
         expect.objectContaining({
           requestId: requestIds[0],
-          error: "db connection lost",
+          error: 'db connection lost',
         }),
       );
     });
 
-    it("accumulates counters across multiple results from different batches", async () => {
-      await store.upsertUserLimits("user_01", {
+    it('accumulates counters across multiple results from different batches', async () => {
+      await store.upsertUserLimits('user_01', {
         maxTokensPerPeriod: 1_000_000,
         hardSpendLimitUsd: 100.0,
       });
 
       // First batch.
-      const { batch: batch1, requestIds: reqIds1 } = await createEndedBatch(
-        store,
-        { requestCount: 1 },
-      );
+      const { batch: batch1, requestIds: reqIds1 } = await createEndedBatch(store, {
+        requestCount: 1,
+      });
       const results1: NorushResult[] = [
         {
           requestId: reqIds1[0],
-          response: { content: "First" },
+          response: { content: 'First' },
           success: true,
           inputTokens: 100,
           outputTokens: 200,
@@ -954,19 +943,18 @@ describe("ResultIngester", () => {
       });
       const ingester1 = new ResultIngester({
         store,
-        providers: new Map([["claude", provider1]]),
+        providers: new Map([['claude', provider1]]),
       });
       await ingester1.ingest(batch1);
 
       // Second batch.
-      const { batch: batch2, requestIds: reqIds2 } = await createEndedBatch(
-        store,
-        { requestCount: 1 },
-      );
+      const { batch: batch2, requestIds: reqIds2 } = await createEndedBatch(store, {
+        requestCount: 1,
+      });
       const results2: NorushResult[] = [
         {
           requestId: reqIds2[0],
-          response: { content: "Second" },
+          response: { content: 'Second' },
           success: true,
           inputTokens: 300,
           outputTokens: 400,
@@ -978,22 +966,21 @@ describe("ResultIngester", () => {
       });
       const ingester2 = new ResultIngester({
         store,
-        providers: new Map([["claude", provider2]]),
+        providers: new Map([['claude', provider2]]),
       });
       await ingester2.ingest(batch2);
 
-      const limits = await store.getUserLimits("user_01");
-      if (!limits) throw new Error("expected user limits to exist");
+      const limits = await store.getUserLimits('user_01');
+      if (!limits) throw new Error('expected user limits to exist');
       // Total tokens: (100+200) + (300+400) = 1000
       expect(limits.currentPeriodTokens).toBe(1000);
 
       // Total spend: batchCost(claude, 100, 200) + batchCost(claude, 300, 400)
-      const expectedSpend =
-        batchCost("claude", 100, 200) + batchCost("claude", 300, 400);
+      const expectedSpend = batchCost('claude', 100, 200) + batchCost('claude', 300, 400);
       expect(limits.currentSpendUsd).toBeCloseTo(expectedSpend, 10);
     });
 
-    it("does not increment when user has no limits configured", async () => {
+    it('does not increment when user has no limits configured', async () => {
       // No upsertUserLimits call — user has no limits row.
       const { batch, requestIds } = await createEndedBatch(store, {
         requestCount: 1,
@@ -1002,7 +989,7 @@ describe("ResultIngester", () => {
       const norushResults: NorushResult[] = [
         {
           requestId: requestIds[0],
-          response: { content: "Hello" },
+          response: { content: 'Hello' },
           success: true,
           inputTokens: 100,
           outputTokens: 200,
@@ -1015,7 +1002,7 @@ describe("ResultIngester", () => {
 
       const ingester = new ResultIngester({
         store,
-        providers: new Map([["claude", provider]]),
+        providers: new Map([['claude', provider]]),
       });
 
       const result = await ingester.ingest(batch);
@@ -1026,20 +1013,20 @@ describe("ResultIngester", () => {
       expect(result.errors).toHaveLength(0);
     });
 
-    it("uses correct provider rates for openai vs claude", async () => {
-      await store.upsertUserLimits("user_01", {
+    it('uses correct provider rates for openai vs claude', async () => {
+      await store.upsertUserLimits('user_01', {
         hardSpendLimitUsd: 100.0,
       });
 
       const { batch, requestIds } = await createEndedBatch(store, {
         requestCount: 1,
-        provider: "openai",
+        provider: 'openai',
       });
 
       const norushResults: NorushResult[] = [
         {
           requestId: requestIds[0],
-          response: { content: "Hello from OpenAI" },
+          response: { content: 'Hello from OpenAI' },
           success: true,
           inputTokens: 1000,
           outputTokens: 500,
@@ -1052,20 +1039,20 @@ describe("ResultIngester", () => {
 
       const ingester = new ResultIngester({
         store,
-        providers: new Map([["openai", provider]]),
+        providers: new Map([['openai', provider]]),
       });
 
       await ingester.ingest(batch);
 
-      const limits = await store.getUserLimits("user_01");
-      if (!limits) throw new Error("expected user limits to exist");
+      const limits = await store.getUserLimits('user_01');
+      if (!limits) throw new Error('expected user limits to exist');
 
-      const expectedCost = batchCost("openai", 1000, 500);
+      const expectedCost = batchCost('openai', 1000, 500);
       expect(expectedCost).toBeGreaterThan(0);
       expect(limits.currentSpendUsd).toBeCloseTo(expectedCost, 10);
 
       // OpenAI and Claude have different rates — verify they differ.
-      const claudeCost = batchCost("claude", 1000, 500);
+      const claudeCost = batchCost('claude', 1000, 500);
       expect(expectedCost).not.toBeCloseTo(claudeCost, 10);
     });
   });
@@ -1074,16 +1061,16 @@ describe("ResultIngester", () => {
   // Token/spend limits trigger after ingestion (end-to-end)
   // -----------------------------------------------------------------------
 
-  describe("rate limit enforcement after ingestion", () => {
+  describe('rate limit enforcement after ingestion', () => {
     const HEALTHY_WINDOW: SlidingWindow = {
       total: 10,
       succeeded: 10,
       failed: 0,
     };
 
-    it("token limit triggers after ingesting results that exhaust the budget", async () => {
+    it('token limit triggers after ingesting results that exhaust the budget', async () => {
       // Set a token limit of 500 tokens.
-      await store.upsertUserLimits("user_01", {
+      await store.upsertUserLimits('user_01', {
         maxTokensPerPeriod: 500,
       });
 
@@ -1094,7 +1081,7 @@ describe("ResultIngester", () => {
       const norushResults: NorushResult[] = [
         {
           requestId: requestIds[0],
-          response: { content: "Big response" },
+          response: { content: 'Big response' },
           success: true,
           inputTokens: 200,
           outputTokens: 350,
@@ -1107,11 +1094,11 @@ describe("ResultIngester", () => {
 
       const ingester = new ResultIngester({
         store,
-        providers: new Map([["claude", provider]]),
+        providers: new Map([['claude', provider]]),
       });
 
       // Before ingestion: rate limit should allow.
-      let limits = await store.getUserLimits("user_01");
+      let limits = await store.getUserLimits('user_01');
       let rateLimitResult = checkRateLimit(limits, HEALTHY_WINDOW);
       expect(rateLimitResult.allowed).toBe(true);
 
@@ -1119,17 +1106,17 @@ describe("ResultIngester", () => {
       await ingester.ingest(batch);
 
       // After ingestion: rate limit should reject.
-      limits = await store.getUserLimits("user_01");
+      limits = await store.getUserLimits('user_01');
       rateLimitResult = checkRateLimit(limits, HEALTHY_WINDOW);
       expect(rateLimitResult.allowed).toBe(false);
-      expect(rateLimitResult.reason).toBe("token_limit_exceeded");
+      expect(rateLimitResult.reason).toBe('token_limit_exceeded');
     });
 
-    it("spend limit triggers after ingesting results that exhaust the budget", async () => {
+    it('spend limit triggers after ingesting results that exhaust the budget', async () => {
       // Compute how many tokens are needed to reach the spend limit.
       // Use a very low spend limit that a single result can exhaust.
       const spendLimit = 0.001; // $0.001
-      await store.upsertUserLimits("user_01", {
+      await store.upsertUserLimits('user_01', {
         hardSpendLimitUsd: spendLimit,
       });
 
@@ -1141,7 +1128,7 @@ describe("ResultIngester", () => {
       const norushResults: NorushResult[] = [
         {
           requestId: requestIds[0],
-          response: { content: "Expensive response" },
+          response: { content: 'Expensive response' },
           success: true,
           inputTokens: 10_000,
           outputTokens: 10_000,
@@ -1154,24 +1141,24 @@ describe("ResultIngester", () => {
 
       const ingester = new ResultIngester({
         store,
-        providers: new Map([["claude", provider]]),
+        providers: new Map([['claude', provider]]),
       });
 
       // Before ingestion: rate limit should allow.
-      let limits = await store.getUserLimits("user_01");
+      let limits = await store.getUserLimits('user_01');
       let rateLimitResult = checkRateLimit(limits, HEALTHY_WINDOW);
       expect(rateLimitResult.allowed).toBe(true);
 
       await ingester.ingest(batch);
 
       // After ingestion: spend should exceed limit.
-      limits = await store.getUserLimits("user_01");
-      if (!limits) throw new Error("expected user limits to exist");
+      limits = await store.getUserLimits('user_01');
+      if (!limits) throw new Error('expected user limits to exist');
       expect(limits.currentSpendUsd).toBeGreaterThanOrEqual(spendLimit);
 
       rateLimitResult = checkRateLimit(limits, HEALTHY_WINDOW);
       expect(rateLimitResult.allowed).toBe(false);
-      expect(rateLimitResult.reason).toBe("hard_spend_limit_exceeded");
+      expect(rateLimitResult.reason).toBe('hard_spend_limit_exceeded');
     });
   });
 });

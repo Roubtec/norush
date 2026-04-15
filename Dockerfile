@@ -30,11 +30,16 @@ RUN corepack enable && corepack prepare "$(node -p 'require("./package.json").pa
 
 # Copy only the files pnpm needs to resolve the workspace and install deps.
 COPY pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY packages/core/bin packages/core/bin
 COPY packages/core/package.json packages/core/package.json
 COPY packages/web/package.json packages/web/package.json
 
 # Install all dependencies (including devDependencies needed for the build).
-RUN pnpm install --frozen-lockfile
+# The cache mount persists pnpm's content-addressable store across builds, so
+# even when this layer is invalidated (e.g. lockfile change) only new/changed
+# packages are downloaded — the rest are reused from the local store.
+RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
+    pnpm install --frozen-lockfile --config.node-linker=hoisted
 
 # ---------------------------------------------------------------------------
 # Stage 2 — build: compile TypeScript and SvelteKit
@@ -44,7 +49,9 @@ FROM base AS build
 # Copy source code (respects .dockerignore).
 COPY tsconfig.json ./
 COPY packages/core/src packages/core/src
+COPY packages/core/bin packages/core/bin
 COPY packages/core/migrations packages/core/migrations
+COPY packages/core/tsconfig.build.json packages/core/tsconfig.build.json
 COPY packages/core/tsconfig.json packages/core/tsconfig.json
 COPY packages/web/src packages/web/src
 COPY packages/web/tsconfig.json packages/web/tsconfig.json
@@ -57,7 +64,7 @@ RUN pnpm --filter @norush/core run build && \
     pnpm --filter @norush/web run build
 
 # Prune devDependencies so only production deps remain.
-RUN pnpm prune --prod
+RUN CI=true pnpm prune --prod --config.node-linker=hoisted
 
 # ---------------------------------------------------------------------------
 # Stage 3 — runtime: minimal image with built artefacts
@@ -75,10 +82,9 @@ COPY --from=build /app/package.json /app/pnpm-workspace.yaml ./
 
 # Copy production node_modules (pruned in build stage).
 COPY --from=build /app/node_modules ./node_modules
-COPY --from=build /app/packages/core/node_modules ./packages/core/node_modules
-COPY --from=build /app/packages/web/node_modules ./packages/web/node_modules
 
 # Copy built artefacts.
+COPY --from=build /app/packages/core/bin ./packages/core/bin
 COPY --from=build /app/packages/core/dist ./packages/core/dist
 COPY --from=build /app/packages/core/migrations ./packages/core/migrations
 COPY --from=build /app/packages/core/package.json ./packages/core/package.json

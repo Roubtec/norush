@@ -5,10 +5,10 @@
  * Authentication: Bearer token in Authorization header.
  */
 
-import { json } from "@sveltejs/kit";
-import type { RequestHandler } from "./$types";
-import { getSql } from "$lib/server/norush";
-import { authenticateApiRequest } from "$lib/server/api-auth";
+import { json } from '@sveltejs/kit';
+import type { RequestHandler } from './$types';
+import { getSql } from '$lib/server/norush';
+import { authenticateApiRequest } from '$lib/server/api-auth';
 
 // ---------------------------------------------------------------------------
 // Error helpers
@@ -24,15 +24,15 @@ function apiError(code: string, message: string, status: number) {
 
 export const GET: RequestHandler = async ({ request, url }) => {
   const sql = getSql();
-  const caller = await authenticateApiRequest(sql, request.headers.get("authorization"));
+  const caller = await authenticateApiRequest(sql, request.headers.get('authorization'));
   if (!caller) {
-    return apiError("unauthorized", "Invalid or missing API token", 401);
+    return apiError('unauthorized', 'Invalid or missing API token', 401);
   }
 
   // Parse pagination
-  const cursor = url.searchParams.get("cursor");
-  const limitParam = url.searchParams.get("limit");
-  const parsedLimit = parseInt(limitParam ?? "50", 10);
+  const cursor = url.searchParams.get('cursor');
+  const limitParam = url.searchParams.get('limit');
+  const parsedLimit = parseInt(limitParam ?? '50', 10);
   const limit = Math.min(Math.max(Number.isNaN(parsedLimit) ? 50 : parsedLimit, 1), 100);
 
   // Find batches that contain at least one request from this user.
@@ -67,9 +67,8 @@ export const GET: RequestHandler = async ({ request, url }) => {
     updatedAt: (row.updated_at as Date).toISOString(),
   }));
 
-  const nextCursor = hasMore && pageRows.length > 0
-    ? (pageRows[pageRows.length - 1].id as string)
-    : null;
+  const nextCursor =
+    hasMore && pageRows.length > 0 ? (pageRows[pageRows.length - 1].id as string) : null;
 
   return json({
     batches,

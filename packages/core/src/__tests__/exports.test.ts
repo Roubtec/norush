@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from 'vitest';
 import {
   VERSION,
   resolveConfig,
@@ -39,7 +39,7 @@ import {
   DEFAULT_RETENTION_POLICY,
   DEFAULT_HARD_CAP_DAYS,
   DEFAULT_RETENTION_INTERVAL_MS,
-} from "../index.js";
+} from '../index.js';
 
 // Type-only imports to verify they are exported
 import type {
@@ -101,125 +101,125 @@ import type {
   RetentionPolicyResolver,
   RetentionWorkerOptions,
   RetentionSweepResult,
-} from "../index.js";
+} from '../index.js';
 
-describe("@norush/core exports", () => {
-  it("exports VERSION", () => {
-    expect(VERSION).toBe("0.0.0");
+describe('@norush/core exports', () => {
+  it('exports VERSION', () => {
+    expect(VERSION).toBe('0.0.0');
   });
 
-  it("exports resolveConfig function", () => {
-    expect(typeof resolveConfig).toBe("function");
+  it('exports resolveConfig function', () => {
+    expect(typeof resolveConfig).toBe('function');
   });
 
-  it("exports NoopTelemetry class", () => {
+  it('exports NoopTelemetry class', () => {
     const t = new NoopTelemetry();
     expect(t).toBeInstanceOf(NoopTelemetry);
   });
 
-  it("exports ConsoleTelemetry class", () => {
+  it('exports ConsoleTelemetry class', () => {
     const t = new ConsoleTelemetry();
     expect(t).toBeInstanceOf(ConsoleTelemetry);
   });
 
-  it("exports PrometheusTelemetry via subpath import", async () => {
-    const { PrometheusTelemetry } = await import("../telemetry/prometheus.js");
+  it('exports PrometheusTelemetry via subpath import', async () => {
+    const { PrometheusTelemetry } = await import('../telemetry/prometheus.js');
     const t = new PrometheusTelemetry();
     expect(t).toBeInstanceOf(PrometheusTelemetry);
   });
 
-  it("exports OpenTelemetryTelemetry via subpath import", async () => {
-    const { OpenTelemetryTelemetry } = await import("../telemetry/opentelemetry.js");
+  it('exports OpenTelemetryTelemetry via subpath import', async () => {
+    const { OpenTelemetryTelemetry } = await import('../telemetry/opentelemetry.js');
     const t = new OpenTelemetryTelemetry();
     expect(t).toBeInstanceOf(OpenTelemetryTelemetry);
   });
 
-  it("exports MemoryStore class", () => {
+  it('exports MemoryStore class', () => {
     const s = new MemoryStore();
     expect(s).toBeInstanceOf(MemoryStore);
   });
 
-  it("exports PostgresStore class", () => {
+  it('exports PostgresStore class', () => {
     expect(PostgresStore).toBeDefined();
-    expect(typeof PostgresStore).toBe("function");
+    expect(typeof PostgresStore).toBe('function');
   });
 
-  it("exports migrate function", () => {
-    expect(typeof migrate).toBe("function");
+  it('exports migrate function', () => {
+    expect(typeof migrate).toBe('function');
   });
 
-  it("exports ClaudeAdapter class", () => {
+  it('exports ClaudeAdapter class', () => {
     expect(ClaudeAdapter).toBeDefined();
-    expect(typeof ClaudeAdapter).toBe("function");
+    expect(typeof ClaudeAdapter).toBe('function');
   });
 
-  it("exports OpenAIBatchAdapter class", () => {
+  it('exports OpenAIBatchAdapter class', () => {
     expect(OpenAIBatchAdapter).toBeDefined();
-    expect(typeof OpenAIBatchAdapter).toBe("function");
+    expect(typeof OpenAIBatchAdapter).toBe('function');
   });
 
-  it("exports OpenAIFlexAdapter class", () => {
+  it('exports OpenAIFlexAdapter class', () => {
     expect(OpenAIFlexAdapter).toBeDefined();
-    expect(typeof OpenAIFlexAdapter).toBe("function");
+    expect(typeof OpenAIFlexAdapter).toBe('function');
   });
 
-  it("exports StatusTracker class", () => {
+  it('exports StatusTracker class', () => {
     expect(StatusTracker).toBeDefined();
-    expect(typeof StatusTracker).toBe("function");
+    expect(typeof StatusTracker).toBe('function');
   });
 
-  it("exports OrphanRecovery class", () => {
+  it('exports OrphanRecovery class', () => {
     expect(OrphanRecovery).toBeDefined();
-    expect(typeof OrphanRecovery).toBe("function");
+    expect(typeof OrphanRecovery).toBe('function');
   });
 
-  it("exports CircuitBreaker class", () => {
+  it('exports CircuitBreaker class', () => {
     const cb = new CircuitBreaker();
     expect(cb).toBeInstanceOf(CircuitBreaker);
-    expect(cb.state).toBe("closed");
+    expect(cb.state).toBe('closed');
   });
 
-  it("exports createNorush factory function", () => {
-    expect(typeof createNorush).toBe("function");
+  it('exports createNorush factory function', () => {
+    expect(typeof createNorush).toBe('function');
   });
 
-  it("exports crypto vault functions", () => {
-    expect(typeof deriveKey).toBe("function");
-    expect(typeof encrypt).toBe("function");
-    expect(typeof decrypt).toBe("function");
-    expect(typeof maskApiKey).toBe("function");
+  it('exports crypto vault functions', () => {
+    expect(typeof deriveKey).toBe('function');
+    expect(typeof encrypt).toBe('function');
+    expect(typeof decrypt).toBe('function');
+    expect(typeof maskApiKey).toBe('function');
   });
 
-  it("exports key selector functions", () => {
-    expect(typeof selectKeys).toBe("function");
-    expect(typeof isFailoverEligibleError).toBe("function");
+  it('exports key selector functions', () => {
+    expect(typeof selectKeys).toBe('function');
+    expect(typeof isFailoverEligibleError).toBe('function');
   });
 
-  it("exports rate limiting functions and constants", () => {
-    expect(typeof computeHealth).toBe("function");
-    expect(typeof computeEffectiveLimit).toBe("function");
-    expect(typeof checkRateLimit).toBe("function");
-    expect(typeof buildRateLimitHeaders).toBe("function");
-    expect(typeof nextPeriodReset).toBe("function");
+  it('exports rate limiting functions and constants', () => {
+    expect(typeof computeHealth).toBe('function');
+    expect(typeof computeEffectiveLimit).toBe('function');
+    expect(typeof checkRateLimit).toBe('function');
+    expect(typeof buildRateLimitHeaders).toBe('function');
+    expect(typeof nextPeriodReset).toBe('function');
     expect(DEFAULT_WINDOW_MS).toBe(3_600_000);
     expect(DEFAULT_PERIOD_MS).toBe(3_600_000);
   });
 
-  it("exports pricing functions and constants", () => {
-    expect(typeof getRates).toBe("function");
-    expect(typeof standardCost).toBe("function");
-    expect(typeof batchCost).toBe("function");
-    expect(typeof pricingSavings).toBe("function");
+  it('exports pricing functions and constants', () => {
+    expect(typeof getRates).toBe('function');
+    expect(typeof standardCost).toBe('function');
+    expect(typeof batchCost).toBe('function');
+    expect(typeof pricingSavings).toBe('function');
     expect(STANDARD_RATES).toBeDefined();
     expect(BATCH_DISCOUNT).toBe(0.5);
   });
 
-  it("exports RetentionWorker class and helpers", () => {
+  it('exports RetentionWorker class and helpers', () => {
     expect(RetentionWorker).toBeDefined();
-    expect(typeof RetentionWorker).toBe("function");
-    expect(typeof parseRetentionPolicy).toBe("function");
-    expect(typeof computeCutoffDate).toBe("function");
-    expect(DEFAULT_RETENTION_POLICY).toBe("7d");
+    expect(typeof RetentionWorker).toBe('function');
+    expect(typeof parseRetentionPolicy).toBe('function');
+    expect(typeof computeCutoffDate).toBe('function');
+    expect(DEFAULT_RETENTION_POLICY).toBe('7d');
     expect(DEFAULT_HARD_CAP_DAYS).toBe(90);
     expect(DEFAULT_RETENTION_INTERVAL_MS).toBe(3_600_000);
   });
@@ -227,31 +227,31 @@ describe("@norush/core exports", () => {
   // Type-level assertions — these verify that all type exports compile.
   // They don't execute meaningful runtime checks; the test passing means
   // the types resolved correctly during compilation.
-  it("type exports compile correctly", () => {
+  it('type exports compile correctly', () => {
     // Verify type aliases are usable
-    const _id: NorushId = "01ABC";
-    const _batchId: BatchId = "01DEF";
-    const _resultId: ResultId = "01GHI";
-    const _provider: ProviderName = "claude";
-    const _reqStatus: RequestStatus = "queued";
-    const _batchStatus: BatchStatus = "pending";
-    const _deliveryStatus: DeliveryStatus = "delivered";
+    const _id: NorushId = '01ABC';
+    const _batchId: BatchId = '01DEF';
+    const _resultId: ResultId = '01GHI';
+    const _provider: ProviderName = 'claude';
+    const _reqStatus: RequestStatus = 'queued';
+    const _batchStatus: BatchStatus = 'pending';
+    const _deliveryStatus: DeliveryStatus = 'delivered';
 
     // Verify interface types are usable
     const _ref: ProviderBatchRef = {
-      providerBatchId: "x",
-      provider: "openai",
+      providerBatchId: 'x',
+      provider: 'openai',
     };
     const _pollCtx: PollContext = {
-      batchId: "b",
-      provider: "claude",
+      batchId: 'b',
+      provider: 'claude',
       submittedAt: new Date(),
       lastPolledAt: null,
       pollCount: 0,
       expiresAt: new Date(),
     };
     const _dateRange: DateRange = { from: new Date(), to: new Date() };
-    const _health: HealthScore = { factor: 1.0, reason: "healthy" };
+    const _health: HealthScore = { factor: 1.0, reason: 'healthy' };
     const _stats: UsageStats = {
       totalRequests: 0,
       succeededRequests: 0,
@@ -261,8 +261,8 @@ describe("@norush/core exports", () => {
       totalBatches: 0,
     };
     const _costEntry: CostBreakdownEntry = {
-      provider: "claude",
-      model: "claude-sonnet-4-6",
+      provider: 'claude',
+      model: 'claude-sonnet-4-6',
       inputTokens: 0,
       outputTokens: 0,
       batchCostUsd: 0,
@@ -289,26 +289,26 @@ describe("@norush/core exports", () => {
       flushIntervalMs: 60_000,
     };
     const _pollCfg: PollingConfig = { intervalMs: 30_000, maxRetries: 3 };
-    const _keyCfg: ProviderKeyConfig = { apiKey: "sk-test" };
+    const _keyCfg: ProviderKeyConfig = { apiKey: 'sk-test' };
     const _envCfg: EnvConfig = {};
     const _opCfg: OperatorConfig = {};
     const _userCfg: UserConfig = {};
     const _resolved: ResolvedConfig = resolveConfig();
 
-    const _claudeOpts: ClaudeAdapterOptions = { apiKey: "sk-test" };
-    const _openaiOpts: OpenAIBatchAdapterOptions = { apiKey: "sk-test" };
-    const _flexOpts: OpenAIFlexAdapterOptions = { apiKey: "sk-test" };
-    const _cbState: CircuitBreakerState = "closed";
+    const _claudeOpts: ClaudeAdapterOptions = { apiKey: 'sk-test' };
+    const _openaiOpts: OpenAIBatchAdapterOptions = { apiKey: 'sk-test' };
+    const _flexOpts: OpenAIFlexAdapterOptions = { apiKey: 'sk-test' };
+    const _cbState: CircuitBreakerState = 'closed';
     const _cbSnapshot: CircuitBreakerSnapshot = {
-      state: "closed",
+      state: 'closed',
       consecutiveFailures: 0,
       lastFailureAt: null,
       lastTrippedAt: null,
     };
-    const _eventName: StatusTrackerEventName = "batch:completed";
+    const _eventName: StatusTrackerEventName = 'batch:completed';
     const _eventHandler: StatusTrackerEventHandler = () => {};
     const _orphanResult: OrphanRecoveryResult = { recovered: 0, failed: 0 };
-    const _norushEventName: NorushEventName = "batch:completed";
+    const _norushEventName: NorushEventName = 'batch:completed';
     const _norushEventHandler: NorushEventHandler = () => {};
     const _norushConfig: NorushConfig = {
       store: new MemoryStore(),
@@ -332,20 +332,22 @@ describe("@norush/core exports", () => {
 
     // Key selector types
     const _keyInfo: ApiKeyInfo = {
-      id: "key1",
-      provider: "claude",
-      label: "primary",
+      id: 'key1',
+      provider: 'claude',
+      label: 'primary',
       priority: 0,
       failoverEnabled: true,
       revokedAt: null,
     };
-    const _keyCandidate: KeyCandidate = { id: "key1", label: "primary", priority: 0 };
+    const _keyCandidate: KeyCandidate = { id: 'key1', label: 'primary', priority: 0 };
     const _keyResolver: KeyResolver = {
       getKeysForUser: async () => [],
       buildProvider: async () => ({
-        submitBatch: async () => ({ providerBatchId: "x", provider: "claude" }),
-        checkStatus: async () => "processing",
-        fetchResults: async function* () { /* empty */ },
+        submitBatch: async () => ({ providerBatchId: 'x', provider: 'claude' }),
+        checkStatus: async () => 'processing',
+        fetchResults: async function* () {
+          /* empty */
+        },
         cancelBatch: async () => {},
       }),
     };
@@ -355,7 +357,7 @@ describe("@norush/core exports", () => {
 
     // Rate limiting types
     const _userLimits: UserLimits = {
-      userId: "u1",
+      userId: 'u1',
       maxRequestsPerHour: 100,
       maxTokensPerPeriod: null,
       hardSpendLimitUsd: null,
@@ -369,7 +371,7 @@ describe("@norush/core exports", () => {
     const _userLimitsInput: UserLimitsInput = { maxRequestsPerHour: 50 };
     const _slidingWindow: SlidingWindow = { total: 10, succeeded: 9, failed: 1 };
     const _rateLimitResult: RateLimitResult = { allowed: true };
-    const _retentionPolicy: RetentionPolicy = "7d";
+    const _retentionPolicy: RetentionPolicy = '7d';
     const _retentionSweep: RetentionSweepResult = {
       totalScrubbed: 0,
       hardCapScrubbed: 0,
@@ -377,7 +379,7 @@ describe("@norush/core exports", () => {
       eventLogScrubbed: 0,
       errors: 0,
     };
-    const _retentionResolver: RetentionPolicyResolver = () => "7d";
+    const _retentionResolver: RetentionPolicyResolver = () => '7d';
     const _retentionOpts: RetentionWorkerOptions = {
       store: new MemoryStore(),
     };
@@ -413,41 +415,41 @@ describe("@norush/core exports", () => {
 
   // These types are interfaces — we verify they exist as types by
   // creating compatible objects. This is a compile-time check.
-  it("interface types are assignable", () => {
+  it('interface types are assignable', () => {
     // NewRequest
     const _newReq: NewRequest = {
-      provider: "claude",
-      model: "claude-sonnet-4-6",
+      provider: 'claude',
+      model: 'claude-sonnet-4-6',
       params: { messages: [] },
-      userId: "user1",
+      userId: 'user1',
     };
 
     // NewBatch
     const _newBatch: NewBatch = {
-      provider: "openai",
-      apiKeyId: "key1",
+      provider: 'openai',
+      apiKeyId: 'key1',
       requestCount: 10,
     };
 
     // NewResult
     const _newResult: NewResult = {
-      requestId: "req1",
-      batchId: "batch1",
-      response: { content: "hello" },
+      requestId: 'req1',
+      batchId: 'batch1',
+      response: { content: 'hello' },
     };
 
     // NorushRequest
     const _norushReq: NorushRequest = {
-      id: "req1",
-      externalId: "ext1",
-      provider: "claude",
-      model: "claude-sonnet-4-6",
+      id: 'req1',
+      externalId: 'ext1',
+      provider: 'claude',
+      model: 'claude-sonnet-4-6',
       params: {},
     };
 
     // NorushResult
     const _norushResult: NorushResult = {
-      requestId: "req1",
+      requestId: 'req1',
       response: {},
       success: true,
     };
@@ -471,8 +473,8 @@ describe("@norush/core exports", () => {
 
     // Provider type check (minimal mock)
     const _prov: Provider = {
-      submitBatch: async () => ({ providerBatchId: "x", provider: "claude" }),
-      checkStatus: async () => "processing",
+      submitBatch: async () => ({ providerBatchId: 'x', provider: 'claude' }),
+      checkStatus: async () => 'processing',
       fetchResults: async function* () {
         /* empty */
       },

@@ -1,0 +1,8 @@
+{
+  // Run markdownlint auto-fix on explicit save (Ctrl+S) for markdown files.
+  "[markdown]": {
+    "editor.codeActionsOnSave": {
+      "source.fixAll.markdownlint": "explicit"
+    }
+  }
+}

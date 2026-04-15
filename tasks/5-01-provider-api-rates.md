@@ -10,6 +10,7 @@ local fallback so the UI still functions when the fetch fails.
 ## Scope
 
 **Included:**
+
 - Fetch current model pricing from provider APIs/pages on a scheduled basis (e.g. hourly or daily)
 - Store fetched rates in the database (`provider_rates` table) so they survive restarts and are shared across workers
 - Expose a server helper that returns the freshest available rates for a given provider + model
@@ -18,6 +19,7 @@ local fallback so the UI still functions when the fetch fails.
 - CLI or admin endpoint to manually trigger a rate refresh
 
 **Out of scope:**
+
 - Per-model granularity if a provider doesn't publish per-model rates via a machine-readable API
 - Historical rate tracking (store only the latest rate per provider+model)
 - Billing reconciliation against actual invoices
@@ -30,10 +32,10 @@ local fallback so the UI still functions when the fetch fails.
 
 ## Provider rate sources
 
-| Provider | Source |
-|----------|--------|
+| Provider           | Source                                                                                                                                      |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
 | Anthropic (Claude) | `https://www.anthropic.com/api` pricing page; no public machine-readable API yet — scrape or use the pricing JSON embedded in the docs site |
-| OpenAI | `https://platform.openai.com/docs/models` pricing page; consider the unofficial `https://openai.com/api/pricing` JSON if stable |
+| OpenAI             | `https://platform.openai.com/docs/models` pricing page; consider the unofficial `https://openai.com/api/pricing` JSON if stable             |
 
 ## Target files or areas
 

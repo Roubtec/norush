@@ -7,8 +7,8 @@
  * Idempotent: calling provisionUser for an existing user is a no-op.
  */
 
-import type postgres from "postgres";
-import type { SessionUser } from "./auth.js";
+import type postgres from 'postgres';
+import type { SessionUser } from './auth.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -24,10 +24,7 @@ export interface DbUser {
 // Lookup
 // ---------------------------------------------------------------------------
 
-export async function findUser(
-  sql: postgres.Sql,
-  workosId: string,
-): Promise<DbUser | null> {
+export async function findUser(sql: postgres.Sql, workosId: string): Promise<DbUser | null> {
   const rows = await sql`
     SELECT id, created_at, updated_at FROM users WHERE id = ${workosId}
   `;
@@ -51,10 +48,7 @@ export async function findUser(
  * Uses INSERT ... ON CONFLICT DO NOTHING for idempotency — safe to call
  * on every login without race conditions.
  */
-export async function provisionUser(
-  sql: postgres.Sql,
-  sessionUser: SessionUser,
-): Promise<DbUser> {
+export async function provisionUser(sql: postgres.Sql, sessionUser: SessionUser): Promise<DbUser> {
   const id = sessionUser.workosId;
 
   // Single transaction: insert user + settings atomically.

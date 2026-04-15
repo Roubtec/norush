@@ -12,15 +12,15 @@
  * same logic and are exercised by the store-contract tests.
  */
 
-import { redirect } from "@sveltejs/kit";
-import type { PageServerLoad } from "./$types";
-import { getSql } from "$lib/server/norush";
-import type { UserLimits } from "@norush/core";
-import { getDetailedStatsFromDb, type DashboardStats } from "$lib/server/dashboard";
+import { redirect } from '@sveltejs/kit';
+import type { PageServerLoad } from './$types';
+import { getSql } from '$lib/server/norush';
+import type { UserLimits } from '@norush/core';
+import { getDetailedStatsFromDb, type DashboardStats } from '$lib/server/dashboard';
 
 /** Extract authenticated user ID, redirecting to login if absent. */
 function requireUser(locals: App.Locals): string {
-  if (!locals.user) redirect(302, "/login");
+  if (!locals.user) redirect(302, '/login');
   return locals.user.id;
 }
 
@@ -30,13 +30,13 @@ function periodToRange(period: string): { from: Date; to: Date } {
   const from = new Date();
 
   switch (period) {
-    case "24h":
+    case '24h':
       from.setTime(to.getTime() - 24 * 60 * 60 * 1000);
       break;
-    case "30d":
+    case '30d':
       from.setDate(to.getDate() - 30);
       break;
-    case "7d":
+    case '7d':
     default:
       from.setDate(to.getDate() - 7);
       break;
@@ -61,33 +61,25 @@ async function getUserLimitsFromDb(
     userId: row.user_id as string,
     maxRequestsPerHour: (row.max_requests_per_hour as number) ?? null,
     maxTokensPerPeriod: (row.max_tokens_per_period as number) ?? null,
-    hardSpendLimitUsd:
-      row.hard_spend_limit_usd != null
-        ? Number(row.hard_spend_limit_usd)
-        : null,
+    hardSpendLimitUsd: row.hard_spend_limit_usd != null ? Number(row.hard_spend_limit_usd) : null,
     currentPeriodRequests: (row.current_period_requests as number) ?? 0,
     currentPeriodTokens: (row.current_period_tokens as number) ?? 0,
-    currentSpendUsd:
-      row.current_spend_usd != null ? Number(row.current_spend_usd) : 0,
+    currentSpendUsd: row.current_spend_usd != null ? Number(row.current_spend_usd) : 0,
     periodResetAt: new Date(row.period_reset_at as string),
-    createdAt: new Date(
-      (row.created_at as string) ?? (row.updated_at as string),
-    ),
+    createdAt: new Date((row.created_at as string) ?? (row.updated_at as string)),
     updatedAt: new Date(row.updated_at as string),
   };
 }
 
-const VALID_PERIODS = ["24h", "7d", "30d"] as const;
+const VALID_PERIODS = ['24h', '7d', '30d'] as const;
 type Period = (typeof VALID_PERIODS)[number];
 
 export const load: PageServerLoad = async ({ locals, url }) => {
   const userId = requireUser(locals);
   const sql = getSql();
 
-  const rawPeriod = url.searchParams.get("period") ?? "7d";
-  const period: Period = VALID_PERIODS.includes(rawPeriod as Period)
-    ? (rawPeriod as Period)
-    : "7d";
+  const rawPeriod = url.searchParams.get('period') ?? '7d';
+  const period: Period = VALID_PERIODS.includes(rawPeriod as Period) ? (rawPeriod as Period) : '7d';
 
   const range = periodToRange(period);
 
@@ -105,8 +97,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
   } catch (err) {
     const errorId = new Date().toISOString();
     console.error(`[dashboard] Failed to load stats (${errorId}):`, err);
-    loadError =
-      `Failed to load usage statistics. Please try again later. Reference: ${errorId}`;
+    loadError = `Failed to load usage statistics. Please try again later. Reference: ${errorId}`;
   }
 
   return {

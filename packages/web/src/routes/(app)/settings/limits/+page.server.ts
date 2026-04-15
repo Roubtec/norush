@@ -5,14 +5,14 @@
  * - update: Validates and updates the user's spend limits.
  */
 
-import { fail, redirect } from "@sveltejs/kit";
-import type { Actions, PageServerLoad } from "./$types";
-import { getEngine, getStore } from "$lib/server/norush";
-import type { UserLimits } from "@norush/core";
+import { fail, redirect } from '@sveltejs/kit';
+import type { Actions, PageServerLoad } from './$types';
+import { getEngine, getStore } from '$lib/server/norush';
+import type { UserLimits } from '@norush/core';
 
 /** Extract authenticated user ID, redirecting to login if absent. */
 function requireUser(locals: App.Locals): string {
-  if (!locals.user) redirect(302, "/login");
+  if (!locals.user) redirect(302, '/login');
   return locals.user.id;
 }
 
@@ -26,9 +26,8 @@ export const load: PageServerLoad = async ({ locals }) => {
     await getEngine();
     limits = await getStore().getUserLimits(userId);
   } catch (err) {
-    console.error("[settings/limits] Failed to load user limits:", err);
-    loadError =
-      "Failed to load spend limits. The database table may not exist yet.";
+    console.error('[settings/limits] Failed to load user limits:', err);
+    loadError = 'Failed to load spend limits. The database table may not exist yet.';
   }
 
   return {
@@ -56,19 +55,15 @@ interface ValidationError {
   message: string;
 }
 
-function parseOptionalInt(
-  value: string | null,
-): number | null | undefined {
-  if (value === null || value === "") return null;
+function parseOptionalInt(value: string | null): number | null | undefined {
+  if (value === null || value === '') return null;
   const n = Number(value);
   if (!Number.isInteger(n) || n !== n) return undefined; // signals invalid; rejects "1.5", "abc"
   return n;
 }
 
-function parseOptionalFloat(
-  value: string | null,
-): number | null | undefined {
-  if (value === null || value === "") return null;
+function parseOptionalFloat(value: string | null): number | null | undefined {
+  if (value === null || value === '') return null;
   const n = parseFloat(value);
   if (isNaN(n)) return undefined;
   return n;
@@ -81,13 +76,9 @@ export const actions = {
 
     const errors: ValidationError[] = [];
 
-    const maxRequestsPerHourRaw = data.get(
-      "maxRequestsPerHour",
-    ) as string | null;
-    const maxTokensPerPeriodRaw = data.get("maxTokensPerPeriod") as string | null;
-    const hardSpendLimitUsdRaw = data.get(
-      "hardSpendLimitUsd",
-    ) as string | null;
+    const maxRequestsPerHourRaw = data.get('maxRequestsPerHour') as string | null;
+    const maxTokensPerPeriodRaw = data.get('maxTokensPerPeriod') as string | null;
+    const hardSpendLimitUsdRaw = data.get('hardSpendLimitUsd') as string | null;
 
     const maxRequestsPerHour = parseOptionalInt(maxRequestsPerHourRaw);
     const maxTokensPerPeriod = parseOptionalInt(maxTokensPerPeriodRaw);
@@ -95,37 +86,37 @@ export const actions = {
 
     if (maxRequestsPerHour === undefined) {
       errors.push({
-        field: "maxRequestsPerHour",
-        message: "Must be a valid number or empty for unlimited",
+        field: 'maxRequestsPerHour',
+        message: 'Must be a valid number or empty for unlimited',
       });
     } else if (maxRequestsPerHour !== null && maxRequestsPerHour < 1) {
       errors.push({
-        field: "maxRequestsPerHour",
-        message: "Must be at least 1",
+        field: 'maxRequestsPerHour',
+        message: 'Must be at least 1',
       });
     }
 
     if (maxTokensPerPeriod === undefined) {
       errors.push({
-        field: "maxTokensPerPeriod",
-        message: "Must be a valid number or empty for unlimited",
+        field: 'maxTokensPerPeriod',
+        message: 'Must be a valid number or empty for unlimited',
       });
     } else if (maxTokensPerPeriod !== null && maxTokensPerPeriod < 1) {
       errors.push({
-        field: "maxTokensPerPeriod",
-        message: "Must be at least 1",
+        field: 'maxTokensPerPeriod',
+        message: 'Must be at least 1',
       });
     }
 
     if (hardSpendLimitUsd === undefined) {
       errors.push({
-        field: "hardSpendLimitUsd",
-        message: "Must be a valid number or empty for unlimited",
+        field: 'hardSpendLimitUsd',
+        message: 'Must be a valid number or empty for unlimited',
       });
     } else if (hardSpendLimitUsd !== null && hardSpendLimitUsd < 0) {
       errors.push({
-        field: "hardSpendLimitUsd",
-        message: "Must be zero or positive",
+        field: 'hardSpendLimitUsd',
+        message: 'Must be zero or positive',
       });
     }
 
@@ -148,12 +139,12 @@ export const actions = {
         hardSpendLimitUsd: hardSpendLimitUsd ?? null,
       });
     } catch (err) {
-      console.error("[settings/limits] Failed to update limits:", err);
+      console.error('[settings/limits] Failed to update limits:', err);
       return fail(500, {
         errors: [
           {
-            field: "general",
-            message: "Failed to save limits. Please try again.",
+            field: 'general',
+            message: 'Failed to save limits. Please try again.',
           },
         ],
         values: {

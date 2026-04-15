@@ -1,12 +1,12 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { MemoryStore } from "../../store/memory.js";
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MemoryStore } from '../../store/memory.js';
 import {
   DeliveryWorker,
   BASE_DELAY_MS,
   MAX_DELAY_MS,
   DEFAULT_MAX_DELIVERY_ATTEMPTS,
-} from "../../engine/delivery-worker.js";
-import type { NewRequest, Request, Result } from "../../types.js";
+} from '../../engine/delivery-worker.js';
+import type { NewRequest, Request, Result } from '../../types.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -14,23 +14,21 @@ import type { NewRequest, Request, Result } from "../../types.js";
 
 function makeNewRequest(overrides: Partial<NewRequest> = {}): NewRequest {
   return {
-    provider: "claude",
-    model: "claude-sonnet-4-5-20250929",
+    provider: 'claude',
+    model: 'claude-sonnet-4-5-20250929',
     params: {
       max_tokens: 1024,
-      messages: [{ role: "user", content: "Hello" }],
+      messages: [{ role: 'user', content: 'Hello' }],
     },
-    userId: "user_01",
-    callbackUrl: "https://example.com/callback",
+    userId: 'user_01',
+    callbackUrl: 'https://example.com/callback',
     ...overrides,
   };
 }
 
 /** A no-op fetch mock that always returns 200 OK. */
 function mockFetchOk(): typeof globalThis.fetch {
-  return vi.fn().mockResolvedValue(
-    new Response("OK", { status: 200, statusText: "OK" }),
-  );
+  return vi.fn().mockResolvedValue(new Response('OK', { status: 200, statusText: 'OK' }));
 }
 
 /**
@@ -40,22 +38,18 @@ async function createPendingResult(
   store: MemoryStore,
   overrides: { callbackUrl?: string | null; maxDeliveryAttempts?: number } = {},
 ): Promise<{ request: Request; result: Result }> {
-  const callbackUrl = "callbackUrl" in overrides
-    ? overrides.callbackUrl
-    : "https://example.com/cb";
-  const request = await store.createRequest(
-    makeNewRequest({ callbackUrl }),
-  );
+  const callbackUrl = 'callbackUrl' in overrides ? overrides.callbackUrl : 'https://example.com/cb';
+  const request = await store.createRequest(makeNewRequest({ callbackUrl }));
   const batch = await store.createBatch({
-    provider: "claude",
-    apiKeyId: "user_01",
+    provider: 'claude',
+    apiKeyId: 'user_01',
     requestCount: 1,
   });
   let result = await store.createResult({
     requestId: request.id,
     batchId: batch.id,
-    response: { content: "Hello response" },
-    stopReason: "end_turn",
+    response: { content: 'Hello response' },
+    stopReason: 'end_turn',
     inputTokens: 10,
     outputTokens: 20,
   });
@@ -77,7 +71,7 @@ async function createPendingResult(
 // Tests
 // ---------------------------------------------------------------------------
 
-describe("DeliveryWorker", () => {
+describe('DeliveryWorker', () => {
   let store: MemoryStore;
   let currentTime: number;
 
@@ -94,8 +88,8 @@ describe("DeliveryWorker", () => {
   // Successful delivery
   // -----------------------------------------------------------------------
 
-  describe("successful delivery", () => {
-    it("delivers results to registered callbacks", async () => {
+  describe('successful delivery', () => {
+    it('delivers results to registered callbacks', async () => {
       const { result } = await createPendingResult(store);
 
       const callback = vi.fn().mockResolvedValue(undefined);
@@ -112,11 +106,11 @@ describe("DeliveryWorker", () => {
       expect(callback).toHaveBeenCalledOnce();
       expect(callback).toHaveBeenCalledWith(
         expect.objectContaining({ id: result.id }),
-        expect.objectContaining({ userId: "user_01" }),
+        expect.objectContaining({ userId: 'user_01' }),
       );
     });
 
-    it("marks result as delivered on success", async () => {
+    it('marks result as delivered on success', async () => {
       const { result } = await createPendingResult(store);
 
       const callback = vi.fn().mockResolvedValue(undefined);
@@ -136,7 +130,7 @@ describe("DeliveryWorker", () => {
       expect(found).toBeUndefined();
     });
 
-    it("delivers multiple results in one tick", async () => {
+    it('delivers multiple results in one tick', async () => {
       await createPendingResult(store);
       await createPendingResult(store);
       await createPendingResult(store);
@@ -156,7 +150,7 @@ describe("DeliveryWorker", () => {
       expect(callback).toHaveBeenCalledTimes(3);
     });
 
-    it("invokes all registered callbacks for each result", async () => {
+    it('invokes all registered callbacks for each result', async () => {
       await createPendingResult(store);
 
       const cb1 = vi.fn().mockResolvedValue(undefined);
@@ -176,7 +170,7 @@ describe("DeliveryWorker", () => {
       expect(cb2).toHaveBeenCalledOnce();
     });
 
-    it("emits delivery:success event on successful delivery", async () => {
+    it('emits delivery:success event on successful delivery', async () => {
       const { result } = await createPendingResult(store);
 
       const callback = vi.fn().mockResolvedValue(undefined);
@@ -188,14 +182,12 @@ describe("DeliveryWorker", () => {
         fetchFn: mockFetchOk(),
       });
       worker.addCallback(callback);
-      worker.on("delivery:success", handler);
+      worker.on('delivery:success', handler);
 
       await worker.tick();
 
       expect(handler).toHaveBeenCalledOnce();
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ resultId: result.id }),
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ resultId: result.id }));
     });
   });
 
@@ -203,13 +195,13 @@ describe("DeliveryWorker", () => {
   // Delivery failure and retry
   // -----------------------------------------------------------------------
 
-  describe("delivery failure and retry", () => {
-    it("retries delivery on callback failure", async () => {
+  describe('delivery failure and retry', () => {
+    it('retries delivery on callback failure', async () => {
       const { result } = await createPendingResult(store);
 
       const callback = vi
         .fn()
-        .mockRejectedValueOnce(new Error("Network error"))
+        .mockRejectedValueOnce(new Error('Network error'))
         .mockResolvedValue(undefined);
 
       const worker = new DeliveryWorker({
@@ -227,16 +219,16 @@ describe("DeliveryWorker", () => {
       const found = undelivered.find((r) => r.id === result.id);
       expect(found).toBeDefined();
       expect(found?.deliveryAttempts).toBe(1);
-      expect(found?.lastDeliveryError).toBe("Network error");
+      expect(found?.lastDeliveryError).toBe('Network error');
       expect(found?.nextDeliveryAt).toBeInstanceOf(Date);
     });
 
-    it("uses exponential backoff for retry scheduling", async () => {
+    it('uses exponential backoff for retry scheduling', async () => {
       const { result } = await createPendingResult(store, {
         maxDeliveryAttempts: 5,
       });
 
-      const callback = vi.fn().mockRejectedValue(new Error("Fail"));
+      const callback = vi.fn().mockRejectedValue(new Error('Fail'));
 
       const worker = new DeliveryWorker({
         store,
@@ -261,9 +253,7 @@ describe("DeliveryWorker", () => {
       res = found.find((r) => r.id === result.id);
       expect(res?.deliveryAttempts).toBe(2);
       // After 2nd attempt: delay = 10s * 2^1 = 20s
-      expect(res?.nextDeliveryAt?.getTime()).toBe(
-        currentTime + BASE_DELAY_MS * 2,
-      );
+      expect(res?.nextDeliveryAt?.getTime()).toBe(currentTime + BASE_DELAY_MS * 2);
 
       // Advance past the second backoff.
       currentTime += BASE_DELAY_MS * 2 + 1;
@@ -273,17 +263,15 @@ describe("DeliveryWorker", () => {
       res = found.find((r) => r.id === result.id);
       expect(res?.deliveryAttempts).toBe(3);
       // After 3rd attempt: delay = 10s * 2^2 = 40s
-      expect(res?.nextDeliveryAt?.getTime()).toBe(
-        currentTime + BASE_DELAY_MS * 4,
-      );
+      expect(res?.nextDeliveryAt?.getTime()).toBe(currentTime + BASE_DELAY_MS * 4);
     });
 
-    it("caps backoff at MAX_DELAY_MS (10 minutes)", async () => {
+    it('caps backoff at MAX_DELAY_MS (10 minutes)', async () => {
       const { result } = await createPendingResult(store, {
         maxDeliveryAttempts: 20, // High limit so we can test backoff cap
       });
 
-      const callback = vi.fn().mockRejectedValue(new Error("Fail"));
+      const callback = vi.fn().mockRejectedValue(new Error('Fail'));
 
       const worker = new DeliveryWorker({
         store,
@@ -307,7 +295,7 @@ describe("DeliveryWorker", () => {
       }
     });
 
-    it("skips results whose nextDeliveryAt is in the future", async () => {
+    it('skips results whose nextDeliveryAt is in the future', async () => {
       const { result } = await createPendingResult(store);
 
       // Set nextDeliveryAt far in the future.
@@ -331,7 +319,7 @@ describe("DeliveryWorker", () => {
       expect(callback).not.toHaveBeenCalled();
     });
 
-    it("processes results whose nextDeliveryAt is in the past", async () => {
+    it('processes results whose nextDeliveryAt is in the past', async () => {
       const { result } = await createPendingResult(store);
 
       // Set nextDeliveryAt in the past.
@@ -355,10 +343,10 @@ describe("DeliveryWorker", () => {
       expect(callback).toHaveBeenCalledOnce();
     });
 
-    it("emits delivery:failure event on failed delivery", async () => {
+    it('emits delivery:failure event on failed delivery', async () => {
       await createPendingResult(store);
 
-      const callback = vi.fn().mockRejectedValue(new Error("Fail"));
+      const callback = vi.fn().mockRejectedValue(new Error('Fail'));
       const handler = vi.fn();
 
       const worker = new DeliveryWorker({
@@ -367,7 +355,7 @@ describe("DeliveryWorker", () => {
         fetchFn: mockFetchOk(),
       });
       worker.addCallback(callback);
-      worker.on("delivery:failure", handler);
+      worker.on('delivery:failure', handler);
 
       await worker.tick();
 
@@ -375,7 +363,7 @@ describe("DeliveryWorker", () => {
       expect(handler).toHaveBeenCalledWith(
         expect.objectContaining({
           attempt: 1,
-          error: "Fail",
+          error: 'Fail',
         }),
       );
     });
@@ -385,13 +373,13 @@ describe("DeliveryWorker", () => {
   // Exhausted delivery attempts
   // -----------------------------------------------------------------------
 
-  describe("exhausted delivery attempts", () => {
-    it("marks result as failed after maxDeliveryAttempts", async () => {
+  describe('exhausted delivery attempts', () => {
+    it('marks result as failed after maxDeliveryAttempts', async () => {
       const { result } = await createPendingResult(store, {
         maxDeliveryAttempts: 3,
       });
 
-      const callback = vi.fn().mockRejectedValue(new Error("Always fails"));
+      const callback = vi.fn().mockRejectedValue(new Error('Always fails'));
 
       const worker = new DeliveryWorker({
         store,
@@ -414,15 +402,15 @@ describe("DeliveryWorker", () => {
 
       // The result should still show up in undelivered because MemoryStore
       // returns 'failed' status too, but with status 'failed'.
-      expect(res?.deliveryStatus).toBe("failed");
+      expect(res?.deliveryStatus).toBe('failed');
       expect(res?.deliveryAttempts).toBe(3);
-      expect(res?.lastDeliveryError).toBe("Always fails");
+      expect(res?.lastDeliveryError).toBe('Always fails');
     });
 
-    it("emits delivery:exhausted event when max attempts reached", async () => {
+    it('emits delivery:exhausted event when max attempts reached', async () => {
       await createPendingResult(store, { maxDeliveryAttempts: 1 });
 
-      const callback = vi.fn().mockRejectedValue(new Error("Always fails"));
+      const callback = vi.fn().mockRejectedValue(new Error('Always fails'));
       const handler = vi.fn();
 
       const worker = new DeliveryWorker({
@@ -430,7 +418,7 @@ describe("DeliveryWorker", () => {
         now: () => new Date(currentTime),
       });
       worker.addCallback(callback);
-      worker.on("delivery:exhausted", handler);
+      worker.on('delivery:exhausted', handler);
 
       await worker.tick();
 
@@ -438,15 +426,15 @@ describe("DeliveryWorker", () => {
       expect(handler).toHaveBeenCalledWith(
         expect.objectContaining({
           attempts: 1,
-          error: "Always fails",
+          error: 'Always fails',
         }),
       );
     });
 
-    it("emits delivery_failures telemetry counter", async () => {
+    it('emits delivery_failures telemetry counter', async () => {
       await createPendingResult(store, { maxDeliveryAttempts: 1 });
 
-      const callback = vi.fn().mockRejectedValue(new Error("Fail"));
+      const callback = vi.fn().mockRejectedValue(new Error('Fail'));
       const telemetry = { counter: vi.fn(), histogram: vi.fn(), event: vi.fn() };
 
       const worker = new DeliveryWorker({
@@ -459,7 +447,7 @@ describe("DeliveryWorker", () => {
 
       await worker.tick();
 
-      expect(telemetry.counter).toHaveBeenCalledWith("delivery_failures", 1);
+      expect(telemetry.counter).toHaveBeenCalledWith('delivery_failures', 1);
     });
   });
 
@@ -467,8 +455,8 @@ describe("DeliveryWorker", () => {
   // No-target handling
   // -----------------------------------------------------------------------
 
-  describe("no-target handling", () => {
-    it("marks result as no_target when no callbacks and no callbackUrl", async () => {
+  describe('no-target handling', () => {
+    it('marks result as no_target when no callbacks and no callbackUrl', async () => {
       const { result } = await createPendingResult(store, {
         callbackUrl: null,
       });
@@ -487,10 +475,10 @@ describe("DeliveryWorker", () => {
       expect(res).toBeUndefined();
     });
 
-    it("delivers via webhook when callbackUrl is set and no callbacks registered", async () => {
+    it('delivers via webhook when callbackUrl is set and no callbacks registered', async () => {
       const fetchFn = mockFetchOk();
       const { result } = await createPendingResult(store, {
-        callbackUrl: "https://example.com/hook",
+        callbackUrl: 'https://example.com/hook',
       });
 
       const worker = new DeliveryWorker({
@@ -515,18 +503,18 @@ describe("DeliveryWorker", () => {
   // Orphaned result handling
   // -----------------------------------------------------------------------
 
-  describe("orphaned result handling", () => {
-    it("marks orphaned result as permanently failed without infinite retry", async () => {
+  describe('orphaned result handling', () => {
+    it('marks orphaned result as permanently failed without infinite retry', async () => {
       const batch = await store.createBatch({
-        provider: "claude",
-        apiKeyId: "user_01",
+        provider: 'claude',
+        apiKeyId: 'user_01',
         requestCount: 1,
       });
       // Create a result whose requestId does not exist in the store.
       const orphanResult = await store.createResult({
-        requestId: "req_nonexistent",
+        requestId: 'req_nonexistent',
         batchId: batch.id,
-        response: { content: "orphan" },
+        response: { content: 'orphan' },
       });
 
       const worker = new DeliveryWorker({
@@ -540,10 +528,8 @@ describe("DeliveryWorker", () => {
 
       const all = await store.getUndeliveredResults(100);
       const orphan = all.find((r) => r.id === orphanResult.id);
-      expect(orphan?.deliveryStatus).toBe("failed");
-      expect(orphan?.deliveryAttempts).toBeGreaterThanOrEqual(
-        orphan?.maxDeliveryAttempts ?? 5,
-      );
+      expect(orphan?.deliveryStatus).toBe('failed');
+      expect(orphan?.deliveryAttempts).toBeGreaterThanOrEqual(orphan?.maxDeliveryAttempts ?? 5);
 
       // Second tick: orphan is skipped (attempts >= max), so nothing processed.
       const processed = await worker.tick();
@@ -555,8 +541,8 @@ describe("DeliveryWorker", () => {
   // Callback management
   // -----------------------------------------------------------------------
 
-  describe("callback management", () => {
-    it("removeCallback removes a previously registered callback", async () => {
+  describe('callback management', () => {
+    it('removeCallback removes a previously registered callback', async () => {
       const { result } = await createPendingResult(store);
 
       const callback = vi.fn().mockResolvedValue(undefined);
@@ -575,9 +561,7 @@ describe("DeliveryWorker", () => {
 
       expect(callback).not.toHaveBeenCalled();
 
-      const updated = (await store.getUndeliveredResults(100)).find(
-        (r) => r.id === result.id,
-      );
+      const updated = (await store.getUndeliveredResults(100)).find((r) => r.id === result.id);
       // no_target results are excluded from getUndeliveredResults.
       expect(updated).toBeUndefined();
     });
@@ -587,8 +571,8 @@ describe("DeliveryWorker", () => {
   // Event emitter
   // -----------------------------------------------------------------------
 
-  describe("event emitter", () => {
-    it("can remove event listeners with off()", async () => {
+  describe('event emitter', () => {
+    it('can remove event listeners with off()', async () => {
       await createPendingResult(store);
 
       const callback = vi.fn().mockResolvedValue(undefined);
@@ -600,15 +584,15 @@ describe("DeliveryWorker", () => {
         fetchFn: mockFetchOk(),
       });
       worker.addCallback(callback);
-      worker.on("delivery:success", handler);
-      worker.off("delivery:success", handler);
+      worker.on('delivery:success', handler);
+      worker.off('delivery:success', handler);
 
       await worker.tick();
 
       expect(handler).not.toHaveBeenCalled();
     });
 
-    it("swallows errors thrown by event listeners", async () => {
+    it('swallows errors thrown by event listeners', async () => {
       await createPendingResult(store);
 
       const callback = vi.fn().mockResolvedValue(undefined);
@@ -619,8 +603,8 @@ describe("DeliveryWorker", () => {
         fetchFn: mockFetchOk(),
       });
       worker.addCallback(callback);
-      worker.on("delivery:success", () => {
-        throw new Error("listener error");
+      worker.on('delivery:success', () => {
+        throw new Error('listener error');
       });
 
       await expect(worker.tick()).resolves.toBe(1);
@@ -631,8 +615,8 @@ describe("DeliveryWorker", () => {
   // Concurrency guard
   // -----------------------------------------------------------------------
 
-  describe("concurrency", () => {
-    it("prevents concurrent tick execution", async () => {
+  describe('concurrency', () => {
+    it('prevents concurrent tick execution', async () => {
       await createPendingResult(store);
 
       let resolveCallback: (() => void) | undefined;
@@ -672,8 +656,8 @@ describe("DeliveryWorker", () => {
   // Start/stop lifecycle
   // -----------------------------------------------------------------------
 
-  describe("start/stop", () => {
-    it("start() is idempotent", () => {
+  describe('start/stop', () => {
+    it('start() is idempotent', () => {
       const worker = new DeliveryWorker({
         store,
         tickIntervalMs: 60_000,
@@ -684,7 +668,7 @@ describe("DeliveryWorker", () => {
       worker.stop();
     });
 
-    it("stop() clears the timer", () => {
+    it('stop() clears the timer', () => {
       const worker = new DeliveryWorker({
         store,
         tickIntervalMs: 60_000,
@@ -700,8 +684,8 @@ describe("DeliveryWorker", () => {
   // Telemetry
   // -----------------------------------------------------------------------
 
-  describe("telemetry", () => {
-    it("emits deliveries_attempted counter", async () => {
+  describe('telemetry', () => {
+    it('emits deliveries_attempted counter', async () => {
       await createPendingResult(store);
       await createPendingResult(store);
 
@@ -718,13 +702,10 @@ describe("DeliveryWorker", () => {
 
       await worker.tick();
 
-      expect(telemetry.counter).toHaveBeenCalledWith(
-        "deliveries_attempted",
-        2,
-      );
+      expect(telemetry.counter).toHaveBeenCalledWith('deliveries_attempted', 2);
     });
 
-    it("does not emit deliveries_attempted when no results processed", async () => {
+    it('does not emit deliveries_attempted when no results processed', async () => {
       const telemetry = { counter: vi.fn(), histogram: vi.fn(), event: vi.fn() };
 
       const worker = new DeliveryWorker({
@@ -736,12 +717,12 @@ describe("DeliveryWorker", () => {
       await worker.tick();
 
       const attemptedCalls = telemetry.counter.mock.calls.filter(
-        (c: unknown[]) => c[0] === "deliveries_attempted",
+        (c: unknown[]) => c[0] === 'deliveries_attempted',
       );
       expect(attemptedCalls).toHaveLength(0);
     });
 
-    it("emits delivery_worker.tick_error telemetry when tick throws", async () => {
+    it('emits delivery_worker.tick_error telemetry when tick throws', async () => {
       const telemetry = { counter: vi.fn(), histogram: vi.fn(), event: vi.fn() };
 
       const worker = new DeliveryWorker({
@@ -752,8 +733,8 @@ describe("DeliveryWorker", () => {
       });
 
       // Make the store throw on getUndeliveredResults to simulate a tick error.
-      vi.spyOn(store, "getUndeliveredResults").mockRejectedValueOnce(
-        new Error("store unavailable"),
+      vi.spyOn(store, 'getUndeliveredResults').mockRejectedValueOnce(
+        new Error('store unavailable'),
       );
 
       worker.start();
@@ -761,8 +742,8 @@ describe("DeliveryWorker", () => {
       // Wait for at least one tick to fire and the error to be emitted.
       await vi.waitFor(() => {
         expect(telemetry.event).toHaveBeenCalledWith(
-          "delivery_worker.tick_error",
-          expect.objectContaining({ message: "store unavailable" }),
+          'delivery_worker.tick_error',
+          expect.objectContaining({ message: 'store unavailable' }),
         );
       });
 
@@ -774,8 +755,8 @@ describe("DeliveryWorker", () => {
   // Webhook delivery integration
   // -----------------------------------------------------------------------
 
-  describe("webhook delivery", () => {
-    it("POSTs to callbackUrl when set on the request", async () => {
+  describe('webhook delivery', () => {
+    it('POSTs to callbackUrl when set on the request', async () => {
       const fetchFn = mockFetchOk();
       await createPendingResult(store);
 
@@ -788,12 +769,15 @@ describe("DeliveryWorker", () => {
       await worker.tick();
 
       expect(fetchFn).toHaveBeenCalledOnce();
-      const [url, init] = (fetchFn as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit];
-      expect(url).toBe("https://example.com/cb");
-      expect(init.method).toBe("POST");
+      const [url, init] = (fetchFn as ReturnType<typeof vi.fn>).mock.calls[0] as [
+        string,
+        RequestInit,
+      ];
+      expect(url).toBe('https://example.com/cb');
+      expect(init.method).toBe('POST');
     });
 
-    it("does not POST when callbackUrl is null", async () => {
+    it('does not POST when callbackUrl is null', async () => {
       const fetchFn = mockFetchOk();
       await createPendingResult(store, { callbackUrl: null });
 
@@ -813,23 +797,23 @@ describe("DeliveryWorker", () => {
       expect(callback).toHaveBeenCalledOnce();
     });
 
-    it("includes HMAC signature when webhookSecret is set", async () => {
+    it('includes HMAC signature when webhookSecret is set', async () => {
       const fetchFn = mockFetchOk();
       const request = await store.createRequest(
         makeNewRequest({
-          callbackUrl: "https://example.com/hook",
-          webhookSecret: "my-secret",
+          callbackUrl: 'https://example.com/hook',
+          webhookSecret: 'my-secret',
         }),
       );
       const batch = await store.createBatch({
-        provider: "claude",
-        apiKeyId: "user_01",
+        provider: 'claude',
+        apiKeyId: 'user_01',
         requestCount: 1,
       });
       await store.createResult({
         requestId: request.id,
         batchId: batch.id,
-        response: { content: "Hello" },
+        response: { content: 'Hello' },
         inputTokens: 10,
         outputTokens: 20,
       });
@@ -844,11 +828,11 @@ describe("DeliveryWorker", () => {
 
       const [, init] = (fetchFn as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit];
       const headers = init.headers as Record<string, string>;
-      expect(headers["X-Norush-Signature"]).toBeDefined();
-      expect(headers["X-Norush-Signature"]).toMatch(/^sha256=[a-f0-9]{64}$/);
+      expect(headers['X-Norush-Signature']).toBeDefined();
+      expect(headers['X-Norush-Signature']).toMatch(/^sha256=[a-f0-9]{64}$/);
     });
 
-    it("omits signature when no webhookSecret", async () => {
+    it('omits signature when no webhookSecret', async () => {
       const fetchFn = mockFetchOk();
       await createPendingResult(store);
 
@@ -862,13 +846,15 @@ describe("DeliveryWorker", () => {
 
       const [, init] = (fetchFn as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit];
       const headers = init.headers as Record<string, string>;
-      expect(headers["X-Norush-Signature"]).toBeUndefined();
+      expect(headers['X-Norush-Signature']).toBeUndefined();
     });
 
-    it("retries on webhook delivery failure (non-2xx)", async () => {
-      const fetchFn = vi.fn().mockResolvedValue(
-        new Response("Server Error", { status: 500, statusText: "Internal Server Error" }),
-      );
+    it('retries on webhook delivery failure (non-2xx)', async () => {
+      const fetchFn = vi
+        .fn()
+        .mockResolvedValue(
+          new Response('Server Error', { status: 500, statusText: 'Internal Server Error' }),
+        );
 
       const { result } = await createPendingResult(store);
 
@@ -887,10 +873,10 @@ describe("DeliveryWorker", () => {
       expect(found?.lastDeliveryError).toMatch(/500/);
     });
 
-    it("marks as failed after max webhook delivery attempts", async () => {
-      const fetchFn = vi.fn().mockResolvedValue(
-        new Response("Error", { status: 502, statusText: "Bad Gateway" }),
-      );
+    it('marks as failed after max webhook delivery attempts', async () => {
+      const fetchFn = vi
+        .fn()
+        .mockResolvedValue(new Response('Error', { status: 502, statusText: 'Bad Gateway' }));
 
       const { result } = await createPendingResult(store, { maxDeliveryAttempts: 2 });
 
@@ -909,11 +895,11 @@ describe("DeliveryWorker", () => {
 
       const undelivered = await store.getUndeliveredResults(100);
       const found = undelivered.find((r) => r.id === result.id);
-      expect(found?.deliveryStatus).toBe("failed");
+      expect(found?.deliveryStatus).toBe('failed');
       expect(found?.deliveryAttempts).toBe(2);
     });
 
-    it("includes norush_id in the webhook payload", async () => {
+    it('includes norush_id in the webhook payload', async () => {
       const fetchFn = mockFetchOk();
       const { request } = await createPendingResult(store);
 
@@ -930,7 +916,7 @@ describe("DeliveryWorker", () => {
       expect(body.norush_id).toBe(request.id);
     });
 
-    it("includes X-Norush-Attempt and X-Norush-Request-Id headers", async () => {
+    it('includes X-Norush-Attempt and X-Norush-Request-Id headers', async () => {
       const fetchFn = mockFetchOk();
       const { request } = await createPendingResult(store);
 
@@ -944,8 +930,8 @@ describe("DeliveryWorker", () => {
 
       const [, init] = (fetchFn as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit];
       const headers = init.headers as Record<string, string>;
-      expect(headers["X-Norush-Attempt"]).toBe("1");
-      expect(headers["X-Norush-Request-Id"]).toBe(request.id);
+      expect(headers['X-Norush-Attempt']).toBe('1');
+      expect(headers['X-Norush-Request-Id']).toBe(request.id);
     });
   });
 
@@ -953,8 +939,8 @@ describe("DeliveryWorker", () => {
   // Event logging
   // -----------------------------------------------------------------------
 
-  describe("event logging", () => {
-    it("logs a webhook_delivered event on successful delivery", async () => {
+  describe('event logging', () => {
+    it('logs a webhook_delivered event on successful delivery', async () => {
       const { result } = await createPendingResult(store);
 
       const callback = vi.fn().mockResolvedValue(undefined);
@@ -970,18 +956,18 @@ describe("DeliveryWorker", () => {
 
       const events = store.getEvents();
       const deliveredEvent = events.find(
-        (e) => e.event === "delivery_succeeded" && e.entityId === result.id,
+        (e) => e.event === 'delivery_succeeded' && e.entityId === result.id,
       );
       expect(deliveredEvent).toBeDefined();
-      expect(deliveredEvent?.entityType).toBe("result");
+      expect(deliveredEvent?.entityType).toBe('result');
       expect(deliveredEvent?.details?.requestId).toBe(result.requestId);
       expect(deliveredEvent?.details?.attempt).toBe(1);
     });
 
-    it("logs a webhook_delivery_failed event on retryable failure", async () => {
+    it('logs a webhook_delivery_failed event on retryable failure', async () => {
       const { result } = await createPendingResult(store);
 
-      const callback = vi.fn().mockRejectedValue(new Error("Network error"));
+      const callback = vi.fn().mockRejectedValue(new Error('Network error'));
 
       const worker = new DeliveryWorker({
         store,
@@ -994,19 +980,18 @@ describe("DeliveryWorker", () => {
 
       const events = store.getEvents();
       const failedEvent = events.find(
-        (e) =>
-          e.event === "delivery_failed" && e.entityId === result.id,
+        (e) => e.event === 'delivery_failed' && e.entityId === result.id,
       );
       expect(failedEvent).toBeDefined();
-      expect(failedEvent?.entityType).toBe("result");
-      expect(failedEvent?.details?.error).toBe("Network error");
+      expect(failedEvent?.entityType).toBe('result');
+      expect(failedEvent?.details?.error).toBe('Network error');
       expect(failedEvent?.details?.attempt).toBe(1);
     });
 
-    it("logs a webhook_delivery_exhausted event after max attempts", async () => {
+    it('logs a webhook_delivery_exhausted event after max attempts', async () => {
       const { result } = await createPendingResult(store, { maxDeliveryAttempts: 1 });
 
-      const callback = vi.fn().mockRejectedValue(new Error("Always fails"));
+      const callback = vi.fn().mockRejectedValue(new Error('Always fails'));
 
       const worker = new DeliveryWorker({
         store,
@@ -1019,21 +1004,19 @@ describe("DeliveryWorker", () => {
 
       const events = store.getEvents();
       const exhaustedEvent = events.find(
-        (e) =>
-          e.event === "delivery_exhausted" &&
-          e.entityId === result.id,
+        (e) => e.event === 'delivery_exhausted' && e.entityId === result.id,
       );
       expect(exhaustedEvent).toBeDefined();
-      expect(exhaustedEvent?.entityType).toBe("result");
+      expect(exhaustedEvent?.entityType).toBe('result');
       expect(exhaustedEvent?.details?.attempts).toBe(1);
-      expect(exhaustedEvent?.details?.error).toBe("Always fails");
+      expect(exhaustedEvent?.details?.error).toBe('Always fails');
     });
 
-    it("logs events for webhook HTTP delivery failures", async () => {
+    it('logs events for webhook HTTP delivery failures', async () => {
       const fetchFn = vi.fn().mockResolvedValue(
-        new Response("Server Error", {
+        new Response('Server Error', {
           status: 500,
-          statusText: "Internal Server Error",
+          statusText: 'Internal Server Error',
         }),
       );
 
@@ -1049,8 +1032,7 @@ describe("DeliveryWorker", () => {
 
       const events = store.getEvents();
       const failedEvent = events.find(
-        (e) =>
-          e.event === "delivery_failed" && e.entityId === result.id,
+        (e) => e.event === 'delivery_failed' && e.entityId === result.id,
       );
       expect(failedEvent).toBeDefined();
       expect(failedEvent?.details?.error).toMatch(/500/);
@@ -1061,8 +1043,8 @@ describe("DeliveryWorker", () => {
   // Constants
   // -----------------------------------------------------------------------
 
-  describe("constants", () => {
-    it("exports expected default values", () => {
+  describe('constants', () => {
+    it('exports expected default values', () => {
       expect(BASE_DELAY_MS).toBe(10_000);
       expect(MAX_DELAY_MS).toBe(600_000);
       expect(DEFAULT_MAX_DELIVERY_ATTEMPTS).toBe(5);

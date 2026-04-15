@@ -43,7 +43,7 @@ A TypeScript library that manages deferred LLM request processing:
 - **Broker model** — Delivers results to your webhooks. Chain further work
   by submitting new requests through the norush API.
 
-### Deferred Chat (`norush.chat`)
+### Deferred Chat (`norush.roubtec.com`)
 
 A web application built on the core library:
 
@@ -55,7 +55,7 @@ A web application built on the core library:
 
 ## How It Works
 
-```
+```txt
 You write prompts
        │
        ▼
@@ -73,13 +73,13 @@ You write prompts
 
 Underneath, norush maps to each provider's native batch API:
 
-| | Anthropic (Claude) | OpenAI |
-|---|---|---|
-| API | Message Batches | Batch API |
-| Discount | 50% | 50% |
-| Max batch | 100K requests | 50K requests |
-| Typical completion | <1 hour | <24 hours |
-| Format | JSON body | JSONL file upload |
+|                    | Anthropic (Claude) | OpenAI            |
+|--------------------|--------------------|-------------------|
+| API                | Message Batches    | Batch API         |
+| Discount           | 50%                | 50%               |
+| Max batch          | 100K requests      | 50K requests      |
+| Typical completion | <1 hour            | <24 hours         |
+| Format             | JSON body          | JSONL file upload |
 
 ## Development
 
@@ -97,26 +97,50 @@ pnpm install
 
 ### Workspace packages
 
-| Package | Description |
-|---|---|
+| Package        | Description                   |
+|----------------|-------------------------------|
 | `@norush/core` | Core batch-processing library |
-| `@norush/web` | Deferred chat web application |
+| `@norush/web`  | Deferred chat web application |
 
 ### Scripts
 
-| Command | Description |
-|---|---|
-| `pnpm build` | Compile all packages |
-| `pnpm test` | Run all tests (Vitest) |
-| `pnpm lint` | Lint all packages (ESLint) |
+#### Code
+
+| Command          | Description                                 |
+|------------------|---------------------------------------------|
+| `pnpm build`     | Compile all packages                        |
+| `pnpm test`      | Run all tests (Vitest)                      |
+| `pnpm lint`      | Lint all packages (ESLint)                  |
 | `pnpm typecheck` | Type-check all packages (TypeScript strict) |
-| `pnpm db:up` | Start local PostgreSQL 17 via Docker Compose |
-| `pnpm db:down` | Stop local PostgreSQL |
+
+#### Docker — full stack
+
+| Command             | Description                                          |
+|---------------------|------------------------------------------------------|
+| `pnpm dev:up`       | Build image and start all services (web, worker, DB) |
+| `pnpm dev:start`    | Start all services without rebuilding                |
+| `pnpm dev:down`     | Stop and remove all compose services                 |
+| `pnpm docker:build` | Build the `norush` Docker image without starting     |
+
+#### Docker — individual services
+
+| Command            | Description                                      |
+|--------------------|--------------------------------------------------|
+| `pnpm db:up`       | Start PostgreSQL only                            |
+| `pnpm db:down`     | Stop PostgreSQL (data is preserved)              |
+| `pnpm worker:up`   | Start the background worker (also starts the DB) |
+| `pnpm worker:down` | Stop the background worker                       |
+
+#### Host development
+
+| Command         | Description                                              |
+|-----------------|----------------------------------------------------------|
+| `pnpm host:dev` | Start DB + worker in Docker, run the web app on the host |
 
 ### Local database
 
-Start PostgreSQL with `pnpm db:up`.
-The database is available at `localhost:5432` with database `norush` and password `dev`.
+PostgreSQL runs in Docker and is always port-mapped to `localhost:5432`
+(database `norush`, password `dev`). Use `pnpm db:up` to start it alone.
 
 ## Running with Docker
 
@@ -134,26 +158,63 @@ docker compose down
 ```
 
 The web server is available at `http://localhost:3000`.
-Provider API keys and other secrets can be set via environment variables or a `.env` file:
+
+### Environment variables
+
+The project uses two env files at the repo root. Both are gitignored.
+
+| File         | Read by                               | Purpose                                        |
+|--------------|---------------------------------------|------------------------------------------------|
+| `.env`       | Docker Compose **and** Vite           | Secrets shared between containers and host dev |
+| `.env.local` | Vite only (Docker Compose ignores it) | Host-only overrides, primarily `DATABASE_URL`  |
+
+Copy [`.env.example`](./.env.example) to `.env` and fill in the values you need:
 
 ```env
 NORUSH_MASTER_KEY=your-secret-key
 ANTHROPIC_API_KEY=sk-ant-...
 OPENAI_API_KEY=sk-...
+
+# Skip WorkOS login in development (NEVER set in production):
+NORUSH_DEV_AUTH_BYPASS=1
 ```
 
-### Development (without Docker)
+**Do not** put `DATABASE_URL` in `.env`. Docker Compose substitutes variables
+from `.env` into the container environment, so a `localhost` URL there would
+break container-to-container networking. Instead, put it in `.env.local`:
+
+```env
+# .env.local — for host dev only (pnpm host:dev)
+DATABASE_URL=postgres://postgres:dev@localhost:5432/norush
+```
+
+Vite picks up `.env.local` automatically via `envDir` in `vite.config.ts`.
+When running inside Docker, no `.env.local` exists in the build context, so
+env vars arrive from the compose `environment:` block at runtime.
+
+### Host development (web on host, services in Docker)
+
+For rapid iteration on the web app without rebuilding the Docker image:
 
 ```bash
-# Start just the database
-docker compose up -d postgres
+# First time only — build the norush image the worker needs
+pnpm docker:build
 
-# Install dependencies and build
-pnpm install
-pnpm build
+# Start DB + worker in Docker, web dev server on the host
+pnpm host:dev
+```
 
-# Run tests
-pnpm test
+The Vite dev server runs at `http://localhost:5173` with HMR.
+The worker and database run as usual in Docker containers.
+
+### Full Docker stack
+
+```bash
+# Start everything (builds on first run)
+pnpm dev:up
+
+# Stop (worker shuts down gracefully)
+pnpm dev:down
 ```
 
 ## Deployment
@@ -162,6 +223,7 @@ norush deploys to Azure Container Apps via GitHub Actions.
 On merge to `main`, the deploy workflow builds the Docker image, pushes it to Azure Container Registry, and updates both the web and worker containers.
 
 See [infra/README.md](./infra/README.md) for full Azure setup instructions, including:
+
 - Resource provisioning (Container Apps, PostgreSQL, ACR)
 - GitHub repository secrets configuration
 - Custom domain setup
@@ -171,11 +233,11 @@ See [infra/README.md](./infra/README.md) for full Azure setup instructions, incl
 
 norush ships four telemetry adapters:
 
-| Adapter | Description |
-|---------|-------------|
-| `NoopTelemetry` | Default. Silently discards all metrics. |
-| `ConsoleTelemetry` | Logs to stdout with `[norush]` prefix. |
-| `PrometheusTelemetry` | Maps to `prom-client` counters and histograms. |
+| Adapter                  | Description                                            |
+|--------------------------|--------------------------------------------------------|
+| `NoopTelemetry`          | Default. Silently discards all metrics.                |
+| `ConsoleTelemetry`       | Logs to stdout with `[norush]` prefix.                 |
+| `PrometheusTelemetry`    | Maps to `prom-client` counters and histograms.         |
 | `OpenTelemetryTelemetry` | Maps to `@opentelemetry/api` meters (OTLP-compatible). |
 
 The web application exposes `GET /metrics` for Prometheus scraping.

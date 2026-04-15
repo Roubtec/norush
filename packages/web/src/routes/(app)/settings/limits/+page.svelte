@@ -34,14 +34,14 @@
 </script>
 
 <svelte:head>
-  <title>Spend Limits - norush.chat</title>
+  <title>Spend Limits - norush chat</title>
 </svelte:head>
 
 <section class="settings">
   <h1>Spend Limits</h1>
   <p class="subtitle">
-    Configure rate limits and spend caps for your account.
-    Leave fields empty for unlimited. Limits are enforced when submitting new requests.
+    Configure rate limits and spend caps for your account. Leave fields empty
+    for unlimited. Limits are enforced when submitting new requests.
   </p>
 
   <!-- Error loading limits -->
@@ -51,9 +51,7 @@
 
   <!-- Success message -->
   {#if form?.success}
-    <div class="alert alert-success">
-      Spend limits updated successfully.
-    </div>
+    <div class="alert alert-success">Spend limits updated successfully.</div>
   {/if}
 
   <!-- General form error -->
@@ -84,7 +82,9 @@
           <span class="usage-value">
             {data.limits.currentPeriodTokens.toLocaleString()}
             {#if data.limits.maxTokensPerPeriod !== null}
-              <span class="usage-cap">/ {data.limits.maxTokensPerPeriod.toLocaleString()}</span>
+              <span class="usage-cap"
+                >/ {data.limits.maxTokensPerPeriod.toLocaleString()}</span
+              >
             {:else}
               <span class="usage-cap">/ unlimited</span>
             {/if}
@@ -95,7 +95,9 @@
           <span class="usage-value">
             ${data.limits.currentSpendUsd.toFixed(2)}
             {#if data.limits.hardSpendLimitUsd !== null}
-              <span class="usage-cap">/ ${data.limits.hardSpendLimitUsd.toFixed(2)}</span>
+              <span class="usage-cap"
+                >/ ${data.limits.hardSpendLimitUsd.toFixed(2)}</span
+              >
             {:else}
               <span class="usage-cap">/ unlimited</span>
             {/if}
@@ -124,11 +126,14 @@
           name="maxRequestsPerHour"
           placeholder="Unlimited"
           min="1"
-          value={fieldValue(form?.values?.maxRequestsPerHour, data.limits?.maxRequestsPerHour)}
+          value={fieldValue(
+            form?.values?.maxRequestsPerHour,
+            data.limits?.maxRequestsPerHour,
+          )}
         />
         <span class="field-hint">
-          Maximum number of requests you can submit per rolling hour.
-          Adaptive rate limiting may reduce this further during failures.
+          Maximum number of requests you can submit per rolling hour. Adaptive
+          rate limiting may reduce this further during failures.
         </span>
         {#if fieldError("maxRequestsPerHour")}
           <span class="field-error">{fieldError("maxRequestsPerHour")}</span>
@@ -143,10 +148,14 @@
           name="maxTokensPerPeriod"
           placeholder="Unlimited"
           min="1"
-          value={fieldValue(form?.values?.maxTokensPerPeriod, data.limits?.maxTokensPerPeriod)}
+          value={fieldValue(
+            form?.values?.maxTokensPerPeriod,
+            data.limits?.maxTokensPerPeriod,
+          )}
         />
         <span class="field-hint">
-          Estimated token budget per rolling period. Counts input and output tokens.
+          Estimated token budget per rolling period. Counts input and output
+          tokens.
         </span>
         {#if fieldError("maxTokensPerPeriod")}
           <span class="field-error">{fieldError("maxTokensPerPeriod")}</span>
@@ -162,7 +171,10 @@
           placeholder="Unlimited"
           min="0"
           step="0.01"
-          value={fieldValue(form?.values?.hardSpendLimitUsd, data.limits?.hardSpendLimitUsd)}
+          value={fieldValue(
+            form?.values?.hardSpendLimitUsd,
+            data.limits?.hardSpendLimitUsd,
+          )}
         />
         <span class="field-hint">
           Absolute ceiling. All new requests are rejected when this is reached.
