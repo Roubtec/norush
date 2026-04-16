@@ -8,16 +8,188 @@
   padding: 0;
 }
 
+/*
+ * Theming: light is the default; dark is applied when either the OS
+ * prefers-color-scheme is dark (and the user has not explicitly chosen a
+ * theme) or when an explicit `data-theme="dark"` is set on the <html>
+ * element. An inline script in app.html seeds `data-theme` from
+ * localStorage before first paint to avoid a flash when an explicit
+ * override is active; without JS, the media query still picks the right
+ * palette for the current OS setting.
+ */
+
 :root {
+  color-scheme: light;
+
   --color-bg: #fafafa;
   --color-surface: #ffffff;
+  --color-surface-muted: #f3f4f6;
   --color-text: #1a1a1a;
   --color-text-muted: #6b7280;
   --color-border: #e5e7eb;
+
   --color-primary: #2563eb;
   --color-primary-hover: #1d4ed8;
+  --color-primary-subtle-bg: #eff6ff;
+  --color-primary-subtle-bg-hover: #dbeafe;
+  --color-on-primary: #ffffff;
+
+  --color-success-text: #166534;
+  --color-success-bg: #f0fdf4;
+  --color-success-border: #bbf7d0;
+
+  --color-error-text: #dc2626;
+  --color-error-text-strong: #991b1b;
+  --color-error-bg: #fef2f2;
+  --color-error-border: #fecaca;
+  --color-error-border-strong: #fca5a5;
+
+  --color-warning: #f59e0b;
+  --color-danger: #ef4444;
+
+  --color-provider-openai: #10b981;
+  --color-provider-claude: #2563eb;
+
+  --color-status-queued: #6b7280;
+  --color-status-batched: #2563eb;
+  --color-status-processing: #d97706;
+  --color-status-succeeded: #16a34a;
+  --color-status-failed: #dc2626;
+  --color-status-expired: #9333ea;
+  --color-status-failed-final: #991b1b;
+  --color-status-canceled: #6b7280;
+
   --max-width: 1200px;
   --header-height: 56px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+
+    --color-bg: #0f1115;
+    --color-surface: #181b21;
+    --color-surface-muted: #242932;
+    --color-text: #e5e7eb;
+    --color-text-muted: #9ca3af;
+    --color-border: #2e333c;
+
+    --color-primary: #60a5fa;
+    --color-primary-hover: #93c5fd;
+    --color-primary-subtle-bg: #1e2a44;
+    --color-primary-subtle-bg-hover: #253457;
+    --color-on-primary: #0f1115;
+
+    --color-success-text: #86efac;
+    --color-success-bg: #0f2a1a;
+    --color-success-border: #14532d;
+
+    --color-error-text: #fca5a5;
+    --color-error-text-strong: #f87171;
+    --color-error-bg: #2a1212;
+    --color-error-border: #7f1d1d;
+    --color-error-border-strong: #b91c1c;
+
+    --color-warning: #fbbf24;
+    --color-danger: #f87171;
+
+    --color-provider-openai: #34d399;
+    --color-provider-claude: #60a5fa;
+
+    --color-status-queued: #9ca3af;
+    --color-status-batched: #60a5fa;
+    --color-status-processing: #fbbf24;
+    --color-status-succeeded: #4ade80;
+    --color-status-failed: #f87171;
+    --color-status-expired: #c084fc;
+    --color-status-failed-final: #ef4444;
+    --color-status-canceled: #9ca3af;
+  }
+}
+
+/* Explicit user override — wins over the media query. */
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --color-bg: #fafafa;
+  --color-surface: #ffffff;
+  --color-surface-muted: #f3f4f6;
+  --color-text: #1a1a1a;
+  --color-text-muted: #6b7280;
+  --color-border: #e5e7eb;
+
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+  --color-primary-subtle-bg: #eff6ff;
+  --color-primary-subtle-bg-hover: #dbeafe;
+  --color-on-primary: #ffffff;
+
+  --color-success-text: #166534;
+  --color-success-bg: #f0fdf4;
+  --color-success-border: #bbf7d0;
+
+  --color-error-text: #dc2626;
+  --color-error-text-strong: #991b1b;
+  --color-error-bg: #fef2f2;
+  --color-error-border: #fecaca;
+  --color-error-border-strong: #fca5a5;
+
+  --color-warning: #f59e0b;
+  --color-danger: #ef4444;
+
+  --color-provider-openai: #10b981;
+  --color-provider-claude: #2563eb;
+
+  --color-status-queued: #6b7280;
+  --color-status-batched: #2563eb;
+  --color-status-processing: #d97706;
+  --color-status-succeeded: #16a34a;
+  --color-status-failed: #dc2626;
+  --color-status-expired: #9333ea;
+  --color-status-failed-final: #991b1b;
+  --color-status-canceled: #6b7280;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --color-bg: #0f1115;
+  --color-surface: #181b21;
+  --color-surface-muted: #242932;
+  --color-text: #e5e7eb;
+  --color-text-muted: #9ca3af;
+  --color-border: #2e333c;
+
+  --color-primary: #60a5fa;
+  --color-primary-hover: #93c5fd;
+  --color-primary-subtle-bg: #1e2a44;
+  --color-primary-subtle-bg-hover: #253457;
+  --color-on-primary: #0f1115;
+
+  --color-success-text: #86efac;
+  --color-success-bg: #0f2a1a;
+  --color-success-border: #14532d;
+
+  --color-error-text: #fca5a5;
+  --color-error-text-strong: #f87171;
+  --color-error-bg: #2a1212;
+  --color-error-border: #7f1d1d;
+  --color-error-border-strong: #b91c1c;
+
+  --color-warning: #fbbf24;
+  --color-danger: #f87171;
+
+  --color-provider-openai: #34d399;
+  --color-provider-claude: #60a5fa;
+
+  --color-status-queued: #9ca3af;
+  --color-status-batched: #60a5fa;
+  --color-status-processing: #fbbf24;
+  --color-status-succeeded: #4ade80;
+  --color-status-failed: #f87171;
+  --color-status-expired: #c084fc;
+  --color-status-failed-final: #ef4444;
+  --color-status-canceled: #9ca3af;
 }
 
 html,
@@ -26,7 +198,7 @@ body {
   font-family:
     system-ui,
     -apple-system,
-    'Segoe UI',
+    "Segoe UI",
     Roboto,
     sans-serif;
   background: var(--color-bg);
