@@ -9,10 +9,14 @@ import postgres from 'postgres';
 import { env } from '$env/dynamic/private';
 import { PostgresStore, migrate, createNorush, type NorushEngine } from '@norush/core';
 
-function optionalEnvInt(value: string | undefined): number | undefined {
+function optionalEnvInt(name: string, value: string | undefined): number | undefined {
   if (!value) return undefined;
   const n = parseInt(value, 10);
-  return Number.isNaN(n) ? undefined : n;
+  if (Number.isNaN(n)) {
+    console.warn(`[norush] ${name} has invalid integer value "${value}", using default`);
+    return undefined;
+  }
+  return n;
 }
 
 let store: PostgresStore | undefined;
@@ -56,14 +60,17 @@ export async function getEngine(): Promise<NorushEngine> {
         store,
         providers: {},
         batching: {
-          flushIntervalMs: optionalEnvInt(env.NORUSH_FLUSH_INTERVAL_MS),
-          maxRequests: optionalEnvInt(env.NORUSH_MAX_REQUESTS),
+          flushIntervalMs: optionalEnvInt('NORUSH_FLUSH_INTERVAL_MS', env.NORUSH_FLUSH_INTERVAL_MS),
+          maxRequests: optionalEnvInt('NORUSH_MAX_REQUESTS', env.NORUSH_MAX_REQUESTS),
         },
         polling: {
-          intervalMs: optionalEnvInt(env.NORUSH_POLL_INTERVAL_MS),
+          intervalMs: optionalEnvInt('NORUSH_POLL_INTERVAL_MS', env.NORUSH_POLL_INTERVAL_MS),
         },
         delivery: {
-          tickIntervalMs: optionalEnvInt(env.NORUSH_DELIVERY_INTERVAL_MS),
+          tickIntervalMs: optionalEnvInt(
+            'NORUSH_DELIVERY_INTERVAL_MS',
+            env.NORUSH_DELIVERY_INTERVAL_MS,
+          ),
         },
       });
     })();
