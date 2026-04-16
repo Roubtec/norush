@@ -44,11 +44,12 @@ export const ANTHROPIC_DEPRECATIONS_URL =
 
 const ANTHROPIC_PRICING: Record<string, { input: number; output: number }> = {
   // Current frontier (active)
-  'claude-opus-4-6': { input: 5.0 / 1_000_000, output: 25.0 / 1_000_000 },
+  'claude-opus-4-7': { input: 5.0 / 1_000_000, output: 25.0 / 1_000_000 },
   'claude-sonnet-4-6': { input: 3.0 / 1_000_000, output: 15.0 / 1_000_000 },
   'claude-haiku-4-5-20251001': { input: 1.0 / 1_000_000, output: 5.0 / 1_000_000 },
   'claude-haiku-4-5': { input: 1.0 / 1_000_000, output: 5.0 / 1_000_000 },
   // Legacy
+  'claude-opus-4-6': { input: 5.0 / 1_000_000, output: 25.0 / 1_000_000 },
   'claude-sonnet-4-5-20250929': { input: 3.0 / 1_000_000, output: 15.0 / 1_000_000 },
   'claude-opus-4-5-20251101': { input: 5.0 / 1_000_000, output: 25.0 / 1_000_000 },
   'claude-opus-4-1-20250805': { input: 15.0 / 1_000_000, output: 75.0 / 1_000_000 },
