@@ -281,11 +281,15 @@ export function parseAnthropicDeprecationPage(html: string): ParsedCatalogEntry[
   return [...byModel.values()];
 }
 
+/** Timeout for upstream catalog fetches (10 s). Prevents a hung connection
+ *  from stalling the hourly refresh loop indefinitely. */
+const FETCH_TIMEOUT_MS = 10_000;
+
 /**
  * Live-fetch the Anthropic catalog from the deprecations page.
  *
- * Returns [] on network error or empty parse. Callers interpret [] as
- * "don't touch the DB rows" per the parser-robustness rule in the task.
+ * Returns [] on network error, timeout, or empty parse. Callers interpret []
+ * as "don't touch the DB rows" per the parser-robustness rule in the task.
  */
 export async function fetchAnthropicCatalog(
   fetchImpl: typeof fetch = fetch,
@@ -293,6 +297,7 @@ export async function fetchAnthropicCatalog(
   try {
     const res = await fetchImpl(ANTHROPIC_DEPRECATIONS_URL, {
       headers: { accept: 'text/html' },
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
     if (!res.ok) return [];
     const html = await res.text();

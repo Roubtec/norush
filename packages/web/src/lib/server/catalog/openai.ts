@@ -243,18 +243,25 @@ export function parseOpenAIDeprecationPage(html: string): ParsedCatalogEntry[] {
  * through to the seed. This keeps the Composer usable even when OpenAI's
  * docs page is unreachable or has churned.
  */
+/** Timeout for upstream catalog fetches (10 s). Prevents a hung connection
+ *  from stalling the hourly refresh loop indefinitely. */
+const FETCH_TIMEOUT_MS = 10_000;
+
 export async function fetchOpenAICatalog(
   fetchImpl: typeof fetch = fetch,
 ): Promise<ParsedCatalogEntry[]> {
   try {
-    const res = await fetchImpl(OPENAI_DEPRECATIONS_URL, { headers: { accept: 'text/html' } });
+    const res = await fetchImpl(OPENAI_DEPRECATIONS_URL, {
+      headers: { accept: 'text/html' },
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
     if (res.ok) {
       const html = await res.text();
       const parsed = parseOpenAIDeprecationPage(html);
       if (parsed.length > 0) return parsed;
     }
   } catch {
-    // fall through to seed
+    // fall through to seed (covers network errors, timeouts, and shape changes)
   }
   return SEED.map((e) => ({ ...e }));
 }

@@ -8,6 +8,7 @@
   import MessageList from "$lib/components/MessageList.svelte";
   import Composer from "$lib/components/Composer.svelte";
   import { calculateSavings } from "$lib/savings.js";
+  import { FALLBACK_MODELS } from "$lib/models.js";
 
   let { data } = $props();
 
@@ -43,12 +44,15 @@
   let lastPollAt = $state(initialLoadedAt);
 
   /**
-   * Per-(provider, model) rate lookup built from the server-loaded catalog.
-   * Passed into `calculateSavings` so the savings line reflects each
-   * message's actual model, not a provider-level average.
+   * Per-(provider, model) rate lookup built from the same effective catalog
+   * source used by the model picker. When the server load falls back to an
+   * empty catalog, keep savings aligned by using the same fallback models
+   * instead of dropping back to provider-level default pricing.
    */
   // svelte-ignore state_referenced_locally — catalog is loaded once at page-load time; per-catalog refresh requires a reload anyway.
-  const ratesOverride = buildRatesOverride(data.catalog ?? []);
+  const effectiveCatalog =
+    Array.isArray(data.catalog) && data.catalog.length > 0 ? data.catalog : [...FALLBACK_MODELS];
+  const ratesOverride = buildRatesOverride(effectiveCatalog);
 
   /**
    * @param {{ provider: string; model: string; inputUsdPerToken: number | null; outputUsdPerToken: number | null }[]} catalog
