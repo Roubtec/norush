@@ -52,6 +52,8 @@ A web application built on the core library:
 - Responses appear when ready (minutes to hours).
 - Optional webhook forwarding — use norush as a batch-processing broker
   without self-hosting.
+- Light and dark themes — follows the OS preference by default, with an
+  unobtrusive toggle in the header to override it.
 
 ## How It Works
 
