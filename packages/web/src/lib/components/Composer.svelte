@@ -48,11 +48,13 @@
    */
   function buildSelectableCatalog(list) {
     const source = list.length > 0 ? list : FALLBACK_MODELS;
+
+    // First pass: filter to active/legacy only.
     /** @type {CatalogModel[]} */
-    const selectable = [];
+    const candidates = [];
     for (const entry of source) {
       if (entry.lifecycleState !== "active" && entry.lifecycleState !== "legacy") continue;
-      selectable.push({
+      candidates.push({
         provider: entry.provider,
         model: entry.model,
         displayLabel: entry.displayLabel,
@@ -62,7 +64,35 @@
         replacementModel: entry.replacementModel ?? null,
       });
     }
-    return selectable;
+
+    // Second pass: deduplicate by (provider, displayLabel). When the live
+    // catalog contains both a dated slug (e.g. claude-haiku-4-5-20251001)
+    // and the undated alias (claude-haiku-4-5), they share the same display
+    // label. Prefer the undated alias (the provider's "latest" pointer); if
+    // both are dated, keep the one with the later date suffix.
+    /** @type {Map<string, CatalogModel>} */
+    const byLabel = new Map();
+    for (const entry of candidates) {
+      const key = `${entry.provider}::${entry.displayLabel}`;
+      const existing = byLabel.get(key);
+      if (!existing) {
+        byLabel.set(key, entry);
+        continue;
+      }
+      // Prefer the undated alias (no -YYYYMMDD suffix).
+      const existingDated = /-\d{8}$/.test(existing.model);
+      const entryDated = /-\d{8}$/.test(entry.model);
+      if (existingDated && !entryDated) {
+        byLabel.set(key, entry);
+      } else if (entryDated && !existingDated) {
+        // keep existing (undated)
+      } else if (entry.model > existing.model) {
+        // Both dated or both undated — lexicographic compare picks the later date.
+        byLabel.set(key, entry);
+      }
+    }
+
+    return [...byLabel.values()];
   }
 
   /** @type {"claude" | "openai"} */
