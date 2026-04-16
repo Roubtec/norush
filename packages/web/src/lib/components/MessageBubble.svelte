@@ -23,9 +23,10 @@
    *     outputTokens: number | null;
    *     createdAt: string;
    *   } | null;
+   *   rates?: { getRate(provider: string, model: string): { input: number; output: number } | null | undefined } | null;
    * }}
    */
-  let { id, provider, model, params, status, createdAt, result } = $props();
+  let { id, provider, model, params, status, createdAt, result, rates = null } = $props();
 
   /** Extract the user's message content from params. */
   let userContent = $derived((() => {
@@ -113,6 +114,8 @@
             </span>
             <CostIndicator
               {provider}
+              {model}
+              {rates}
               inputTokens={result.inputTokens}
               outputTokens={result.outputTokens}
             />

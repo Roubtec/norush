@@ -8,6 +8,7 @@
 import postgres from 'postgres';
 import { env } from '$env/dynamic/private';
 import { PostgresStore, migrate, createNorush, type NorushEngine } from '@norush/core';
+import { startCatalogRefresh } from './catalog';
 
 function optionalEnvInt(name: string, value: string | undefined): number | undefined {
   if (!value) return undefined;
@@ -56,6 +57,17 @@ export async function getEngine(): Promise<NorushEngine> {
       const db = getSql();
       await migrate(db);
       store = new PostgresStore(db);
+
+      // Kick off the scheduled provider-catalog refresh. It runs one fetch
+      // immediately and then repeats on a jittered ~hourly interval. The
+      // call is idempotent, so a second `getEngine()` in the same process
+      // is a no-op.
+      try {
+        startCatalogRefresh(store);
+      } catch (err) {
+        console.error('[norush] Failed to start catalog refresh loop:', err);
+      }
+
       return createNorush({
         store,
         providers: {},
