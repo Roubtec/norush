@@ -107,8 +107,9 @@ Run these steps in order. Do not skip the verification pass at the end
      1_000_000`) so the raw dollar figure stays readable in reviews.
    - Prefer the API alias (`claude-opus-4-7`) over the dated snapshot
      (`claude-opus-4-7-20260416`) for active models, matching the
-     pattern in the current file. Legacy/deprecated/retired rows use
-     the dated snapshot so callers can pin to a specific release.
+     pattern in the current file. For legacy/deprecated/retired rows,
+     use the dated snapshot when one is available; otherwise keep the
+     alias used by the provider docs/current fallback catalog.
 
 3. **Reconcile.** For each existing row:
    - If the source still lists it → update any fields that drifted

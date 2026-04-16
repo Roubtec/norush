@@ -25,9 +25,14 @@ describe('parseAnthropicDeprecationPage', () => {
     // We expect at least the 8 rows in the fixture.
     const byModel = new Map(entries.map((e) => [e.model, e]));
 
+    const opus47 = byModel.get('claude-opus-4-7');
+    expect(opus47).toBeDefined();
+    expect(opus47?.lifecycleState).toBe('active');
+    expect(opus47?.inputUsdPerToken).toBeCloseTo(5.0 / 1_000_000, 12);
+
     const opus46 = byModel.get('claude-opus-4-6');
     expect(opus46).toBeDefined();
-    expect(opus46?.lifecycleState).toBe('active');
+    expect(opus46?.lifecycleState).toBe('legacy');
     expect(opus46?.inputUsdPerToken).toBeCloseTo(5.0 / 1_000_000, 12);
 
     const sonnet45 = byModel.get('claude-sonnet-4-5-20250929');
