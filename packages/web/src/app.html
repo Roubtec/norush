@@ -10,9 +10,9 @@
       // a theme flash. With no override, CSS prefers-color-scheme handles it.
       (function () {
         try {
-          var t = localStorage.getItem("norush:theme");
-          if (t === "light" || t === "dark") {
-            document.documentElement.setAttribute("data-theme", t);
+          var t = localStorage.getItem('norush:theme');
+          if (t === 'light' || t === 'dark') {
+            document.documentElement.setAttribute('data-theme', t);
           }
         } catch (e) {
           // localStorage may be unavailable (e.g. privacy mode) — ignore.
