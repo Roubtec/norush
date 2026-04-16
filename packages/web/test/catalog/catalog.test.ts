@@ -160,7 +160,7 @@ describe('listAvailableModels', () => {
     const sonnet45 = models.find((m) => m.model === 'claude-sonnet-4-5-20250929');
     expect(sonnet45?.displayLabel).toBe('Claude Sonnet 4.5 (live)');
     // Other claude entries still come from the fallback.
-    expect(models.find((m) => m.model === 'claude-opus-4-5-20251014')).toBeDefined();
+    expect(models.find((m) => m.model === 'claude-opus-4-5-20251101')).toBeDefined();
   });
 
   it('orders active models before legacy/deprecated/retired', async () => {

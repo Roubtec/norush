@@ -128,7 +128,7 @@
       <p class="content error-content">
         Request failed.
         {#if result?.response?.error}
-          {String(result.response.error)}
+          {typeof result.response.error === "string" ? result.response.error : JSON.stringify(result.response.error)}
         {:else}
           The batch request did not succeed. You may try again.
         {/if}

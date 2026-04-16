@@ -22,24 +22,32 @@ describe('parseAnthropicDeprecationPage', () => {
     const html = await readFile(resolve(FIXTURE_DIR, 'anthropic-deprecations.html'), 'utf-8');
     const entries = parseAnthropicDeprecationPage(html);
 
-    // We expect at least the 7 rows in the fixture.
+    // We expect at least the 8 rows in the fixture.
     const byModel = new Map(entries.map((e) => [e.model, e]));
+
+    const opus47 = byModel.get('claude-opus-4-7');
+    expect(opus47).toBeDefined();
+    expect(opus47?.lifecycleState).toBe('active');
+    expect(opus47?.inputUsdPerToken).toBeCloseTo(5.0 / 1_000_000, 12);
+
+    const opus46 = byModel.get('claude-opus-4-6');
+    expect(opus46).toBeDefined();
+    expect(opus46?.lifecycleState).toBe('legacy');
+    expect(opus46?.inputUsdPerToken).toBeCloseTo(5.0 / 1_000_000, 12);
 
     const sonnet45 = byModel.get('claude-sonnet-4-5-20250929');
     expect(sonnet45).toBeDefined();
-    expect(sonnet45?.lifecycleState).toBe('active');
-    expect(sonnet45?.deprecatedAt).toBeNull();
-    expect(sonnet45?.retiresAt).toBeNull();
+    expect(sonnet45?.lifecycleState).toBe('legacy');
     expect(sonnet45?.inputUsdPerToken).toBeCloseTo(3.0 / 1_000_000, 12);
 
-    const opus4 = byModel.get('claude-opus-4-20250514');
-    expect(opus4?.lifecycleState).toBe('legacy');
+    const opus45 = byModel.get('claude-opus-4-5-20251101');
+    expect(opus45?.lifecycleState).toBe('legacy');
 
     const sonnet4 = byModel.get('claude-sonnet-4-20250514');
     expect(sonnet4?.lifecycleState).toBe('deprecated');
     expect(sonnet4?.deprecatedAt).toEqual(new Date('2026-04-14'));
     expect(sonnet4?.retiresAt).toEqual(new Date('2026-06-15'));
-    expect(sonnet4?.replacementModel).toBe('claude-sonnet-4-5-20250929');
+    expect(sonnet4?.replacementModel).toBe('claude-sonnet-4-6');
 
     const retiredHaiku = byModel.get('claude-3-5-haiku-20241022');
     expect(retiredHaiku?.lifecycleState).toBe('retired');

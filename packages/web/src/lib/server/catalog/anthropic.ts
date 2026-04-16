@@ -43,18 +43,26 @@ export const ANTHROPIC_DEPRECATIONS_URL =
 // ---------------------------------------------------------------------------
 
 const ANTHROPIC_PRICING: Record<string, { input: number; output: number }> = {
-  'claude-opus-4-5-20251014': { input: 15.0 / 1_000_000, output: 75.0 / 1_000_000 },
-  'claude-opus-4-1-20250805': { input: 15.0 / 1_000_000, output: 75.0 / 1_000_000 },
-  'claude-opus-4-20250514': { input: 15.0 / 1_000_000, output: 75.0 / 1_000_000 },
-  'claude-sonnet-4-5-20250929': { input: 3.0 / 1_000_000, output: 15.0 / 1_000_000 },
-  'claude-sonnet-4-20250514': { input: 3.0 / 1_000_000, output: 15.0 / 1_000_000 },
+  // Current frontier (active)
+  'claude-opus-4-7': { input: 5.0 / 1_000_000, output: 25.0 / 1_000_000 },
+  'claude-sonnet-4-6': { input: 3.0 / 1_000_000, output: 15.0 / 1_000_000 },
+  'claude-haiku-4-5-20251001': { input: 1.0 / 1_000_000, output: 5.0 / 1_000_000 },
   'claude-haiku-4-5': { input: 1.0 / 1_000_000, output: 5.0 / 1_000_000 },
+  // Legacy
+  'claude-opus-4-6': { input: 5.0 / 1_000_000, output: 25.0 / 1_000_000 },
+  'claude-sonnet-4-5-20250929': { input: 3.0 / 1_000_000, output: 15.0 / 1_000_000 },
+  'claude-opus-4-5-20251101': { input: 5.0 / 1_000_000, output: 25.0 / 1_000_000 },
+  'claude-opus-4-1-20250805': { input: 15.0 / 1_000_000, output: 75.0 / 1_000_000 },
+  // Deprecated
+  'claude-sonnet-4-20250514': { input: 3.0 / 1_000_000, output: 15.0 / 1_000_000 },
+  'claude-opus-4-20250514': { input: 15.0 / 1_000_000, output: 75.0 / 1_000_000 },
+  'claude-3-haiku-20240307': { input: 0.25 / 1_000_000, output: 1.25 / 1_000_000 },
+  // Retired (kept for historical cost display)
   'claude-3-5-haiku-20241022': { input: 0.8 / 1_000_000, output: 4.0 / 1_000_000 },
   'claude-3-5-sonnet-20241022': { input: 3.0 / 1_000_000, output: 15.0 / 1_000_000 },
   'claude-3-5-sonnet-20240620': { input: 3.0 / 1_000_000, output: 15.0 / 1_000_000 },
   'claude-3-opus-20240229': { input: 15.0 / 1_000_000, output: 75.0 / 1_000_000 },
   'claude-3-sonnet-20240229': { input: 3.0 / 1_000_000, output: 15.0 / 1_000_000 },
-  'claude-3-haiku-20240307': { input: 0.25 / 1_000_000, output: 1.25 / 1_000_000 },
 };
 
 // ---------------------------------------------------------------------------

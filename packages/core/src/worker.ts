@@ -67,7 +67,7 @@ function positiveEnvInt(name: string, fallback: number): number {
 }
 
 function parseRequiredRetentionPolicy(name: string, fallback: RetentionPolicy): RetentionPolicy {
-  const raw = process.env[name] ?? fallback;
+  const raw = process.env[name] || fallback;
   const parsed = parseRetentionPolicy(raw);
   if (parsed === null) {
     throw new Error(`Invalid ${name}: '${raw}'. Expected 'on_ack' or 'Nd' (e.g. '7d', '30d').`);
