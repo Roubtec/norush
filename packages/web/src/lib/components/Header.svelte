@@ -55,6 +55,9 @@
         {/each}
       </ul>
       <div class="auth">
+        <span class="user-name">
+          {page.data.user.firstName ?? page.data.user.email}
+        </span>
         <a href="/auth/logout" class="link" data-sveltekit-reload>Log out</a>
       </div>
     {/if}
@@ -103,6 +106,14 @@
 
   .auth {
     margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .user-name {
+    font-size: 0.875rem;
+    color: var(--color-text-muted);
   }
 
   .link {
