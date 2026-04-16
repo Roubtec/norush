@@ -1,0 +1,17 @@
+<!--
+  Fixture: OpenAI page with an empty Next.js payload — the JS-only-render
+  case described in the task. Parser must return []. The refresh loop then
+  falls back to the seeded OPENAI_SEED list.
+-->
+<!doctype html>
+<html lang="en">
+  <head>
+    <title>Deprecations — OpenAI docs</title>
+  </head>
+  <body>
+    <div id="__next"></div>
+    <script id="__NEXT_DATA__" type="application/json">
+      { "props": { "pageProps": {} } }
+    </script>
+  </body>
+</html>
