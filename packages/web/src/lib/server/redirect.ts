@@ -1,3 +1,5 @@
+import { env } from '$env/dynamic/private';
+
 /**
  * Post-login redirect helpers.
  *
@@ -60,7 +62,7 @@ export const NEXT_COOKIE = 'norush_login_next';
 export const NEXT_COOKIE_OPTIONS = {
   path: '/',
   httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',
+  secure: env.NODE_ENV === 'production',
   sameSite: 'lax' as const,
   maxAge: 10 * 60,
 };

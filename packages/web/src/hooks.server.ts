@@ -8,6 +8,7 @@
  */
 
 import type { Handle } from '@sveltejs/kit';
+import { env } from '$env/dynamic/private';
 import { getSql } from '$lib/server/norush';
 import { validateSession, SESSION_COOKIE } from '$lib/server/auth';
 import { provisionUser } from '$lib/server/user';
@@ -16,11 +17,8 @@ let dbInitialized = false;
 let nextInitializationAttemptAt = 0;
 const INITIALIZATION_RETRY_DELAY_MS = 60_000;
 
-// Dev-only auth bypass. Hard-gated on NODE_ENV so a misconfigured production
-// deploy cannot silently grant unauthenticated access.
-const DEV_AUTH_BYPASS =
-  process.env.NORUSH_DEV_AUTH_BYPASS === '1' &&
-  (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test');
+// Dev-only auth bypass flag. Read at request time (inside handle) so that
+// env is fully populated from .env files before it is evaluated.
 
 const DEV_USER = {
   id: 'dev-user',
@@ -37,7 +35,7 @@ export const handle: Handle = async ({ event, resolve }) => {
   // -- Database init (once, with retry backoff) -----------------------------
   const now = Date.now();
 
-  if (!dbInitialized && process.env.DATABASE_URL && now >= nextInitializationAttemptAt) {
+  if (!dbInitialized && env.DATABASE_URL && now >= nextInitializationAttemptAt) {
     try {
       const db = getSql();
       await db`SELECT 1`;
@@ -53,6 +51,13 @@ export const handle: Handle = async ({ event, resolve }) => {
   // Skip auth for API routes that use token-based auth instead of session cookies.
   const publicPrefixes = ['/api/v1/'];
   const isPublic = publicPrefixes.some((p) => event.url.pathname.startsWith(p));
+
+  // Hard-gated on NODE_ENV so the bypass can never activate in a production
+  // deploy, while still working in both vite dev (host) and a dev-mode
+  // container (production build with NODE_ENV=development at runtime).
+  const DEV_AUTH_BYPASS =
+    env.NORUSH_DEV_AUTH_BYPASS === '1' &&
+    (env.NODE_ENV === 'development' || env.NODE_ENV === 'test');
 
   if (DEV_AUTH_BYPASS) {
     if (!devAuthWarned) {

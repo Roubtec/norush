@@ -9,6 +9,7 @@
  */
 
 import type postgres from 'postgres';
+import { env } from '$env/dynamic/private';
 import { encrypt, decrypt, deriveKey, maskApiKey } from '@norush/core';
 import { ulid } from 'ulidx';
 
@@ -51,7 +52,7 @@ let _masterKeyBuffer: Buffer | null = null;
 async function getMasterKey(): Promise<Buffer> {
   if (_masterKeyBuffer) return _masterKeyBuffer;
 
-  const raw = process.env.NORUSH_MASTER_KEY;
+  const raw = env.NORUSH_MASTER_KEY;
   if (!raw) {
     throw new Error('NORUSH_MASTER_KEY environment variable is required for API key encryption');
   }

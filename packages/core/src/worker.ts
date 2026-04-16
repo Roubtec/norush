@@ -101,7 +101,11 @@ async function main(): Promise<void> {
     );
   }
 
-  const sql = postgres(databaseUrl);
+  const sql = postgres(databaseUrl, {
+    onnotice: (notice) => {
+      console.log(`[postgres] ${notice.severity ?? 'NOTICE'} ${JSON.stringify(notice)}`);
+    },
+  });
 
   // Run database migrations before anything else to ensure the schema is
   // up-to-date, even if the worker starts before the first web request.

@@ -7,11 +7,7 @@
 
 import { redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
-import {
-  sanitizeNextPath,
-  NEXT_COOKIE,
-  NEXT_COOKIE_OPTIONS,
-} from '$lib/server/redirect';
+import { sanitizeNextPath, NEXT_COOKIE, NEXT_COOKIE_OPTIONS } from '$lib/server/redirect';
 
 export const load: PageServerLoad = async ({ locals, url, cookies }) => {
   const next = sanitizeNextPath(url.searchParams.get('next'));

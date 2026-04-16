@@ -6,6 +6,8 @@ const config = {
   preprocess: vitePreprocess(),
   kit: {
     adapter: adapter({ out: 'dist' }),
+    // Load .env files from the monorepo root, matching Vite's envDir config.
+    env: { dir: '../../' },
   },
 };
 

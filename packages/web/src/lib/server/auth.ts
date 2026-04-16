@@ -13,6 +13,7 @@
 
 import { WorkOS } from '@workos-inc/node';
 import type { User as WorkOSUser } from '@workos-inc/node';
+import { env } from '$env/dynamic/private';
 
 export type { WorkOSUser };
 
@@ -26,7 +27,7 @@ const SESSION_COOKIE_NAME = 'norush_session';
 const COOKIE_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
 
 function getEnvOrThrow(name: string): string {
-  const value = process.env[name];
+  const value = env[name];
   if (!value) {
     throw new Error(`Missing required environment variable: ${name}`);
   }
@@ -183,7 +184,7 @@ export const SESSION_COOKIE = SESSION_COOKIE_NAME;
 export const COOKIE_OPTIONS = {
   path: '/',
   httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',
+  secure: env.NODE_ENV === 'production',
   sameSite: 'lax' as const,
   maxAge: COOKIE_MAX_AGE_SECONDS,
 };

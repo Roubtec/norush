@@ -6,7 +6,18 @@
  */
 
 import postgres from 'postgres';
+import { env } from '$env/dynamic/private';
 import { PostgresStore, migrate, createNorush, type NorushEngine } from '@norush/core';
+
+function optionalEnvInt(name: string, value: string | undefined): number | undefined {
+  if (!value) return undefined;
+  const n = parseInt(value, 10);
+  if (Number.isNaN(n)) {
+    console.warn(`[norush] ${name} has invalid integer value "${value}", using default`);
+    return undefined;
+  }
+  return n;
+}
 
 let store: PostgresStore | undefined;
 let sql: postgres.Sql | undefined;
@@ -17,11 +28,15 @@ let sql: postgres.Sql | undefined;
  */
 export function getSql(): postgres.Sql {
   if (!sql) {
-    const url = process.env.DATABASE_URL;
+    const url = env.DATABASE_URL;
     if (!url) {
       throw new Error('DATABASE_URL environment variable is required');
     }
-    sql = postgres(url);
+    sql = postgres(url, {
+      onnotice: (notice) => {
+        console.log(`[postgres] ${notice.severity ?? 'NOTICE'} ${JSON.stringify(notice)}`);
+      },
+    });
   }
   return sql;
 }
@@ -44,6 +59,19 @@ export async function getEngine(): Promise<NorushEngine> {
       return createNorush({
         store,
         providers: {},
+        batching: {
+          flushIntervalMs: optionalEnvInt('NORUSH_FLUSH_INTERVAL_MS', env.NORUSH_FLUSH_INTERVAL_MS),
+          maxRequests: optionalEnvInt('NORUSH_MAX_REQUESTS', env.NORUSH_MAX_REQUESTS),
+        },
+        polling: {
+          intervalMs: optionalEnvInt('NORUSH_POLL_INTERVAL_MS', env.NORUSH_POLL_INTERVAL_MS),
+        },
+        delivery: {
+          tickIntervalMs: optionalEnvInt(
+            'NORUSH_DELIVERY_INTERVAL_MS',
+            env.NORUSH_DELIVERY_INTERVAL_MS,
+          ),
+        },
       });
     })();
   }
