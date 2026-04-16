@@ -51,7 +51,7 @@ describe('PostgresStore', () => {
       if (!state.sql) throw new Error('Database not available');
       // Truncate all mutable tables so each contract test starts with an empty
       // store. Reference data (users, user_api_keys) is preserved.
-      await state.sql`TRUNCATE results, requests, batches, event_log, user_limits`;
+      await state.sql`TRUNCATE results, requests, batches, event_log, user_limits, provider_catalog`;
       return new PostgresStore(state.sql);
     },
     () => !state.available,

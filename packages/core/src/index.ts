@@ -41,6 +41,9 @@ export type {
   UserLimitsInput,
   SlidingWindow,
   RateLimitResult,
+  ProviderLifecycleState,
+  ProviderCatalogEntry,
+  ProviderCatalogUpsert,
 } from './types.js';
 
 // ---------------------------------------------------------------------------

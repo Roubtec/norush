@@ -19,6 +19,9 @@ import type {
   NewEvent,
   NewRequest,
   NewResult,
+  ProviderCatalogEntry,
+  ProviderCatalogUpsert,
+  ProviderName,
   Request,
   Result,
   SlidingWindow,
@@ -762,11 +765,87 @@ export class PostgresStore implements Store {
 
     return { total: succeeded + failed, succeeded, failed };
   }
+
+  // -- Provider catalog (pricing + lifecycle) -------------------------------
+
+  async getProviderCatalogEntry(
+    provider: ProviderName,
+    model: string,
+  ): Promise<ProviderCatalogEntry | null> {
+    const rows = await this.sql`
+      SELECT * FROM provider_catalog
+      WHERE provider = ${provider} AND model = ${model}
+    `;
+    return rows.length > 0 ? toProviderCatalogEntry(rows[0] as Record<string, unknown>) : null;
+  }
+
+  async listProviderCatalog(provider?: ProviderName): Promise<ProviderCatalogEntry[]> {
+    const rows = provider
+      ? await this.sql`
+          SELECT * FROM provider_catalog
+          WHERE provider = ${provider}
+          ORDER BY provider, display_label
+        `
+      : await this.sql`
+          SELECT * FROM provider_catalog
+          ORDER BY provider, display_label
+        `;
+    return rows.map((r) => toProviderCatalogEntry(r as Record<string, unknown>));
+  }
+
+  async upsertProviderCatalogEntry(entry: ProviderCatalogUpsert): Promise<ProviderCatalogEntry> {
+    const fetchedAt = entry.fetchedAt ?? new Date();
+    const rows = await this.sql`
+      INSERT INTO provider_catalog (
+        provider, model, display_label,
+        input_usd_per_token, output_usd_per_token,
+        lifecycle_state, deprecated_at, retires_at, replacement_model, fetched_at
+      )
+      VALUES (
+        ${entry.provider},
+        ${entry.model},
+        ${entry.displayLabel},
+        ${entry.inputUsdPerToken},
+        ${entry.outputUsdPerToken},
+        ${entry.lifecycleState},
+        ${entry.deprecatedAt},
+        ${entry.retiresAt},
+        ${entry.replacementModel},
+        ${fetchedAt}
+      )
+      ON CONFLICT (provider, model) DO UPDATE SET
+        display_label        = EXCLUDED.display_label,
+        input_usd_per_token  = EXCLUDED.input_usd_per_token,
+        output_usd_per_token = EXCLUDED.output_usd_per_token,
+        lifecycle_state      = EXCLUDED.lifecycle_state,
+        deprecated_at        = EXCLUDED.deprecated_at,
+        retires_at           = EXCLUDED.retires_at,
+        replacement_model    = EXCLUDED.replacement_model,
+        fetched_at           = EXCLUDED.fetched_at
+      RETURNING *
+    `;
+    return toProviderCatalogEntry(rows[0] as Record<string, unknown>);
+  }
 }
 
 // ---------------------------------------------------------------------------
 // UserLimits mapper
 // ---------------------------------------------------------------------------
+
+function toProviderCatalogEntry(row: Record<string, unknown>): ProviderCatalogEntry {
+  return {
+    provider: row.provider as ProviderName,
+    model: row.model as string,
+    displayLabel: row.display_label as string,
+    inputUsdPerToken: row.input_usd_per_token != null ? Number(row.input_usd_per_token) : null,
+    outputUsdPerToken: row.output_usd_per_token != null ? Number(row.output_usd_per_token) : null,
+    lifecycleState: row.lifecycle_state as ProviderCatalogEntry['lifecycleState'],
+    deprecatedAt: row.deprecated_at ? new Date(row.deprecated_at as string) : null,
+    retiresAt: row.retires_at ? new Date(row.retires_at as string) : null,
+    replacementModel: (row.replacement_model as string) ?? null,
+    fetchedAt: new Date(row.fetched_at as string),
+  };
+}
 
 function toUserLimits(row: Record<string, unknown>): UserLimits {
   return {

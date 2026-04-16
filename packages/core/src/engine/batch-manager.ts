@@ -148,7 +148,13 @@ export class BatchManager {
       const queued = await this.store.getQueuedRequests(this.batching.maxRequests);
       if (queued.length === 0) return;
 
-      const groups = this.groupRequests(queued);
+      // Execution-time lifecycle preflight: short-circuit retired-model
+      // requests directly to failed_final before any batching work happens.
+      // Surviving requests fall through to the normal batch path.
+      const live = await this.preflightLifecycle(queued);
+      if (live.length === 0) return;
+
+      const groups = this.groupRequests(live);
 
       for (const [, requests] of groups) {
         const chunks = this.splitByProviderLimits(requests);
@@ -160,6 +166,94 @@ export class BatchManager {
     } finally {
       this.flushing = false;
     }
+  }
+
+  /**
+   * Execution-time lifecycle gate.
+   *
+   * For each queued request, look up the catalog entry and short-circuit
+   * retired models directly to `failed_final` without a provider call. Any
+   * request whose (provider, model) is `active`, `legacy`, `deprecated`,
+   * or absent from the catalog falls through and is submitted normally.
+   *
+   * **Why we gate here instead of silently rewriting the user's model choice.**
+   * Anthropic's public deprecation policy commits to "at least 60 days notice"
+   * between marking a model deprecated and actually retiring it (observed:
+   * Sonnet 4 got 62 days, Haiku 3.5 got 62 days, Haiku 3 got 60). NoRush's
+   * longest pipeline — a 24-hour batch window plus its retry budget — fits
+   * comfortably inside that window with ~50 days of margin, so a request
+   * submitted against an active model cannot realistically reach retirement
+   * before execution. This preflight is defense-in-depth for the rare case
+   * of an unannounced short-notice shutdown. We deliberately do NOT rewrite
+   * the request to a "replacement" model here, because doing so changes the
+   * semantics of the submission without the caller's consent — the catalog
+   * still carries `replacement_model` so a future UI surface can suggest
+   * it, but the rewrite decision belongs to the user, not the engine.
+   *
+   * Why preflight instead of after-the-fact error classification: providers
+   * do not expose a machine-readable "retired" error code (Anthropic returns
+   * a prose `invalid_request_error`; OpenAI returns a generic `404` /
+   * `model_not_found`). A post-hoc classifier would have to string-match
+   * prose and drift every time a provider reworded a message.
+   *
+   * @returns Requests that survived the gate and should proceed to batching.
+   */
+  private async preflightLifecycle(queued: Request[]): Promise<Request[]> {
+    // Cache lookups per (provider, model) so a batch with many requests for
+    // the same model makes one catalog round-trip, not N.
+    const cache = new Map<string, Awaited<ReturnType<Store['getProviderCatalogEntry']>>>();
+    const survivors: Request[] = [];
+
+    for (const req of queued) {
+      const key = `${req.provider}::${req.model}`;
+      let entry = cache.get(key);
+      if (entry === undefined) {
+        entry = await this.store.getProviderCatalogEntry(req.provider, req.model);
+        cache.set(key, entry);
+      }
+
+      // Unknown model: catalog may lag upstream releases, so we don't want
+      // a false positive against a just-launched model. Submit normally.
+      // Deprecated and legacy: still callable — submit normally.
+      if (!entry || entry.lifecycleState !== 'retired') {
+        survivors.push(req);
+        continue;
+      }
+
+      // Retired model: fail the request directly without contacting the
+      // provider or using any retry budget. Repackager only re-queues
+      // `failed`/`expired`, so `failed_final` is terminal by design.
+      const errorPayload = {
+        reason: 'model_retired' as const,
+        model: req.model,
+        provider: req.provider,
+        retiredAt: entry.retiresAt ? entry.retiresAt.toISOString() : null,
+        replacementModel: entry.replacementModel,
+      };
+
+      await this.store.updateRequest(req.id, {
+        status: 'failed_final',
+      });
+
+      this.telemetry.counter('requests_retired_model_blocked', 1, {
+        provider: req.provider,
+        model: req.model,
+      });
+
+      this.telemetry.event('request_retired_model_blocked', {
+        requestId: req.id,
+        ...errorPayload,
+      });
+
+      await this.store.logEvent({
+        entityType: 'request',
+        entityId: req.id,
+        event: 'failed_final_retired_model',
+        details: errorPayload,
+      });
+    }
+
+    return survivors;
   }
 
   // -------------------------------------------------------------------------

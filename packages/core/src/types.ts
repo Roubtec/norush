@@ -343,6 +343,54 @@ export interface SlidingWindow {
 }
 
 // ---------------------------------------------------------------------------
+// Provider catalog (pricing + lifecycle)
+// ---------------------------------------------------------------------------
+
+/**
+ * Normalised lifecycle state for a provider model.
+ *
+ * Modelled on Anthropic's published taxonomy. OpenAI's "shutdown" maps to
+ * `retired` (see `packages/web/src/lib/server/catalog/openai.ts`).
+ */
+export type ProviderLifecycleState = 'active' | 'legacy' | 'deprecated' | 'retired';
+
+/**
+ * One row of the provider catalog: pricing + lifecycle for a single
+ * (provider, model) pair.
+ */
+export interface ProviderCatalogEntry {
+  provider: ProviderName;
+  model: string;
+  displayLabel: string;
+  /** USD per input token. NULL if provider hasn't published a price yet. */
+  inputUsdPerToken: number | null;
+  /** USD per output token. NULL if provider hasn't published a price yet. */
+  outputUsdPerToken: number | null;
+  lifecycleState: ProviderLifecycleState;
+  deprecatedAt: Date | null;
+  retiresAt: Date | null;
+  replacementModel: string | null;
+  fetchedAt: Date;
+}
+
+/**
+ * Fields required to upsert a catalog row. Matches `ProviderCatalogEntry`
+ * but `fetchedAt` is set by the store when not provided.
+ */
+export interface ProviderCatalogUpsert {
+  provider: ProviderName;
+  model: string;
+  displayLabel: string;
+  inputUsdPerToken: number | null;
+  outputUsdPerToken: number | null;
+  lifecycleState: ProviderLifecycleState;
+  deprecatedAt: Date | null;
+  retiresAt: Date | null;
+  replacementModel: string | null;
+  fetchedAt?: Date;
+}
+
+// ---------------------------------------------------------------------------
 // Rate limit check result
 // ---------------------------------------------------------------------------
 

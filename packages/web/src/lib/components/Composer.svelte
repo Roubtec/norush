@@ -3,48 +3,104 @@
 
   Designed to feel low-pressure — "Submit for later" button label.
   The user selects a provider + model, types a message, and submits.
+
+  Model options now come from the server via the `catalog` prop — the
+  page load fetches them from the provider_catalog table with hardcoded
+  fallbacks in $lib/models.ts. Only `active` and `legacy` models are
+  offered for selection; `deprecated` and `retired` rows are hidden to
+  avoid the Composer letting a user queue a batch that will then fail at
+  the provider after the model retires. See task 5-01 for rationale.
 -->
 <script>
+  import { FALLBACK_MODELS } from "$lib/models.js";
+
+  /**
+   * @typedef {{
+   *   provider: "claude" | "openai";
+   *   model: string;
+   *   displayLabel: string;
+   *   lifecycleState: "active" | "legacy" | "deprecated" | "retired";
+   *   deprecatedAt: string | null;
+   *   retiresAt: string | null;
+   *   replacementModel: string | null;
+   * }} CatalogModel
+   */
+
   /**
    * @type {{
    *   onSubmit: (data: { provider: string; model: string; content: string }) => Promise<void>;
    *   disabled?: boolean;
+   *   catalog?: CatalogModel[];
    * }}
    */
-  let { onSubmit, disabled = false } = $props();
+  let { onSubmit, disabled = false, catalog = [] } = $props();
 
+  /**
+   * Selectable models: anything from the server catalog or fallback seed
+   * that is currently `active` or `legacy`. `deprecated` and `retired`
+   * rows are filtered out — see the comment block at the top of the file.
+   */
+  let selectableCatalog = $derived(buildSelectableCatalog(catalog));
+
+  /**
+   * @param {CatalogModel[]} list
+   * @returns {CatalogModel[]}
+   */
+  function buildSelectableCatalog(list) {
+    const source = list.length > 0 ? list : FALLBACK_MODELS;
+    /** @type {CatalogModel[]} */
+    const selectable = [];
+    for (const entry of source) {
+      if (entry.lifecycleState !== "active" && entry.lifecycleState !== "legacy") continue;
+      selectable.push({
+        provider: entry.provider,
+        model: entry.model,
+        displayLabel: entry.displayLabel,
+        lifecycleState: entry.lifecycleState,
+        deprecatedAt: entry.deprecatedAt ?? null,
+        retiresAt: entry.retiresAt ?? null,
+        replacementModel: entry.replacementModel ?? null,
+      });
+    }
+    return selectable;
+  }
+
+  /** @type {"claude" | "openai"} */
   let provider = $state("claude");
-  let model = $state("claude-sonnet-4-20250514");
   let content = $state("");
   let submitting = $state(false);
   let error = $state(/** @type {string | null} */ (null));
 
-  /** Model options per provider. */
-  const MODEL_OPTIONS = /** @type {Record<string, Array<{ value: string; label: string }>>} */ ({
-    claude: [
-      { value: "claude-sonnet-4-20250514", label: "Claude Sonnet 4" },
-      { value: "claude-opus-4-20250514", label: "Claude Opus 4" },
-      { value: "claude-3-5-haiku-20241022", label: "Claude 3.5 Haiku" },
-    ],
-    openai: [
-      { value: "gpt-4o", label: "GPT-4o" },
-      { value: "gpt-4o-mini", label: "GPT-4o mini" },
-    ],
-  });
+  let modelOptions = $derived(
+    selectableCatalog.filter((m) => m.provider === provider),
+  );
 
-  let modelOptions = $derived(MODEL_OPTIONS[provider] ?? []);
+  /** Default model: first active option for the current provider (or empty). */
+  // svelte-ignore state_referenced_locally — initial snapshot is fine; the $effect below keeps the selection valid as the catalog or provider changes.
+  let model = $state(pickDefault("claude", selectableCatalog));
 
-  /** Reset model selection when provider changes. */
+  /**
+   * @param {string} prov
+   * @param {CatalogModel[]} list
+   */
+  function pickDefault(prov, list) {
+    const active = list.find((m) => m.provider === prov && m.lifecycleState === "active");
+    if (active) return active.model;
+    const any = list.find((m) => m.provider === prov);
+    return any ? any.model : "";
+  }
+
+  /** Reset model selection when provider changes or the catalog shifts. */
   $effect(() => {
-    const opts = MODEL_OPTIONS[provider];
-    if (opts && opts.length > 0) {
-      model = opts[0].value;
-    }
+    const opts = selectableCatalog.filter((m) => m.provider === provider);
+    // If the currently selected model is still valid, keep it.
+    if (opts.some((m) => m.model === model)) return;
+    model = pickDefault(provider, selectableCatalog);
   });
 
   async function handleSubmit() {
     const trimmed = content.trim();
-    if (!trimmed || submitting || disabled) return;
+    if (!trimmed || submitting || disabled || !model) return;
 
     error = null;
     submitting = true;
@@ -88,8 +144,10 @@
     <div class="field">
       <label for="composer-model">Model</label>
       <select id="composer-model" bind:value={model} disabled={submitting || disabled}>
-        {#each modelOptions as opt}
-          <option value={opt.value}>{opt.label}</option>
+        {#each modelOptions as opt (opt.model)}
+          <option value={opt.model}>
+            {opt.displayLabel}{opt.lifecycleState === "legacy" ? " (legacy)" : ""}
+          </option>
         {/each}
       </select>
     </div>
@@ -111,7 +169,7 @@
     <button
       class="btn-submit"
       onclick={handleSubmit}
-      disabled={submitting || disabled || content.trim().length === 0}
+      disabled={submitting || disabled || content.trim().length === 0 || !model}
     >
       {submitting ? "Submitting..." : "Submit for later"}
     </button>

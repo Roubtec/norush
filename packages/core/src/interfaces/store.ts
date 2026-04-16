@@ -9,6 +9,9 @@ import type {
   NewRequest,
   NewResult,
   NorushId,
+  ProviderCatalogEntry,
+  ProviderCatalogUpsert,
+  ProviderName,
   Request,
   Result,
   ResultId,
@@ -187,4 +190,30 @@ export interface Store {
    * Returns counts of succeeded and failed batches within the window.
    */
   getSlidingWindow(userId: string, windowMs: number): Promise<SlidingWindow>;
+
+  // -- Provider catalog (pricing + lifecycle) -------------------------------
+
+  /**
+   * Look up a single (provider, model) catalog row, or null if none exists.
+   * Used by the execution-time preflight in BatchManager to gate retired
+   * models, and by the web savings helper to source live rates.
+   */
+  getProviderCatalogEntry(
+    provider: ProviderName,
+    model: string,
+  ): Promise<ProviderCatalogEntry | null>;
+
+  /**
+   * List catalog rows. Optionally filter by provider. Ordered by
+   * (provider, display_label) for stable UI rendering.
+   */
+  listProviderCatalog(provider?: ProviderName): Promise<ProviderCatalogEntry[]>;
+
+  /**
+   * Upsert a catalog row (replace on primary key `(provider, model)`).
+   * Callers must populate every field explicitly — parsers are responsible
+   * for normalising missing upstream fields to `null` / `'active'` before
+   * persisting.
+   */
+  upsertProviderCatalogEntry(entry: ProviderCatalogUpsert): Promise<ProviderCatalogEntry>;
 }

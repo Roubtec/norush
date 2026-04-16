@@ -26,9 +26,10 @@
    *       createdAt: string;
    *     } | null;
    *   }>;
+   *   rates?: { getRate(provider: string, model: string): { input: number; output: number } | null | undefined } | null;
    * }}
    */
-  let { messages } = $props();
+  let { messages, rates = null } = $props();
 
   /** Messages displayed oldest-first (reversed from the DESC query). */
   let orderedMessages = $derived([...messages].reverse());
@@ -61,6 +62,7 @@
         status={message.status}
         createdAt={message.createdAt}
         result={message.result}
+        {rates}
       />
     {/each}
   {/if}

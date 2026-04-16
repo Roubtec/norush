@@ -1091,4 +1091,189 @@ describe('BatchManager', () => {
       expect(callOrder).toEqual(['key_low', 'key_mid', 'key_high']);
     });
   });
+
+  // -------------------------------------------------------------------------
+  // Execution-time lifecycle preflight
+  // -------------------------------------------------------------------------
+
+  describe('lifecycle preflight', () => {
+    it('short-circuits retired-model requests to failed_final without submitting', async () => {
+      await store.upsertProviderCatalogEntry({
+        provider: 'claude',
+        model: 'claude-3-5-haiku-20241022',
+        displayLabel: 'Claude 3.5 Haiku',
+        inputUsdPerToken: 0.8 / 1_000_000,
+        outputUsdPerToken: 4.0 / 1_000_000,
+        lifecycleState: 'retired',
+        deprecatedAt: new Date('2025-12-19'),
+        retiresAt: new Date('2026-02-19'),
+        replacementModel: 'claude-haiku-4-5',
+      });
+
+      const req = await store.createRequest(makeNewRequest({ model: 'claude-3-5-haiku-20241022' }));
+
+      const telemetry = { counter: vi.fn(), histogram: vi.fn(), event: vi.fn() };
+      const provider = mockProvider();
+      const providers = new Map([['claude', provider]]);
+      const manager = new BatchManager({
+        store,
+        providers,
+        batching: defaultBatching(),
+        telemetry,
+      });
+
+      await manager.flush();
+
+      // Must not submit to the provider.
+      expect(provider.submitBatch).not.toHaveBeenCalled();
+
+      // Request should be terminal.
+      const stored = await store.getRequest(req.id);
+      expect(stored?.status).toBe('failed_final');
+      expect(stored?.batchId).toBeNull();
+
+      // Telemetry event fires with the full structured payload so the UI can
+      // surface a useful explanation rather than "provider returned an error".
+      expect(telemetry.event).toHaveBeenCalledWith(
+        'request_retired_model_blocked',
+        expect.objectContaining({
+          requestId: req.id,
+          reason: 'model_retired',
+          model: 'claude-3-5-haiku-20241022',
+          provider: 'claude',
+          replacementModel: 'claude-haiku-4-5',
+        }),
+      );
+      expect(telemetry.counter).toHaveBeenCalledWith(
+        'requests_retired_model_blocked',
+        1,
+        expect.objectContaining({ provider: 'claude', model: 'claude-3-5-haiku-20241022' }),
+      );
+
+      // Event log captures the failure reason for later UI surfacing.
+      const events = store.getEvents();
+      const failureEvent = events.find((e) => e.event === 'failed_final_retired_model');
+      expect(failureEvent).toBeTruthy();
+      expect(failureEvent?.details).toMatchObject({
+        reason: 'model_retired',
+        replacementModel: 'claude-haiku-4-5',
+      });
+    });
+
+    it('still submits deprecated-model requests (Composer already hides them from new submissions)', async () => {
+      await store.upsertProviderCatalogEntry({
+        provider: 'claude',
+        model: 'claude-sonnet-4-20250514',
+        displayLabel: 'Claude Sonnet 4',
+        inputUsdPerToken: 3.0 / 1_000_000,
+        outputUsdPerToken: 15.0 / 1_000_000,
+        lifecycleState: 'deprecated',
+        deprecatedAt: new Date('2026-04-14'),
+        retiresAt: new Date('2026-06-15'),
+        replacementModel: 'claude-sonnet-4-5-20250929',
+      });
+
+      await store.createRequest(makeNewRequest({ model: 'claude-sonnet-4-20250514' }));
+
+      const provider = mockProvider();
+      const providers = new Map([['claude', provider]]);
+      const manager = new BatchManager({
+        store,
+        providers,
+        batching: defaultBatching(),
+      });
+
+      await manager.flush();
+
+      expect(provider.submitBatch).toHaveBeenCalledOnce();
+    });
+
+    it('submits requests whose model is absent from the catalog (unknown/just-released)', async () => {
+      // Catalog is empty for this model; the catalog may lag upstream and
+      // we don't want to false-positive against a just-released model.
+      await store.createRequest(makeNewRequest({ model: 'claude-brand-new-20260501' }));
+
+      const provider = mockProvider();
+      const providers = new Map([['claude', provider]]);
+      const manager = new BatchManager({
+        store,
+        providers,
+        batching: defaultBatching(),
+      });
+
+      await manager.flush();
+
+      expect(provider.submitBatch).toHaveBeenCalledOnce();
+    });
+
+    it('submits active-model requests normally', async () => {
+      await store.upsertProviderCatalogEntry({
+        provider: 'claude',
+        model: 'claude-sonnet-4-5-20250929',
+        displayLabel: 'Claude Sonnet 4.5',
+        inputUsdPerToken: 3.0 / 1_000_000,
+        outputUsdPerToken: 15.0 / 1_000_000,
+        lifecycleState: 'active',
+        deprecatedAt: null,
+        retiresAt: null,
+        replacementModel: null,
+      });
+
+      await store.createRequest(makeNewRequest({ model: 'claude-sonnet-4-5-20250929' }));
+
+      const provider = mockProvider();
+      const providers = new Map([['claude', provider]]);
+      const manager = new BatchManager({
+        store,
+        providers,
+        batching: defaultBatching(),
+      });
+
+      await manager.flush();
+
+      expect(provider.submitBatch).toHaveBeenCalledOnce();
+    });
+
+    it('mixes retired and active requests: retired ones short-circuit, active ones still submit', async () => {
+      await store.upsertProviderCatalogEntry({
+        provider: 'claude',
+        model: 'claude-3-5-haiku-20241022',
+        displayLabel: 'Claude 3.5 Haiku',
+        inputUsdPerToken: 0.8 / 1_000_000,
+        outputUsdPerToken: 4.0 / 1_000_000,
+        lifecycleState: 'retired',
+        deprecatedAt: new Date('2025-12-19'),
+        retiresAt: new Date('2026-02-19'),
+        replacementModel: 'claude-haiku-4-5',
+      });
+
+      const retiredReq = await store.createRequest(
+        makeNewRequest({ model: 'claude-3-5-haiku-20241022' }),
+      );
+      const activeReq = await store.createRequest(
+        makeNewRequest({ model: 'claude-sonnet-4-5-20250929' }),
+      );
+
+      const provider = mockProvider();
+      const providers = new Map([['claude', provider]]);
+      const manager = new BatchManager({
+        store,
+        providers,
+        batching: defaultBatching(),
+      });
+
+      await manager.flush();
+
+      // Only the active request reaches the provider adapter.
+      expect(provider.submitBatch).toHaveBeenCalledOnce();
+      const submitted = (provider.submitBatch as ReturnType<typeof vi.fn>).mock
+        .calls[0][0] as NorushRequest[];
+      expect(submitted).toHaveLength(1);
+      expect(submitted[0].id).toBe(activeReq.id);
+
+      // Retired request is terminal, active request is batched.
+      expect((await store.getRequest(retiredReq.id))?.status).toBe('failed_final');
+      expect((await store.getRequest(activeReq.id))?.status).toBe('batched');
+    });
+  });
 });

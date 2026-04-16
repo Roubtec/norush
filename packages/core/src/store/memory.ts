@@ -18,6 +18,9 @@ import type {
   NewEvent,
   NewRequest,
   NewResult,
+  ProviderCatalogEntry,
+  ProviderCatalogUpsert,
+  ProviderName,
   Request,
   Result,
   SlidingWindow,
@@ -34,6 +37,7 @@ export class MemoryStore implements Store {
   private results = new Map<string, Result>();
   private events: EventLogEntry[] = [];
   private userLimits = new Map<string, UserLimits>();
+  private providerCatalog = new Map<string, ProviderCatalogEntry>();
 
   // -- Request lifecycle ----------------------------------------------------
 
@@ -718,5 +722,45 @@ export class MemoryStore implements Store {
     }
 
     return { total: succeeded + failed, succeeded, failed };
+  }
+
+  // -- Provider catalog (pricing + lifecycle) -------------------------------
+
+  async getProviderCatalogEntry(
+    provider: ProviderName,
+    model: string,
+  ): Promise<ProviderCatalogEntry | null> {
+    const entry = this.providerCatalog.get(`${provider}::${model}`);
+    return entry ? structuredClone(entry) : null;
+  }
+
+  async listProviderCatalog(provider?: ProviderName): Promise<ProviderCatalogEntry[]> {
+    const rows: ProviderCatalogEntry[] = [];
+    for (const entry of this.providerCatalog.values()) {
+      if (provider && entry.provider !== provider) continue;
+      rows.push(structuredClone(entry));
+    }
+    rows.sort((a, b) => {
+      if (a.provider !== b.provider) return a.provider.localeCompare(b.provider);
+      return a.displayLabel.localeCompare(b.displayLabel);
+    });
+    return rows;
+  }
+
+  async upsertProviderCatalogEntry(entry: ProviderCatalogUpsert): Promise<ProviderCatalogEntry> {
+    const record: ProviderCatalogEntry = {
+      provider: entry.provider,
+      model: entry.model,
+      displayLabel: entry.displayLabel,
+      inputUsdPerToken: entry.inputUsdPerToken,
+      outputUsdPerToken: entry.outputUsdPerToken,
+      lifecycleState: entry.lifecycleState,
+      deprecatedAt: entry.deprecatedAt,
+      retiresAt: entry.retiresAt,
+      replacementModel: entry.replacementModel,
+      fetchedAt: entry.fetchedAt ?? new Date(),
+    };
+    this.providerCatalog.set(`${entry.provider}::${entry.model}`, record);
+    return structuredClone(record);
   }
 }

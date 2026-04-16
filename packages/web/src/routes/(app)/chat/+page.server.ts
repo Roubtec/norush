@@ -1,14 +1,17 @@
 /**
  * Server load for the chat page.
  *
- * Fetches the user's messages with results on initial page load.
+ * Fetches the user's messages with results on initial page load and the
+ * current provider catalog so the Composer + savings calculations use
+ * server-fetched rates and lifecycle metadata.
  * Subsequent updates arrive via client-side polling of /api/results.
  */
 
 import { redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
-import { getSql } from '$lib/server/norush';
+import { getSql, getEngine, getStore } from '$lib/server/norush';
 import { listMessages } from '$lib/server/messages';
+import { listAvailableModels, type AvailableModel } from '$lib/server/catalog';
 
 export const load: PageServerLoad = async ({ locals }) => {
   if (!locals.user) {
@@ -32,9 +35,22 @@ export const load: PageServerLoad = async ({ locals }) => {
     loadError = 'Failed to load messages. Please try again.';
   }
 
+  // Load the provider catalog so the Composer can render per-model
+  // lifecycle hints and the savings calculation can use live per-model
+  // rates. On error we fall back to the hardcoded seed inside
+  // listAvailableModels — a broken DB here should not block the chat UI.
+  let catalog: AvailableModel[] = [];
+  try {
+    await getEngine();
+    catalog = await listAvailableModels(getStore());
+  } catch (err) {
+    console.error('[chat] Failed to load provider catalog:', err);
+  }
+
   return {
     messages,
     loadError,
     loadedAt,
+    catalog,
   };
 };

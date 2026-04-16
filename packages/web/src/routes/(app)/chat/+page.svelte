@@ -8,6 +8,7 @@
   import MessageList from "$lib/components/MessageList.svelte";
   import Composer from "$lib/components/Composer.svelte";
   import { calculateSavings } from "$lib/savings.js";
+  import { FALLBACK_MODELS } from "$lib/models.js";
 
   let { data } = $props();
 
@@ -42,6 +43,41 @@
   /** Last poll timestamp to fetch only new results. */
   let lastPollAt = $state(initialLoadedAt);
 
+  /**
+   * Per-(provider, model) rate lookup built from the same effective catalog
+   * source used by the model picker. When the server load falls back to an
+   * empty catalog, keep savings aligned by using the same fallback models
+   * instead of dropping back to provider-level default pricing.
+   */
+  // svelte-ignore state_referenced_locally — catalog is loaded once at page-load time; per-catalog refresh requires a reload anyway.
+  const effectiveCatalog =
+    Array.isArray(data.catalog) && data.catalog.length > 0 ? data.catalog : [...FALLBACK_MODELS];
+  const ratesOverride = buildRatesOverride(effectiveCatalog);
+
+  /**
+   * @param {{ provider: string; model: string; inputUsdPerToken: number | null; outputUsdPerToken: number | null }[]} catalog
+   */
+  function buildRatesOverride(catalog) {
+    const idx = new Map();
+    for (const entry of catalog) {
+      if (entry.inputUsdPerToken != null && entry.outputUsdPerToken != null) {
+        idx.set(`${entry.provider}::${entry.model}`, {
+          input: entry.inputUsdPerToken,
+          output: entry.outputUsdPerToken,
+        });
+      }
+    }
+    return {
+      /**
+       * @param {string} provider
+       * @param {string} model
+       */
+      getRate(provider, model) {
+        return idx.get(`${provider}::${model}`) ?? null;
+      },
+    };
+  }
+
   /** Whether we have any pending/in-progress messages that need polling. */
   let hasPending = $derived(
     messages.some(
@@ -61,6 +97,7 @@
           m.provider,
           m.result?.inputTokens,
           m.result?.outputTokens,
+          { model: m.model, rates: ratesOverride },
         ),
       0,
     ),
@@ -167,9 +204,9 @@
     <div class="alert alert-error">{data.loadError}</div>
   {/if}
 
-  <MessageList {messages} />
+  <MessageList {messages} rates={ratesOverride} />
 
-  <Composer onSubmit={handleSubmit} />
+  <Composer onSubmit={handleSubmit} catalog={data.catalog ?? []} />
 </section>
 
 <style>

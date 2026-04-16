@@ -1,0 +1,51 @@
+<!--
+  Fixture: representative OpenAI deprecations page where the __NEXT_DATA__
+  payload carries the model list. The parser walks arbitrary JSON trees for
+  objects that look like model records, so the exact nesting here doesn't
+  have to match the live page — it just has to be realistic.
+-->
+<!doctype html>
+<html lang="en">
+  <head>
+    <title>Deprecations — OpenAI docs</title>
+  </head>
+  <body>
+    <div id="__next"></div>
+    <script id="__NEXT_DATA__" type="application/json">
+      {
+        "props": {
+          "pageProps": {
+            "deprecations": {
+              "models": [
+                {
+                  "model": "gpt-4o",
+                  "name": "GPT-4o",
+                  "status": "active"
+                },
+                {
+                  "model": "gpt-4o-mini",
+                  "name": "GPT-4o mini",
+                  "status": "active"
+                },
+                {
+                  "model": "gpt-4-turbo",
+                  "name": "GPT-4 Turbo",
+                  "status": "legacy",
+                  "replacement_model": "gpt-4o"
+                },
+                {
+                  "model": "gpt-3.5-turbo-0613",
+                  "name": "GPT-3.5 Turbo (0613)",
+                  "status": "shutdown",
+                  "deprecated_at": "2023-09-13",
+                  "shutdown_at": "2024-06-13",
+                  "replacement_model": "gpt-3.5-turbo"
+                }
+              ]
+            }
+          }
+        }
+      }
+    </script>
+  </body>
+</html>

@@ -1,18 +1,27 @@
 <!--
   CostIndicator: displays estimated savings from batch processing.
 
-  Calculates savings based on the 50% discount batch APIs provide
-  over standard real-time API rates.
+  Uses the server-fetched per-model rate when a `rates` override is
+  provided, otherwise falls back to the hardcoded per-provider table in
+  $lib/savings.
 -->
 <script>
   import { calculateSavings } from "$lib/savings.js";
 
   /**
-   * @type {{ provider: string; inputTokens: number; outputTokens: number }}
+   * @type {{
+   *   provider: string;
+   *   model?: string;
+   *   inputTokens: number;
+   *   outputTokens: number;
+   *   rates?: { getRate(provider: string, model: string): { input: number; output: number } | null | undefined } | null;
+   * }}
    */
-  let { provider, inputTokens, outputTokens } = $props();
+  let { provider, model, inputTokens, outputTokens, rates = null } = $props();
 
-  let savings = $derived(calculateSavings(provider, inputTokens, outputTokens));
+  let savings = $derived(
+    calculateSavings(provider, inputTokens, outputTokens, { model, rates }),
+  );
 
   let formattedSavings = $derived(
     savings < 0.01 && savings > 0
