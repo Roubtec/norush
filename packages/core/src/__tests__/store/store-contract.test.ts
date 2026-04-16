@@ -860,5 +860,109 @@ export function runStoreContractTests(
         expect(stats.avgTurnaroundMs).toBeLessThan(70_000);
       });
     });
+
+    describe('Provider catalog', () => {
+      test('getProviderCatalogEntry returns null when no row exists', async () => {
+        store = await factory();
+        const entry = await store.getProviderCatalogEntry('claude', 'claude-nonexistent');
+        expect(entry).toBeNull();
+      });
+
+      test('upsertProviderCatalogEntry inserts a new row and returns it', async () => {
+        store = await factory();
+        const upserted = await store.upsertProviderCatalogEntry({
+          provider: 'claude',
+          model: 'claude-sonnet-4-5-20250929',
+          displayLabel: 'Claude Sonnet 4.5',
+          inputUsdPerToken: 3.0 / 1_000_000,
+          outputUsdPerToken: 15.0 / 1_000_000,
+          lifecycleState: 'active',
+          deprecatedAt: null,
+          retiresAt: null,
+          replacementModel: null,
+        });
+
+        expect(upserted.provider).toBe('claude');
+        expect(upserted.model).toBe('claude-sonnet-4-5-20250929');
+        expect(upserted.displayLabel).toBe('Claude Sonnet 4.5');
+        expect(upserted.lifecycleState).toBe('active');
+        expect(upserted.fetchedAt).toBeInstanceOf(Date);
+
+        const fetched = await store.getProviderCatalogEntry('claude', 'claude-sonnet-4-5-20250929');
+        expect(fetched).not.toBeNull();
+        expect(fetched?.displayLabel).toBe('Claude Sonnet 4.5');
+      });
+
+      test('upsertProviderCatalogEntry replaces an existing row on primary key conflict', async () => {
+        store = await factory();
+        await store.upsertProviderCatalogEntry({
+          provider: 'claude',
+          model: 'claude-sonnet-4-20250514',
+          displayLabel: 'Claude Sonnet 4',
+          inputUsdPerToken: 3.0 / 1_000_000,
+          outputUsdPerToken: 15.0 / 1_000_000,
+          lifecycleState: 'active',
+          deprecatedAt: null,
+          retiresAt: null,
+          replacementModel: null,
+        });
+
+        // Second upsert marks it deprecated.
+        await store.upsertProviderCatalogEntry({
+          provider: 'claude',
+          model: 'claude-sonnet-4-20250514',
+          displayLabel: 'Claude Sonnet 4',
+          inputUsdPerToken: 3.0 / 1_000_000,
+          outputUsdPerToken: 15.0 / 1_000_000,
+          lifecycleState: 'deprecated',
+          deprecatedAt: new Date('2026-04-14'),
+          retiresAt: new Date('2026-06-15'),
+          replacementModel: 'claude-sonnet-4-5-20250929',
+        });
+
+        const fetched = await store.getProviderCatalogEntry('claude', 'claude-sonnet-4-20250514');
+        expect(fetched?.lifecycleState).toBe('deprecated');
+        expect(fetched?.deprecatedAt).toEqual(new Date('2026-04-14'));
+        expect(fetched?.retiresAt).toEqual(new Date('2026-06-15'));
+        expect(fetched?.replacementModel).toBe('claude-sonnet-4-5-20250929');
+      });
+
+      test('listProviderCatalog returns all rows, optionally filtered by provider', async () => {
+        store = await factory();
+        await store.upsertProviderCatalogEntry({
+          provider: 'claude',
+          model: 'claude-sonnet-4-5-20250929',
+          displayLabel: 'Claude Sonnet 4.5',
+          inputUsdPerToken: 3.0 / 1_000_000,
+          outputUsdPerToken: 15.0 / 1_000_000,
+          lifecycleState: 'active',
+          deprecatedAt: null,
+          retiresAt: null,
+          replacementModel: null,
+        });
+        await store.upsertProviderCatalogEntry({
+          provider: 'openai',
+          model: 'gpt-4o',
+          displayLabel: 'GPT-4o',
+          inputUsdPerToken: 2.5 / 1_000_000,
+          outputUsdPerToken: 10.0 / 1_000_000,
+          lifecycleState: 'active',
+          deprecatedAt: null,
+          retiresAt: null,
+          replacementModel: null,
+        });
+
+        const all = await store.listProviderCatalog();
+        expect(all).toHaveLength(2);
+
+        const claudeOnly = await store.listProviderCatalog('claude');
+        expect(claudeOnly).toHaveLength(1);
+        expect(claudeOnly[0].provider).toBe('claude');
+
+        const openaiOnly = await store.listProviderCatalog('openai');
+        expect(openaiOnly).toHaveLength(1);
+        expect(openaiOnly[0].provider).toBe('openai');
+      });
+    });
   });
 }
