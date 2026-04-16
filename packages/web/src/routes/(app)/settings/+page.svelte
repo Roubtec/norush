@@ -200,15 +200,15 @@
   }
 
   .alert-error {
-    background: #fef2f2;
-    color: #991b1b;
-    border: 1px solid #fecaca;
+    background: var(--color-error-bg);
+    color: var(--color-error-text-strong);
+    border: 1px solid var(--color-error-border);
   }
 
   .alert-success {
-    background: #f0fdf4;
-    color: #166534;
-    border: 1px solid #bbf7d0;
+    background: var(--color-success-bg);
+    color: var(--color-success-text);
+    border: 1px solid var(--color-success-border);
   }
 
   /* Keys table */
@@ -251,7 +251,7 @@
 
   .masked-key code {
     font-size: 0.8125rem;
-    background: #f3f4f6;
+    background: var(--color-surface-muted);
     padding: 0.125rem 0.375rem;
     border-radius: 0.25rem;
   }
@@ -262,8 +262,8 @@
 
   .btn-delete {
     background: none;
-    border: 1px solid #fca5a5;
-    color: #dc2626;
+    border: 1px solid var(--color-error-border-strong);
+    color: var(--color-error-text);
     padding: 0.25rem 0.75rem;
     border-radius: 0.25rem;
     cursor: pointer;
@@ -271,7 +271,7 @@
   }
 
   .btn-delete:hover {
-    background: #fef2f2;
+    background: var(--color-error-bg);
   }
 
   /* Add form */
@@ -316,7 +316,7 @@
 
   .field-error {
     font-size: 0.8125rem;
-    color: #dc2626;
+    color: var(--color-error-text);
   }
 
   .field-hint {
@@ -327,7 +327,7 @@
   .btn-add {
     align-self: flex-start;
     background: var(--color-primary);
-    color: #fff;
+    color: var(--color-on-primary);
     border: none;
     padding: 0.5rem 1.25rem;
     border-radius: 0.375rem;

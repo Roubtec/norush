@@ -64,7 +64,10 @@
     stats.costBreakdown.map((entry) => ({
       label: `${entry.provider}/${entry.model}`,
       value: entry.batchCostUsd,
-      color: entry.provider === 'openai' ? '#10b981' : '#2563eb',
+      color:
+        entry.provider === 'openai'
+          ? 'var(--color-provider-openai)'
+          : 'var(--color-provider-claude)',
     })),
   );
 
@@ -73,7 +76,10 @@
     stats.costBreakdown.map((entry) => ({
       label: `${entry.provider}/${entry.model}`,
       value: entry.inputTokens + entry.outputTokens,
-      color: entry.provider === 'openai' ? '#10b981' : '#2563eb',
+      color:
+        entry.provider === 'openai'
+          ? 'var(--color-provider-openai)'
+          : 'var(--color-provider-claude)',
     })),
   );
 
@@ -253,14 +259,14 @@
   }
 
   .period-btn:hover {
-    background: #f3f4f6;
+    background: var(--color-surface-muted);
     color: var(--color-text);
     text-decoration: none;
   }
 
   .period-btn.active {
     background: var(--color-primary);
-    color: #fff;
+    color: var(--color-on-primary);
   }
 
   .period-btn.active:hover {
@@ -275,9 +281,9 @@
   }
 
   .alert-error {
-    background: #fef2f2;
-    color: #991b1b;
-    border: 1px solid #fecaca;
+    background: var(--color-error-bg);
+    color: var(--color-error-text-strong);
+    border: 1px solid var(--color-error-border);
   }
 
   /* Stats grid */

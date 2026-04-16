@@ -50,7 +50,7 @@
 
   .utilization-bar {
     height: 0.5rem;
-    background: #f3f4f6;
+    background: var(--color-surface-muted);
     border-radius: 9999px;
     overflow: hidden;
   }
@@ -63,11 +63,11 @@
   }
 
   .utilization-fill.warning {
-    background: #f59e0b;
+    background: var(--color-warning);
   }
 
   .utilization-fill.danger {
-    background: #ef4444;
+    background: var(--color-danger);
   }
 
   .utilization-pct {

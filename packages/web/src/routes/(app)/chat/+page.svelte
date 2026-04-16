@@ -233,9 +233,9 @@
 
   .total-savings {
     font-size: 0.8125rem;
-    color: #166534;
-    background: #f0fdf4;
-    border: 1px solid #bbf7d0;
+    color: var(--color-success-text);
+    background: var(--color-success-bg);
+    border: 1px solid var(--color-success-border);
     padding: 0.25rem 0.75rem;
     border-radius: 9999px;
   }
@@ -248,8 +248,8 @@
   }
 
   .alert-error {
-    background: #fef2f2;
-    color: #991b1b;
-    border: 1px solid #fecaca;
+    background: var(--color-error-bg);
+    color: var(--color-error-text-strong);
+    border: 1px solid var(--color-error-border);
   }
 </style>
