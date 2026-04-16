@@ -56,7 +56,7 @@ describe('fetchOpenAICatalog', () => {
     const entries = await fetchOpenAICatalog(fakeFetch);
     expect(entries.length).toBe(OPENAI_SEED.length);
     // Must include a baseline active model.
-    expect(entries.find((e) => e.model === 'gpt-4o')?.lifecycleState).toBe('active');
+    expect(entries.find((e) => e.model === 'gpt-5')?.lifecycleState).toBe('active');
   });
 
   it('falls back to the seed list when live fetch throws (network error)', async () => {
