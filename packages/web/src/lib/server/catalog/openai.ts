@@ -31,18 +31,54 @@ export const OPENAI_DEPRECATIONS_URL = 'https://platform.openai.com/docs/depreca
 // hardcoded rather than live-fetched.
 // ---------------------------------------------------------------------------
 
+// All prices are batch/flex tier (= 50% of standard). NoRush submits via
+// the Batch API so this is the cost users actually incur. Source:
+// https://developers.openai.com/api/docs/pricing (batch tab), 2026-04-16.
 const OPENAI_PRICING: Record<string, { input: number; output: number }> = {
-  // Frontier (gpt-5.x pricing not yet published at time of writing)
-  'gpt-4.1': { input: 2.0 / 1_000_000, output: 8.0 / 1_000_000 },
-  // Legacy
-  'gpt-4o': { input: 2.5 / 1_000_000, output: 10.0 / 1_000_000 },
-  'gpt-4o-mini': { input: 0.15 / 1_000_000, output: 0.6 / 1_000_000 },
-  'gpt-4-turbo': { input: 10.0 / 1_000_000, output: 30.0 / 1_000_000 },
-  'gpt-4': { input: 30.0 / 1_000_000, output: 60.0 / 1_000_000 },
-  'gpt-3.5-turbo': { input: 0.5 / 1_000_000, output: 1.5 / 1_000_000 },
+  // gpt-5.4 family
+  'gpt-5.4': { input: 1.25 / 1_000_000, output: 7.5 / 1_000_000 },
+  'gpt-5.4-mini': { input: 0.375 / 1_000_000, output: 2.25 / 1_000_000 },
+  'gpt-5.4-nano': { input: 0.10 / 1_000_000, output: 0.625 / 1_000_000 },
+  'gpt-5.4-pro': { input: 15.0 / 1_000_000, output: 90.0 / 1_000_000 },
+  // gpt-5.2 family
+  'gpt-5.2': { input: 0.875 / 1_000_000, output: 7.0 / 1_000_000 },
+  'gpt-5.2-pro': { input: 10.5 / 1_000_000, output: 84.0 / 1_000_000 },
+  // gpt-5.1 / gpt-5 family
+  'gpt-5.1': { input: 0.625 / 1_000_000, output: 5.0 / 1_000_000 },
+  'gpt-5': { input: 0.625 / 1_000_000, output: 5.0 / 1_000_000 },
+  'gpt-5-mini': { input: 0.125 / 1_000_000, output: 1.0 / 1_000_000 },
+  'gpt-5-nano': { input: 0.025 / 1_000_000, output: 0.20 / 1_000_000 },
+  'gpt-5-pro': { input: 7.5 / 1_000_000, output: 60.0 / 1_000_000 },
+  // gpt-4.1 family
+  'gpt-4.1': { input: 1.0 / 1_000_000, output: 4.0 / 1_000_000 },
+  'gpt-4.1-mini': { input: 0.20 / 1_000_000, output: 0.80 / 1_000_000 },
+  'gpt-4.1-nano': { input: 0.05 / 1_000_000, output: 0.20 / 1_000_000 },
+  // gpt-4o family (legacy)
+  'gpt-4o': { input: 1.25 / 1_000_000, output: 5.0 / 1_000_000 },
+  'gpt-4o-2024-05-13': { input: 2.5 / 1_000_000, output: 7.5 / 1_000_000 },
+  'gpt-4o-mini': { input: 0.075 / 1_000_000, output: 0.30 / 1_000_000 },
+  // Reasoning models
+  'o1': { input: 7.5 / 1_000_000, output: 30.0 / 1_000_000 },
+  'o1-pro': { input: 75.0 / 1_000_000, output: 300.0 / 1_000_000 },
+  'o3': { input: 1.0 / 1_000_000, output: 4.0 / 1_000_000 },
+  'o3-pro': { input: 10.0 / 1_000_000, output: 40.0 / 1_000_000 },
+  'o4-mini': { input: 0.55 / 1_000_000, output: 2.2 / 1_000_000 },
+  'o3-mini': { input: 0.55 / 1_000_000, output: 2.2 / 1_000_000 },
+  // gpt-4-turbo family (legacy)
+  'gpt-4-turbo': { input: 5.0 / 1_000_000, output: 15.0 / 1_000_000 },
+  'gpt-4-turbo-2024-04-09': { input: 5.0 / 1_000_000, output: 15.0 / 1_000_000 },
+  'gpt-4-0613': { input: 15.0 / 1_000_000, output: 30.0 / 1_000_000 },
+  // gpt-3.5 family
+  'gpt-3.5-turbo': { input: 0.25 / 1_000_000, output: 0.75 / 1_000_000 },
+  'gpt-3.5-turbo-0125': { input: 0.25 / 1_000_000, output: 0.75 / 1_000_000 },
+  'gpt-3.5-turbo-1106': { input: 1.0 / 1_000_000, output: 2.0 / 1_000_000 },
   // Retired — kept for savings display on historical messages
-  'gpt-3.5-turbo-0613': { input: 0.5 / 1_000_000, output: 1.5 / 1_000_000 },
-  'gpt-3.5-turbo-1106': { input: 0.5 / 1_000_000, output: 1.5 / 1_000_000 },
+  'gpt-4-32k': { input: 30.0 / 1_000_000, output: 60.0 / 1_000_000 },
+  'gpt-4-0125-preview': { input: 5.0 / 1_000_000, output: 15.0 / 1_000_000 },
+  'gpt-4-1106-preview': { input: 5.0 / 1_000_000, output: 15.0 / 1_000_000 },
+  'gpt-4-0314': { input: 15.0 / 1_000_000, output: 30.0 / 1_000_000 },
+  'gpt-3.5-turbo-0613': { input: 1.5 / 1_000_000, output: 2.0 / 1_000_000 },
+  'o1-mini': { input: 0.55 / 1_000_000, output: 2.2 / 1_000_000 },
 };
 
 // ---------------------------------------------------------------------------
@@ -51,16 +87,20 @@ const OPENAI_PRICING: Record<string, { input: number; output: number }> = {
 // page; the Composer relies on `retired`/`deprecated` being accurate.
 // ---------------------------------------------------------------------------
 
-// Seed last updated 2026-04-16 from https://developers.openai.com/api/docs/deprecations
-// and https://developers.openai.com/api/docs/models/all.
+// Seed last updated 2026-04-16.
+// Sources: https://developers.openai.com/api/docs/deprecations
+//          https://developers.openai.com/api/docs/models/all
+//          https://developers.openai.com/api/docs/pricing (batch tab)
 const SEED: ParsedCatalogEntry[] = [
   // -- Active (frontier) ----------------------------------------------------
+
+  // gpt-5.4 family
   {
     provider: 'openai',
     model: 'gpt-5.4',
     displayLabel: 'GPT-5.4',
-    inputUsdPerToken: null,
-    outputUsdPerToken: null,
+    inputUsdPerToken: OPENAI_PRICING['gpt-5.4'].input,
+    outputUsdPerToken: OPENAI_PRICING['gpt-5.4'].output,
     lifecycleState: 'active',
     deprecatedAt: null,
     retiresAt: null,
@@ -70,8 +110,8 @@ const SEED: ParsedCatalogEntry[] = [
     provider: 'openai',
     model: 'gpt-5.4-pro',
     displayLabel: 'GPT-5.4 Pro',
-    inputUsdPerToken: null,
-    outputUsdPerToken: null,
+    inputUsdPerToken: OPENAI_PRICING['gpt-5.4-pro'].input,
+    outputUsdPerToken: OPENAI_PRICING['gpt-5.4-pro'].output,
     lifecycleState: 'active',
     deprecatedAt: null,
     retiresAt: null,
@@ -81,8 +121,8 @@ const SEED: ParsedCatalogEntry[] = [
     provider: 'openai',
     model: 'gpt-5.4-mini',
     displayLabel: 'GPT-5.4 mini',
-    inputUsdPerToken: null,
-    outputUsdPerToken: null,
+    inputUsdPerToken: OPENAI_PRICING['gpt-5.4-mini'].input,
+    outputUsdPerToken: OPENAI_PRICING['gpt-5.4-mini'].output,
     lifecycleState: 'active',
     deprecatedAt: null,
     retiresAt: null,
@@ -92,8 +132,45 @@ const SEED: ParsedCatalogEntry[] = [
     provider: 'openai',
     model: 'gpt-5.4-nano',
     displayLabel: 'GPT-5.4 nano',
-    inputUsdPerToken: null,
-    outputUsdPerToken: null,
+    inputUsdPerToken: OPENAI_PRICING['gpt-5.4-nano'].input,
+    outputUsdPerToken: OPENAI_PRICING['gpt-5.4-nano'].output,
+    lifecycleState: 'active',
+    deprecatedAt: null,
+    retiresAt: null,
+    replacementModel: null,
+  },
+
+  // gpt-5.2 family
+  {
+    provider: 'openai',
+    model: 'gpt-5.2',
+    displayLabel: 'GPT-5.2',
+    inputUsdPerToken: OPENAI_PRICING['gpt-5.2'].input,
+    outputUsdPerToken: OPENAI_PRICING['gpt-5.2'].output,
+    lifecycleState: 'active',
+    deprecatedAt: null,
+    retiresAt: null,
+    replacementModel: null,
+  },
+  {
+    provider: 'openai',
+    model: 'gpt-5.2-pro',
+    displayLabel: 'GPT-5.2 Pro',
+    inputUsdPerToken: OPENAI_PRICING['gpt-5.2-pro'].input,
+    outputUsdPerToken: OPENAI_PRICING['gpt-5.2-pro'].output,
+    lifecycleState: 'active',
+    deprecatedAt: null,
+    retiresAt: null,
+    replacementModel: null,
+  },
+
+  // gpt-5.1 / gpt-5 family
+  {
+    provider: 'openai',
+    model: 'gpt-5.1',
+    displayLabel: 'GPT-5.1',
+    inputUsdPerToken: OPENAI_PRICING['gpt-5.1'].input,
+    outputUsdPerToken: OPENAI_PRICING['gpt-5.1'].output,
     lifecycleState: 'active',
     deprecatedAt: null,
     retiresAt: null,
@@ -103,8 +180,8 @@ const SEED: ParsedCatalogEntry[] = [
     provider: 'openai',
     model: 'gpt-5',
     displayLabel: 'GPT-5',
-    inputUsdPerToken: null,
-    outputUsdPerToken: null,
+    inputUsdPerToken: OPENAI_PRICING['gpt-5'].input,
+    outputUsdPerToken: OPENAI_PRICING['gpt-5'].output,
     lifecycleState: 'active',
     deprecatedAt: null,
     retiresAt: null,
@@ -114,8 +191,8 @@ const SEED: ParsedCatalogEntry[] = [
     provider: 'openai',
     model: 'gpt-5-mini',
     displayLabel: 'GPT-5 mini',
-    inputUsdPerToken: null,
-    outputUsdPerToken: null,
+    inputUsdPerToken: OPENAI_PRICING['gpt-5-mini'].input,
+    outputUsdPerToken: OPENAI_PRICING['gpt-5-mini'].output,
     lifecycleState: 'active',
     deprecatedAt: null,
     retiresAt: null,
@@ -125,13 +202,26 @@ const SEED: ParsedCatalogEntry[] = [
     provider: 'openai',
     model: 'gpt-5-nano',
     displayLabel: 'GPT-5 nano',
-    inputUsdPerToken: null,
-    outputUsdPerToken: null,
+    inputUsdPerToken: OPENAI_PRICING['gpt-5-nano'].input,
+    outputUsdPerToken: OPENAI_PRICING['gpt-5-nano'].output,
     lifecycleState: 'active',
     deprecatedAt: null,
     retiresAt: null,
     replacementModel: null,
   },
+  {
+    provider: 'openai',
+    model: 'gpt-5-pro',
+    displayLabel: 'GPT-5 Pro',
+    inputUsdPerToken: OPENAI_PRICING['gpt-5-pro'].input,
+    outputUsdPerToken: OPENAI_PRICING['gpt-5-pro'].output,
+    lifecycleState: 'active',
+    deprecatedAt: null,
+    retiresAt: null,
+    replacementModel: null,
+  },
+
+  // gpt-4.1 family
   {
     provider: 'openai',
     model: 'gpt-4.1',
@@ -143,13 +233,47 @@ const SEED: ParsedCatalogEntry[] = [
     retiresAt: null,
     replacementModel: null,
   },
-  // Reasoning models — active replacements for o1-preview / o1-mini
+  {
+    provider: 'openai',
+    model: 'gpt-4.1-mini',
+    displayLabel: 'GPT-4.1 mini',
+    inputUsdPerToken: OPENAI_PRICING['gpt-4.1-mini'].input,
+    outputUsdPerToken: OPENAI_PRICING['gpt-4.1-mini'].output,
+    lifecycleState: 'active',
+    deprecatedAt: null,
+    retiresAt: null,
+    replacementModel: null,
+  },
+  {
+    provider: 'openai',
+    model: 'gpt-4.1-nano',
+    displayLabel: 'GPT-4.1 nano',
+    inputUsdPerToken: OPENAI_PRICING['gpt-4.1-nano'].input,
+    outputUsdPerToken: OPENAI_PRICING['gpt-4.1-nano'].output,
+    lifecycleState: 'active',
+    deprecatedAt: null,
+    retiresAt: null,
+    replacementModel: null,
+  },
+
+  // Reasoning models
   {
     provider: 'openai',
     model: 'o3',
     displayLabel: 'o3',
-    inputUsdPerToken: null,
-    outputUsdPerToken: null,
+    inputUsdPerToken: OPENAI_PRICING['o3'].input,
+    outputUsdPerToken: OPENAI_PRICING['o3'].output,
+    lifecycleState: 'active',
+    deprecatedAt: null,
+    retiresAt: null,
+    replacementModel: null,
+  },
+  {
+    provider: 'openai',
+    model: 'o3-pro',
+    displayLabel: 'o3 Pro',
+    inputUsdPerToken: OPENAI_PRICING['o3-pro'].input,
+    outputUsdPerToken: OPENAI_PRICING['o3-pro'].output,
     lifecycleState: 'active',
     deprecatedAt: null,
     retiresAt: null,
@@ -159,14 +283,27 @@ const SEED: ParsedCatalogEntry[] = [
     provider: 'openai',
     model: 'o4-mini',
     displayLabel: 'o4-mini',
-    inputUsdPerToken: null,
-    outputUsdPerToken: null,
+    inputUsdPerToken: OPENAI_PRICING['o4-mini'].input,
+    outputUsdPerToken: OPENAI_PRICING['o4-mini'].output,
     lifecycleState: 'active',
     deprecatedAt: null,
     retiresAt: null,
     replacementModel: null,
   },
+  {
+    provider: 'openai',
+    model: 'o1-pro',
+    displayLabel: 'o1 Pro',
+    inputUsdPerToken: OPENAI_PRICING['o1-pro'].input,
+    outputUsdPerToken: OPENAI_PRICING['o1-pro'].output,
+    lifecycleState: 'active',
+    deprecatedAt: null,
+    retiresAt: null,
+    replacementModel: null,
+  },
+
   // -- Legacy (still callable; not listed as deprecated) --------------------
+
   {
     provider: 'openai',
     model: 'gpt-4o',
@@ -191,6 +328,17 @@ const SEED: ParsedCatalogEntry[] = [
   },
   {
     provider: 'openai',
+    model: 'gpt-4o-2024-05-13',
+    displayLabel: 'GPT-4o (2024-05-13)',
+    inputUsdPerToken: OPENAI_PRICING['gpt-4o-2024-05-13'].input,
+    outputUsdPerToken: OPENAI_PRICING['gpt-4o-2024-05-13'].output,
+    lifecycleState: 'legacy',
+    deprecatedAt: null,
+    retiresAt: null,
+    replacementModel: 'gpt-4o',
+  },
+  {
+    provider: 'openai',
     model: 'gpt-4-turbo',
     displayLabel: 'GPT-4 Turbo',
     inputUsdPerToken: OPENAI_PRICING['gpt-4-turbo'].input,
@@ -202,16 +350,73 @@ const SEED: ParsedCatalogEntry[] = [
   },
   {
     provider: 'openai',
+    model: 'gpt-4-turbo-2024-04-09',
+    displayLabel: 'GPT-4 Turbo (2024-04-09)',
+    inputUsdPerToken: OPENAI_PRICING['gpt-4-turbo-2024-04-09'].input,
+    outputUsdPerToken: OPENAI_PRICING['gpt-4-turbo-2024-04-09'].output,
+    lifecycleState: 'legacy',
+    deprecatedAt: null,
+    retiresAt: null,
+    replacementModel: 'gpt-4.1',
+  },
+  {
+    provider: 'openai',
+    model: 'gpt-4-0613',
+    displayLabel: 'GPT-4 (0613)',
+    inputUsdPerToken: OPENAI_PRICING['gpt-4-0613'].input,
+    outputUsdPerToken: OPENAI_PRICING['gpt-4-0613'].output,
+    lifecycleState: 'legacy',
+    deprecatedAt: null,
+    retiresAt: null,
+    replacementModel: 'gpt-4.1',
+  },
+  {
+    provider: 'openai',
     model: 'o1',
     displayLabel: 'o1',
-    inputUsdPerToken: null,
-    outputUsdPerToken: null,
+    inputUsdPerToken: OPENAI_PRICING['o1'].input,
+    outputUsdPerToken: OPENAI_PRICING['o1'].output,
     lifecycleState: 'legacy',
     deprecatedAt: null,
     retiresAt: null,
     replacementModel: 'o3',
   },
+  {
+    provider: 'openai',
+    model: 'o3-mini',
+    displayLabel: 'o3-mini',
+    inputUsdPerToken: OPENAI_PRICING['o3-mini'].input,
+    outputUsdPerToken: OPENAI_PRICING['o3-mini'].output,
+    lifecycleState: 'legacy',
+    deprecatedAt: null,
+    retiresAt: null,
+    replacementModel: 'o4-mini',
+  },
+  {
+    provider: 'openai',
+    model: 'gpt-3.5-turbo',
+    displayLabel: 'GPT-3.5 Turbo',
+    inputUsdPerToken: OPENAI_PRICING['gpt-3.5-turbo'].input,
+    outputUsdPerToken: OPENAI_PRICING['gpt-3.5-turbo'].output,
+    lifecycleState: 'legacy',
+    deprecatedAt: null,
+    retiresAt: null,
+    replacementModel: 'gpt-5-mini',
+  },
+  {
+    provider: 'openai',
+    model: 'gpt-3.5-turbo-0125',
+    displayLabel: 'GPT-3.5 Turbo (0125)',
+    inputUsdPerToken: OPENAI_PRICING['gpt-3.5-turbo-0125'].input,
+    outputUsdPerToken: OPENAI_PRICING['gpt-3.5-turbo-0125'].output,
+    lifecycleState: 'legacy',
+    deprecatedAt: null,
+    retiresAt: null,
+    replacementModel: 'gpt-5-mini',
+  },
+
   // -- Deprecated (shutdown date not yet reached as of 2026-04-16) ----------
+
   {
     provider: 'openai',
     model: 'gpt-3.5-turbo-1106',
@@ -223,15 +428,17 @@ const SEED: ParsedCatalogEntry[] = [
     retiresAt: new Date('2026-09-28'),
     replacementModel: 'gpt-5.4-mini',
   },
+
   // -- Retired (shutdown date passed as of 2026-04-16) ----------------------
   // Kept so the batch-manager preflight can gate any in-flight jobs that
   // were submitted against these models before they were retired.
+
   {
     provider: 'openai',
     model: 'gpt-4-0125-preview',
     displayLabel: 'GPT-4 Turbo Preview (0125)',
-    inputUsdPerToken: null,
-    outputUsdPerToken: null,
+    inputUsdPerToken: OPENAI_PRICING['gpt-4-0125-preview'].input,
+    outputUsdPerToken: OPENAI_PRICING['gpt-4-0125-preview'].output,
     lifecycleState: 'retired',
     deprecatedAt: new Date('2025-09-26'),
     retiresAt: new Date('2026-03-26'),
@@ -241,8 +448,8 @@ const SEED: ParsedCatalogEntry[] = [
     provider: 'openai',
     model: 'gpt-4-1106-preview',
     displayLabel: 'GPT-4 Turbo Preview (1106)',
-    inputUsdPerToken: null,
-    outputUsdPerToken: null,
+    inputUsdPerToken: OPENAI_PRICING['gpt-4-1106-preview'].input,
+    outputUsdPerToken: OPENAI_PRICING['gpt-4-1106-preview'].output,
     lifecycleState: 'retired',
     deprecatedAt: new Date('2025-09-26'),
     retiresAt: new Date('2026-03-26'),
@@ -252,12 +459,23 @@ const SEED: ParsedCatalogEntry[] = [
     provider: 'openai',
     model: 'gpt-4-0314',
     displayLabel: 'GPT-4 (0314)',
-    inputUsdPerToken: null,
-    outputUsdPerToken: null,
+    inputUsdPerToken: OPENAI_PRICING['gpt-4-0314'].input,
+    outputUsdPerToken: OPENAI_PRICING['gpt-4-0314'].output,
     lifecycleState: 'retired',
     deprecatedAt: new Date('2025-09-26'),
     retiresAt: new Date('2026-03-26'),
     replacementModel: 'gpt-4.1',
+  },
+  {
+    provider: 'openai',
+    model: 'gpt-4-32k',
+    displayLabel: 'GPT-4 32K',
+    inputUsdPerToken: OPENAI_PRICING['gpt-4-32k'].input,
+    outputUsdPerToken: OPENAI_PRICING['gpt-4-32k'].output,
+    lifecycleState: 'retired',
+    deprecatedAt: new Date('2024-06-06'),
+    retiresAt: new Date('2025-06-06'),
+    replacementModel: 'gpt-4o',
   },
   {
     provider: 'openai',
@@ -285,8 +503,8 @@ const SEED: ParsedCatalogEntry[] = [
     provider: 'openai',
     model: 'o1-mini',
     displayLabel: 'o1-mini',
-    inputUsdPerToken: null,
-    outputUsdPerToken: null,
+    inputUsdPerToken: OPENAI_PRICING['o1-mini'].input,
+    outputUsdPerToken: OPENAI_PRICING['o1-mini'].output,
     lifecycleState: 'retired',
     deprecatedAt: new Date('2025-04-28'),
     retiresAt: new Date('2025-10-27'),
