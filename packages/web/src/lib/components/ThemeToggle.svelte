@@ -12,8 +12,9 @@
   avoid a theme flash; this component only runs after hydration and mirrors
   that logic when the user changes the choice at runtime.
 
-  When mode is "system", we subscribe to matchMedia so the palette follows
-  the OS preference if the user flips it while the page is open.
+  When mode is "system", we clear any explicit `data-theme` override so CSS
+  `prefers-color-scheme` follows OS preference changes while the page is open.
+  A matchMedia listener tracks the OS preference to keep the aria-label accurate.
 -->
 <script>
   import { onMount } from "svelte";
@@ -27,6 +28,9 @@
 
   /** Tracks whether hydration is complete; SSR render stays neutral. */
   let mounted = $state(false);
+
+  /** Tracks OS dark-mode preference to keep aria-label accurate in system mode. */
+  let systemPrefersDark = $state(false);
 
   /**
    * Apply `data-theme` on <html> for light/dark; clear it for system so
@@ -75,13 +79,23 @@
     } catch {
       // Ignore; keep default "system".
     }
+
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    systemPrefersDark = mq.matches;
+    const onOsChange = (/** @type {MediaQueryListEvent} */ e) => {
+      systemPrefersDark = e.matches;
+    };
+    mq.addEventListener("change", onOsChange);
+
     mounted = true;
+
+    return () => mq.removeEventListener("change", onOsChange);
   });
 
   /** Human labels for the current mode, shown as tooltip/aria-label. */
   let label = $derived(
     mode === "system"
-      ? "Theme: system (click to switch to light)"
+      ? `Theme: system — OS is using ${systemPrefersDark ? "dark" : "light"} (click to switch to light)`
       : mode === "light"
         ? "Theme: light (click to switch to dark)"
         : "Theme: dark (click to switch to system)",
