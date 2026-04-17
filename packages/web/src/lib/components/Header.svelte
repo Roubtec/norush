@@ -15,6 +15,7 @@
 -->
 <script>
   import { page } from "$app/state";
+  import ThemeToggle from "./ThemeToggle.svelte";
 
   /** @type {Array<{ href: string; label: string }>} */
   const links = [
@@ -58,7 +59,12 @@
         <span class="user-name">
           {page.data.user.firstName ?? page.data.user.email}
         </span>
+        <ThemeToggle />
         <a href="/auth/logout" class="link" data-sveltekit-reload>Log out</a>
+      </div>
+    {:else}
+      <div class="auth">
+        <ThemeToggle />
       </div>
     {/if}
   </nav>
@@ -130,17 +136,17 @@
   }
 
   .link:hover {
-    background: #f3f4f6;
+    background: var(--color-surface-muted);
     color: var(--color-text);
     text-decoration: none;
   }
 
   .link.active {
     color: var(--color-primary);
-    background: #eff6ff;
+    background: var(--color-primary-subtle-bg);
   }
 
   .link.active:hover {
-    background: #dbeafe;
+    background: var(--color-primary-subtle-bg-hover);
   }
 </style>

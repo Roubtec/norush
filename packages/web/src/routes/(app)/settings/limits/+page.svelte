@@ -220,15 +220,15 @@
   }
 
   .alert-error {
-    background: #fef2f2;
-    color: #991b1b;
-    border: 1px solid #fecaca;
+    background: var(--color-error-bg);
+    color: var(--color-error-text-strong);
+    border: 1px solid var(--color-error-border);
   }
 
   .alert-success {
-    background: #f0fdf4;
-    color: #166534;
-    border: 1px solid #bbf7d0;
+    background: var(--color-success-bg);
+    color: var(--color-success-text);
+    border: 1px solid var(--color-success-border);
   }
 
   /* Usage summary */
@@ -247,8 +247,8 @@
     flex-direction: column;
     gap: 0.25rem;
     padding: 1rem;
-    background: var(--color-surface, #f9fafb);
-    border: 1px solid var(--color-border, #e5e7eb);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
     border-radius: 0.5rem;
   }
 
@@ -257,7 +257,7 @@
     font-weight: 500;
     text-transform: uppercase;
     letter-spacing: 0.025em;
-    color: var(--color-text-muted, #6b7280);
+    color: var(--color-text-muted);
   }
 
   .usage-value {
@@ -268,7 +268,7 @@
   .usage-cap {
     font-size: 0.875rem;
     font-weight: 400;
-    color: var(--color-text-muted, #6b7280);
+    color: var(--color-text-muted);
   }
 
   .usage-date {
@@ -277,7 +277,7 @@
 
   /* Config form */
   .config-section {
-    border-top: 1px solid var(--color-border, #e5e7eb);
+    border-top: 1px solid var(--color-border);
     padding-top: 1.5rem;
   }
 
@@ -301,33 +301,33 @@
 
   input {
     padding: 0.5rem 0.75rem;
-    border: 1px solid var(--color-border, #e5e7eb);
+    border: 1px solid var(--color-border);
     border-radius: 0.375rem;
     font-size: 0.875rem;
-    background: var(--color-surface, #fff);
-    color: var(--color-text, #111827);
+    background: var(--color-surface);
+    color: var(--color-text);
   }
 
   input:focus {
-    outline: 2px solid var(--color-primary, #3b82f6);
+    outline: 2px solid var(--color-primary);
     outline-offset: -1px;
   }
 
   .field-error {
     font-size: 0.8125rem;
-    color: #dc2626;
+    color: var(--color-error-text);
   }
 
   .field-hint {
     font-size: 0.75rem;
-    color: var(--color-text-muted, #6b7280);
+    color: var(--color-text-muted);
     line-height: 1.3;
   }
 
   .btn-save {
     align-self: flex-start;
-    background: var(--color-primary, #3b82f6);
-    color: #fff;
+    background: var(--color-primary);
+    color: var(--color-on-primary);
     border: none;
     padding: 0.5rem 1.25rem;
     border-radius: 0.375rem;
@@ -337,6 +337,6 @@
   }
 
   .btn-save:hover {
-    background: var(--color-primary-hover, #2563eb);
+    background: var(--color-primary-hover);
   }
 </style>

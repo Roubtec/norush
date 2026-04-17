@@ -59,6 +59,6 @@
   }
 
   .error {
-    color: #dc2626;
+    color: var(--color-error-text);
   }
 </style>

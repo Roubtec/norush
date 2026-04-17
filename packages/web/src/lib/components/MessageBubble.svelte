@@ -65,20 +65,6 @@
     return JSON.stringify(resp);
   })());
 
-  /** Status badge color mapping. */
-  const STATUS_COLORS = /** @type {Record<string, string>} */ ({
-    queued: "#6b7280",
-    batched: "#2563eb",
-    processing: "#d97706",
-    succeeded: "#16a34a",
-    failed: "#dc2626",
-    expired: "#9333ea",
-    failed_final: "#991b1b",
-    canceled: "#6b7280",
-  });
-
-  let statusColor = $derived(STATUS_COLORS[status] ?? "#6b7280");
-
   let formattedTime = $derived(
     new Date(createdAt).toLocaleString(undefined, {
       month: "short",
@@ -94,7 +80,7 @@
   <div class="user-message">
     <div class="message-header">
       <span class="model-tag">{model}</span>
-      <span class="status-badge" style="color: {statusColor}; border-color: {statusColor}">
+      <span class="status-badge">
         {status.replace("_", " ")}
       </span>
       <time class="timestamp">{formattedTime}</time>
@@ -171,7 +157,7 @@
   .model-tag {
     font-size: 0.75rem;
     font-weight: 600;
-    background: #f3f4f6;
+    background: var(--color-surface-muted);
     padding: 0.125rem 0.5rem;
     border-radius: 0.25rem;
     color: var(--color-text-muted);
@@ -180,10 +166,36 @@
   .status-badge {
     font-size: 0.75rem;
     font-weight: 500;
-    border: 1px solid;
+    border: 1px solid currentColor;
     padding: 0.0625rem 0.375rem;
     border-radius: 9999px;
     text-transform: capitalize;
+    color: var(--color-status-queued);
+  }
+
+  .message-bubble[data-status="queued"] .status-badge {
+    color: var(--color-status-queued);
+  }
+  .message-bubble[data-status="batched"] .status-badge {
+    color: var(--color-status-batched);
+  }
+  .message-bubble[data-status="processing"] .status-badge {
+    color: var(--color-status-processing);
+  }
+  .message-bubble[data-status="succeeded"] .status-badge {
+    color: var(--color-status-succeeded);
+  }
+  .message-bubble[data-status="failed"] .status-badge {
+    color: var(--color-status-failed);
+  }
+  .message-bubble[data-status="expired"] .status-badge {
+    color: var(--color-status-expired);
+  }
+  .message-bubble[data-status="failed_final"] .status-badge {
+    color: var(--color-status-failed-final);
+  }
+  .message-bubble[data-status="canceled"] .status-badge {
+    color: var(--color-status-canceled);
   }
 
   .timestamp {
@@ -229,11 +241,11 @@
   .error-message {
     margin-top: 0.75rem;
     padding-top: 0.75rem;
-    border-top: 1px solid #fecaca;
+    border-top: 1px solid var(--color-error-border);
   }
 
   .error-content {
-    color: #dc2626;
+    color: var(--color-error-text);
     font-size: 0.875rem;
   }
 

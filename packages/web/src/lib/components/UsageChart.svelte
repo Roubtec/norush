@@ -99,7 +99,7 @@
 
   .bar-track {
     height: 1.25rem;
-    background: #f3f4f6;
+    background: var(--color-surface-muted);
     border-radius: 0.25rem;
     overflow: hidden;
   }

@@ -217,9 +217,9 @@
 
   .composer-error {
     font-size: 0.875rem;
-    color: #dc2626;
-    background: #fef2f2;
-    border: 1px solid #fecaca;
+    color: var(--color-error-text);
+    background: var(--color-error-bg);
+    border: 1px solid var(--color-error-border);
     padding: 0.5rem 0.75rem;
     border-radius: 0.375rem;
   }
@@ -296,7 +296,7 @@
 
   .btn-submit {
     background: var(--color-primary);
-    color: #fff;
+    color: var(--color-on-primary);
     border: none;
     padding: 0.5rem 1.25rem;
     border-radius: 0.375rem;

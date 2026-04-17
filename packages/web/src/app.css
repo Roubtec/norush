@@ -8,16 +8,146 @@
   padding: 0;
 }
 
+/*
+ * Theming: light is the default (:root). Dark is applied either by the OS
+ * media query (when no data-theme override is present) or by an explicit
+ * `data-theme="dark"` on the <html> element. Using `:not([data-theme])` on
+ * the media query means a pinned light override never needs its own
+ * rule-set — removing data-theme is enough to let the media query take over.
+ * An inline script in app.html seeds `data-theme` from localStorage before
+ * first paint to avoid a flash; without JS the media query still applies.
+ */
+
 :root {
+  color-scheme: light;
+
   --color-bg: #fafafa;
   --color-surface: #ffffff;
+  --color-surface-muted: #f3f4f6;
   --color-text: #1a1a1a;
   --color-text-muted: #6b7280;
   --color-border: #e5e7eb;
+
   --color-primary: #2563eb;
   --color-primary-hover: #1d4ed8;
+  --color-primary-subtle-bg: #eff6ff;
+  --color-primary-subtle-bg-hover: #dbeafe;
+  --color-on-primary: #ffffff;
+
+  --color-success-text: #166534;
+  --color-success-bg: #f0fdf4;
+  --color-success-border: #bbf7d0;
+
+  --color-error-text: #dc2626;
+  --color-error-text-strong: #991b1b;
+  --color-error-bg: #fef2f2;
+  --color-error-border: #fecaca;
+  --color-error-border-strong: #fca5a5;
+
+  --color-warning: #f59e0b;
+  --color-danger: #ef4444;
+
+  --color-provider-openai: #10b981;
+  --color-provider-claude: #2563eb;
+
+  --color-status-queued: #6b7280;
+  --color-status-batched: #2563eb;
+  --color-status-processing: #d97706;
+  --color-status-succeeded: #16a34a;
+  --color-status-failed: #dc2626;
+  --color-status-expired: #9333ea;
+  --color-status-failed-final: #991b1b;
+  --color-status-canceled: #6b7280;
+
   --max-width: 1200px;
   --header-height: 56px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    color-scheme: dark;
+
+    --color-bg: #0f1115;
+    --color-surface: #181b21;
+    --color-surface-muted: #242932;
+    --color-text: #e5e7eb;
+    --color-text-muted: #9ca3af;
+    --color-border: #2e333c;
+
+    --color-primary: #60a5fa;
+    --color-primary-hover: #93c5fd;
+    --color-primary-subtle-bg: #1e2a44;
+    --color-primary-subtle-bg-hover: #253457;
+    --color-on-primary: #0f1115;
+
+    --color-success-text: #86efac;
+    --color-success-bg: #0f2a1a;
+    --color-success-border: #14532d;
+
+    --color-error-text: #fca5a5;
+    --color-error-text-strong: #f87171;
+    --color-error-bg: #2a1212;
+    --color-error-border: #7f1d1d;
+    --color-error-border-strong: #b91c1c;
+
+    --color-warning: #fbbf24;
+    --color-danger: #f87171;
+
+    --color-provider-openai: #34d399;
+    --color-provider-claude: #60a5fa;
+
+    --color-status-queued: #9ca3af;
+    --color-status-batched: #60a5fa;
+    --color-status-processing: #fbbf24;
+    --color-status-succeeded: #4ade80;
+    --color-status-failed: #f87171;
+    --color-status-expired: #c084fc;
+    --color-status-failed-final: #ef4444;
+    --color-status-canceled: #9ca3af;
+  }
+}
+
+/* Explicit dark override — wins over both :root and the media query. */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --color-bg: #0f1115;
+  --color-surface: #181b21;
+  --color-surface-muted: #242932;
+  --color-text: #e5e7eb;
+  --color-text-muted: #9ca3af;
+  --color-border: #2e333c;
+
+  --color-primary: #60a5fa;
+  --color-primary-hover: #93c5fd;
+  --color-primary-subtle-bg: #1e2a44;
+  --color-primary-subtle-bg-hover: #253457;
+  --color-on-primary: #0f1115;
+
+  --color-success-text: #86efac;
+  --color-success-bg: #0f2a1a;
+  --color-success-border: #14532d;
+
+  --color-error-text: #fca5a5;
+  --color-error-text-strong: #f87171;
+  --color-error-bg: #2a1212;
+  --color-error-border: #7f1d1d;
+  --color-error-border-strong: #b91c1c;
+
+  --color-warning: #fbbf24;
+  --color-danger: #f87171;
+
+  --color-provider-openai: #34d399;
+  --color-provider-claude: #60a5fa;
+
+  --color-status-queued: #9ca3af;
+  --color-status-batched: #60a5fa;
+  --color-status-processing: #fbbf24;
+  --color-status-succeeded: #4ade80;
+  --color-status-failed: #f87171;
+  --color-status-expired: #c084fc;
+  --color-status-failed-final: #ef4444;
+  --color-status-canceled: #9ca3af;
 }
 
 html,

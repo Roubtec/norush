@@ -42,9 +42,9 @@
   .cost-indicator {
     display: inline-block;
     font-size: 0.75rem;
-    color: #166534;
-    background: #f0fdf4;
-    border: 1px solid #bbf7d0;
+    color: var(--color-success-text);
+    background: var(--color-success-bg);
+    border: 1px solid var(--color-success-border);
     padding: 0.125rem 0.5rem;
     border-radius: 9999px;
     white-space: nowrap;
