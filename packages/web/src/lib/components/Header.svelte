@@ -3,9 +3,9 @@
 
   Rendered in the root layout so it appears on every page. The primary nav
   and logout link are only shown when a user is logged in (read from
-  `page.data.user`, populated by the root +layout.server.ts). Unauthenticated
-  pages (/login and unauthenticated /) get a logo-only header so the layout
-  stays consistent.
+  `page.data.user`, populated by the root +layout.server.ts). Anonymous
+  visitors get "Log in" / "Sign up" links that kick off the WorkOS AuthKit
+  flow (the /register route passes screenHint=sign-up).
 
   Logout uses a plain GET anchor to /auth/logout. The CSRF risk is accepted as
   low-severity: the session cookie is SameSite=Lax, so browsers will not attach
@@ -65,6 +65,26 @@
     {:else}
       <div class="auth">
         <ThemeToggle />
+        <a
+          href="/login"
+          class="link"
+          class:active={isActive("/login", page.url.pathname)}
+          aria-current={isActive("/login", page.url.pathname)
+            ? "page"
+            : undefined}
+        >
+          Log in
+        </a>
+        <a
+          href="/register"
+          class="link link-primary"
+          class:active={isActive("/register", page.url.pathname)}
+          aria-current={isActive("/register", page.url.pathname)
+            ? "page"
+            : undefined}
+        >
+          Sign up
+        </a>
       </div>
     {/if}
   </nav>
@@ -148,5 +168,15 @@
 
   .link.active:hover {
     background: var(--color-primary-subtle-bg-hover);
+  }
+
+  .link-primary {
+    background: var(--color-primary);
+    color: var(--color-on-primary);
+  }
+
+  .link-primary:hover {
+    background: var(--color-primary-hover);
+    color: var(--color-on-primary);
   }
 </style>

@@ -50,6 +50,7 @@ export function sanitizeNextPath(raw: string | null | undefined): string | null 
 
   const pathname = parsed.pathname;
   if (pathname === '/login' || pathname.startsWith('/login/')) return null;
+  if (pathname === '/register' || pathname.startsWith('/register/')) return null;
   if (pathname.startsWith('/auth/')) return null;
 
   return pathname + parsed.search;

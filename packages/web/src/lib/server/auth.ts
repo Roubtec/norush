@@ -63,7 +63,7 @@ export function resetWorkOS(): void {
 // Authorization URL
 // ---------------------------------------------------------------------------
 
-export function getAuthorizationUrl(): string {
+export function getAuthorizationUrl(screenHint?: 'sign-in' | 'sign-up'): string {
   const workos = getWorkOS();
   const redirectUri = getEnvOrThrow('WORKOS_REDIRECT_URI');
   const clientId = getEnvOrThrow('WORKOS_CLIENT_ID');
@@ -72,6 +72,7 @@ export function getAuthorizationUrl(): string {
     provider: 'authkit',
     clientId,
     redirectUri,
+    ...(screenHint ? { screenHint } : {}),
   });
 }
 
