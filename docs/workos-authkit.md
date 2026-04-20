@@ -122,12 +122,18 @@ since both modes point at the same DB on `localhost:5432`.
 
 ### Cookie-domain caveat
 
-Session cookies are stored per **host:port** by browsers in some cases
-(effectively — browsers isolate `localhost:3000` from `localhost:5173` as
-separate origins). A session established on one port will not auto-carry to the
-other; you will need to log in again after switching. This is a browser
-constraint, not a WorkOS one — the *user account* is shared, only the *session
-cookie* is not.
+Session cookies are scoped to the **hostname** (and path), not the port, so a cookie set for `localhost` is sent to both `localhost:3000` and `localhost:5173`.
+
+If a session does not validate after switching ports, the cause is a configuration mismatch between the two server processes rather than port isolation.
+
+Common causes:
+
+- different `WORKOS_COOKIE_PASSWORD` values, which makes an existing cookie unreadable to the other server
+- different cookie name, path, domain, `SameSite`, or `Secure` settings
+- using a different hostname (`127.0.0.1` vs `localhost`)
+- mixing `http` and `https` when `Secure` cookies are enabled
+
+WorkOS shares the same underlying user account across both ports; if you are prompted to sign in again, treat it as a cookie/config mismatch to debug.
 
 ## Wildcards (optional)
 
