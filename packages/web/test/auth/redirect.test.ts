@@ -71,6 +71,9 @@ describe('sanitizeNextPath', () => {
       ['/login'],
       ['/login?next=/chat'],
       ['/login/extra'],
+      ['/register'],
+      ['/register?next=/chat'],
+      ['/register/extra'],
       ['/auth/callback?code=abc'],
       ['/auth/logout'],
     ])('rejects %s', (input) => {

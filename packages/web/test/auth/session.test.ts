@@ -176,6 +176,22 @@ describe('getAuthorizationUrl', () => {
       redirectUri: 'http://localhost:5173/auth/callback',
     });
   });
+
+  it('forwards the sign-up screen hint when requested', async () => {
+    mockGetAuthorizationUrl.mockReturnValueOnce(
+      'https://api.workos.com/user_management/authorize?screen_hint=sign-up',
+    );
+
+    const { getAuthorizationUrl } = await getAuth();
+    getAuthorizationUrl('sign-up');
+
+    expect(mockGetAuthorizationUrl).toHaveBeenCalledWith({
+      provider: 'authkit',
+      clientId: 'client_test_1234',
+      redirectUri: 'http://localhost:5173/auth/callback',
+      screenHint: 'sign-up',
+    });
+  });
 });
 
 describe('getLogoutUrl', () => {

@@ -251,6 +251,7 @@ The web application exposes `GET /metrics` for Prometheus scraping.
 - [API Reference](./docs/api-reference.md)
 - [Architecture](./docs/architecture.md)
 - [Deployment](./docs/deployment.md)
+- [WorkOS AuthKit Integration](./docs/workos-authkit.md)
 
 ## Examples
 
